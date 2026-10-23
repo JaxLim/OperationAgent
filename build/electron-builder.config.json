@@ -1,0 +1,18 @@
+{
+  "appId": "com.jaxlim.operationagent",
+  "productName": "OperationAgent",
+  "electronVersion": "45.0.0",
+  "directories": { "app": "apps/desktop", "output": "dist/installers" },
+  "asar": true,
+  "npmRebuild": false,
+  "nodeGypRebuild": false,
+  "files": ["dist/**", "package.json"],
+  "extraResources": [
+    { "from": "build/stage/${os}-${arch}/sidecar", "to": "sidecar", "filter": ["**/*"] }
+  ],
+  "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+  "win": { "target": ["nsis"] },
+  "mac": { "target": ["dmg", "zip"], "hardenedRuntime": true },
+  "linux": { "target": ["AppImage", "deb"], "category": "Development" },
+  "publish": null
+}

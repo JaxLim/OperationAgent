@@ -1,0 +1,16 @@
+packages:
+  - apps/*
+  - packages/*
+
+nodeLinker: isolated
+linkWorkspacePackages: false
+saveExact: true
+engineStrict: true
+strictPeerDependencies: true
+packageManagerStrictVersion: true
+managePackageManagerVersions: false
+updateNotifier: false
+storeDir: .pnpm-store
+cacheDir: .cache/pnpm
+# P0 has no native/runtime dependencies and authorizes no lifecycle scripts.
+allowBuilds: {}

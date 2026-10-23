@@ -1,0 +1,29 @@
+{
+  "name": "operation-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "OperationAgent P0 architecture and engineering baseline; no application runtime yet",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.34.7",
+  "engines": { "node": "24.22.1", "pnpm": "10.34.7" },
+  "scripts": {
+    "build": "tsc -p tsconfig.tools.json",
+    "typecheck": "tsc -p tsconfig.tools.json --noEmit",
+    "lint": "eslint scripts tests/p0 eslint.config.mjs --max-warnings 0",
+    "test": "node --test tests/p0/*.test.ts",
+    "verify:p0": "node scripts/p0-check.ts",
+    "check:p0-exit": "node scripts/p0-check.ts --require-frozen",
+    "check": "node scripts/run-checks.mjs",
+    "test:integration": "node scripts/phase-required.mjs P1 integration",
+    "package": "node scripts/phase-required.mjs P1 packaging",
+    "test:smoke": "node scripts/phase-required.mjs P1 installed-application-smoke"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.13.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0"
+  }
+}

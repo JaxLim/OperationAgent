@@ -1,0 +1,42 @@
+name: P0 engineering checks
+
+on:
+  push:
+    paths-ignore: ['docs/**', 'README.md']
+  pull_request:
+    paths-ignore: ['docs/**', 'README.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: P0 metadata (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      npm_config_cache: ${{ github.workspace }}/.cache/npm
+      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+      XDG_DATA_HOME: ${{ github.workspace }}/.cache/data
+      XDG_STATE_HOME: ${{ github.workspace }}/.cache/state
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 10.34.7
+          dest: ${{ github.workspace }}/.tools/pnpm-ci
+          run_install: false
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm check
+      - name: Compiled P0 checker
+        run: node dist/tooling/scripts/p0-check.js
+      - name: Scope reminder
+        run: node -e "console.log('P0 metadata checks only. No application, ABI loading, OS isolation, installer or P1 tests have run.')"

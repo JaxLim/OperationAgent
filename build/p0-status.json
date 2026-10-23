@@ -1,0 +1,15 @@
+{
+  "phase": "P0",
+  "status": "review-pending",
+  "p1Started": false,
+  "blockers": ["DEC-001-WINDOWS-WORKER-ISOLATION"],
+  "specificationHashes": {
+    "ARCHITECTURE.md": "6e8329073beaa79e6ac0073b389e12539363422931d07bd61cb1377e396242ef",
+    "AGENTS.md": "72f322b66eb23f4b5c6a5387001914b6afe6945d351aea6ac45ad538f8df0b49"
+  },
+  "platformCapabilities": {
+    "win32-x64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },
+    "darwin-arm64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },
+    "linux-x64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" }
+  }
+}
