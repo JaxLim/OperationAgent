@@ -1,0 +1,7 @@
+* text=auto eol=lf
+# Preserve the supplied normative documents byte for byte.
+ARCHITECTURE.md -text
+AGENTS.md -text
+*.png binary
+*.ico binary
+*.icns binary
