@@ -81,6 +81,7 @@ GitHub 插件用于确认账户和新仓库权限/可见性；插件没有创建
 - Node二进制第一次fetch超时，第二次连接被重置；从同一官方URL以curl重试成功，校验通过才执行。已给bootstrap加入相同源fallback。
 - pnpm 12.15.0 实际包已切为原生Rust启动器，与既定JS调用方式不符；正式工程选用官方 `latest-10` 的 10.34.7（2026-10-12发布）。试验产物仅保留在忽略的 `.tools/pnpm12-probe*`，未进入依赖树或版本控制。
 - 完整lint首轮发现bootstrap的 `fetch` 全局声明缺失与错误因果链未保留；修复后完整check通过。
+- 首次 GitHub Actions 运行 [39923351142](https://github.com/JaxLim/OperationAgent/actions/runs/39923351142) 三个平台均在 pnpm 自安装阶段失败；根目录严格 engines 拒绝 Action 内部的 pnpm 8.14.3 / Node 24.21.0，工程测试尚未执行。修复保留全部版本约束，改由锁定 Node 执行现有 bootstrap 的跨平台 `--pnpm-only` 模式，按 SRI 校验后直接调用工作区 pnpm。
 - cmake未在PATH；P0无需它。VS C++组件可发现不代表SDK/原生构建验证已完成。
 
 ## 未完成或不适用的验证

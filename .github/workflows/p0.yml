@@ -19,6 +19,9 @@ jobs:
         os: [windows-2025, ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
     env:
       npm_config_cache: ${{ github.workspace }}/.cache/npm
       XDG_CACHE_HOME: ${{ github.workspace }}/.cache
@@ -26,16 +29,17 @@ jobs:
       XDG_STATE_HOME: ${{ github.workspace }}/.cache/state
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
-        with:
-          version: 10.34.7
-          dest: ${{ github.workspace }}/.tools/pnpm-ci
-          run_install: false
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: pnpm check
+      - name: Runtime identity
+        run: node -e "console.log(JSON.stringify({node:process.version,platform:process.platform,arch:process.arch,abi:process.versions.modules}))"
+      - name: Install verified workspace-local pnpm
+        run: node scripts/bootstrap-windows.mjs --pnpm-only
+      - run: node .tools/pnpm/bin/pnpm.cjs install --frozen-lockfile --ignore-scripts
+      - run: node .tools/pnpm/bin/pnpm.cjs check
       - name: Compiled P0 checker
         run: node dist/tooling/scripts/p0-check.js
       - name: Scope reminder

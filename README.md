@@ -27,4 +27,6 @@ pnpm check:p0-exit
 
 Windows x64 可用现有 Node 运行 `node scripts/bootstrap-windows.mjs`，将校验过哈希的 Node/pnpm 下载到本仓库 `.tools/`。已有下载仅在哈希一致时复用，哈希不符拒绝覆盖。之后用 `.tools/node/node.exe .tools/pnpm/bin/pnpm.cjs ...` 调用。所有包缓存均配置在工作区内，不需要全局安装。
 
+CI 在各平台先选定锁定的 Node，再运行 `node scripts/bootstrap-windows.mjs --pnpm-only`。该模式支持 Windows/macOS/Linux，只安装并校验 pnpm；版本与 SRI 统一读取 `build/runtime-lock.json`，不使用另一个包管理器自安装当前包管理器。
+
 生产支持状态：所有平台 `ui/read/gitRead/highRisk/workerIsolation` 均为 **unverified**；依赖和工具链检查通过不改变这些状态。
