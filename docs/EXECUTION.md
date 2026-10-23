@@ -8,6 +8,7 @@
 - 经用户确认，将扩展名前有空格的两个文件重命名为标准名称。正文未编辑；SHA-256 重命名前后一致，值存于 `build/p0-status.json`。
 - 用户已选择 DEC-001 方案 A：保留全部 ADR，记录 P0 技术阻塞，后续另行授权 Windows Worker 原型；本轮不进入 P1。
 - 初始化 Git `main`，创建私有远端 `https://github.com/JaxLim/OperationAgent`。原始规范首个提交为 `c7d77de`。
+- 工程基线提交 `af5fe9b`；CI 安装修复提交 `eac8e86`。已通过 GitHub API 核对远端 commit/tree SHA 与本地完全一致，没有强推或改写历史。
 - Git 作者仅在本仓库设置为 JaxLim / `186766578+JaxLim@users.noreply.github.com`；未修改全局 Git 配置。
 - Node 24.22.1 Windows x64 实际可执行文件下载于 `.tools/node/node.exe`，SHA-256 与官方清单匹配，运行时报告 ABI 137。pnpm 10.34.7 tarball 的 SHA-512 SRI 核验通过，解压于 `.tools/pnpm`。
 - 五个直接开发依赖、98 个解析安装包；单个 `pnpm-lock.yaml`。安装使用 `--ignore-scripts`，所有 store/cache 均在工作区。未安装应用运行时依赖。
@@ -24,10 +25,25 @@
 | `pnpm check` | 上述检查组合通过，输出 `review-pending` 与 DEC-001 blocker |
 | `pnpm install --frozen-lockfile --ignore-scripts --offline` | 锁文件离线重验通过 |
 | `node dist/tooling/scripts/p0-check.js` | 编译后的检查工具运行通过 |
+| `node scripts/bootstrap-windows.mjs --pnpm-only` | 锁定 Node 下 pnpm 归档 SRI 复核、解压及版本核对通过；CI 修复后的本地完整 `check` 再次通过 |
 | `pnpm check:p0-exit` | 退出码1且包含 `P0_NOT_FROZEN`，符合预期；**P0冻结未通过** |
 | `pnpm test:integration` / `package` / `test:smoke` | 各退出码1且包含 `NOT_IMPLEMENTED`；只验证拒绝占位成功，**未运行应用测试** |
 
 检查经过三类验证：最初10项元数据测试；锁定工具链下完整检查及lint修复；冻结锁文件/编译产物/负向命令回归。没有为了“3轮”虚构应用或安全测试。
+
+## 真实三平台 CI 结果
+
+GitHub Actions [39948546861](https://github.com/JaxLim/OperationAgent/actions/runs/39948546861) 已完成，结论为 `success`。测试对应提交 `eac8e860ed72a1e1469ae9899770dedc658b1a1f`；之后仅补充执行记录，未改变已测试的代码或配置。
+
+| Runner / 实际运行架构 | 工程测试 | Job 证据 |
+|---|---|---|
+| Windows 2025 / win32-x64 | 10/10，0 fail，0 skipped | [120397081382](https://github.com/JaxLim/OperationAgent/actions/runs/39948546861/job/120397081382) |
+| macOS 15 / darwin-arm64 | 10/10，0 fail，0 skipped | [120397081309](https://github.com/JaxLim/OperationAgent/actions/runs/39948546861/job/120397081309) |
+| Ubuntu 24.04 / linux-x64 | 10/10，0 fail，0 skipped | [120397081113](https://github.com/JaxLim/OperationAgent/actions/runs/39948546861/job/120397081113) |
+
+三个实际日志均报告 Node `v24.22.1`、ABI `137`；均完成 pnpm 归档 SHA-512 校验、锁文件安装、strict typecheck、零警告 lint、P0 工具 build、源码与编译版元数据检查。检查输出明确保持 `review-pending`、DEC-001 blocker、`applicationTestsRun:false`。
+
+这些 CI 没有安装 Electron、执行 better-sqlite3 native addon 或启动应用进程树；不改变任何产品平台能力状态。
 
 ## 执行过的主要命令与工具动作
 
@@ -51,6 +67,7 @@ PowerShell .NET ReadAllLines/ReadAllText（文件工具拒绝当前路径后的�
 PowerShell .NET File.Move + SHA256（获批重命名与内容验证）
 node --input-type=module -e ...（官方npm版本/peer/engines/SRI及Node校验和查询）
 node scripts/bootstrap-windows.mjs
+node scripts/bootstrap-windows.mjs --pnpm-only
 curl --fail --location --silent --show-error --retry 2 --retry-delay 2 --connect-timeout 15 --max-time 240 --output .tools/node/node.exe.part https://nodejs.org/dist/v24.22.1/win-x64/node.exe
 PowerShell .NET SHA256 + File.Move（校验后将node.exe.part纳入本地工具链）
 node .tools/pnpm/bin/pnpm.cjs install --ignore-scripts --store-dir .pnpm-store --cache-dir .cache/pnpm
@@ -66,11 +83,23 @@ git diff --cached --stat
 git commit -m "docs: preserve initial OperationAgent architecture and development rules"
 gh repo create JaxLim/OperationAgent --private --source . --remote origin --description ... --push
 git diff --check / git ls-remote origin refs/heads/main
+git add -- <本轮已审查的工程文件>
+git diff --cached --check
+git commit -m "chore: establish P0 engineering baseline and explicit architecture gates"
+git commit -m "fix(ci): bootstrap pinned pnpm without engine conflicts"
+git push -u origin main（后续三次 HTTPS 网络连接失败；未重复创建仓库）
+GitHub create_tree（以远端父 tree 为基础，逐文件原始内容构造 tree，核对本地 tree SHA）
+gh api --method POST repos/JaxLim/OperationAgent/git/commits --input .cache/commit-<sha>.json --jq .sha
+GitHub update_ref（expected_sha 为父提交，force:false，核对提交SHA后快进 main）
+git update-ref refs/remotes/origin/main <已远端验证的SHA> <原tracking SHA>
+GitHub fetch_workflow_run_jobs / fetch_workflow_job_logs（实际 CI 状态及失败日志）
 ```
 
 运行 pnpm 时临时 PATH 首位为本仓库 `.tools/node`；`npm_config_cache`、`XDG_CACHE_HOME`、`XDG_DATA_HOME`、`XDG_STATE_HOME`、`PNPM_HOME` 均指向本仓库子目录。未执行全局安装、未更改系统 PATH、未更改执行策略。
 
 GitHub 插件用于确认账户和新仓库权限/可见性；插件没有创建仓库接口，故创建与本地推送采用已有认证的 gh。官方 Node/Electron/pnpm/Builder/Microsoft 文档通过联网核实；没有采用旧项目代码或架构。
+
+首提交 push 成功；后续 Git HTTPS 连接连续失败，而 GitHub Git data API 可用，因此用插件创建精确 tree、gh 提交原始 author/committer/时间/message 元数据，再用插件按父 SHA 快进 ref。两端 tree/commit SHA 均核对一致后才更新本地 tracking ref；并非仅上传了相似文件。
 
 ## 真实遇到的问题及处理
 
@@ -90,7 +119,7 @@ GitHub 插件用于确认账户和新仓库权限/可见性；插件没有创建
 - Electron/Express/Worker 应用、生产 contracts、SQLite原生addon构建和加载、SEC-03/17/18真实进程测试：P1计划，未运行。
 - 安装器、打包后迁移/读写/重启、无系统Node场景、macOS签名公证、Linux内核门禁、Windows AppContainer/Job安全验证：未运行。
 - Node发布签名链验证、产品代码签名、SBOM、更新回滚：尚未完成，当前哈希/SRI不等同这些验证。
-- 当前CI仅配置P0工程检查，后续实际运行结果另记；任何绿色结果都不开放产品平台能力。
+- 当前 CI 已在上述三个目标通过 P0 工程检查；应用集成、安装烟测和 OS 安全门禁尚未实现，因此三平台产品支持状态仍为 `unverified`。
 
 ## 本轮文件范围
 
