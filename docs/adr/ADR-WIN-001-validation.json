@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "decision": "ADR-WIN-001",
+  "revision": "r1",
+  "recordedAt": "2026-10-24 10:18:49 UTC",
+  "decisionPackageSha256": "01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58",
+  "approvalState": "pending",
+  "normativeFilesChanged": false,
+  "productionWorkerQualified": false,
+  "environment": {
+    "platform": "win32",
+    "node": "24.22.1",
+    "pnpm": "10.34.7",
+    "workingDirectory": "D:/Operation_Agent",
+    "shell": "Git Bash via PowerShell with UTF-8 console output",
+    "newDependencies": []
+  },
+  "scope": "P0 decision tooling and retained evidence review only. No new sandbox, application, VM or installer tests.",
+  "executions": [
+    {
+      "purpose": "TDD: reproduce status-only and empty-capability bypasses before the fixes",
+      "command": ".tools/node/node.exe --test tests/p0/baseline.test.ts",
+      "expectedExitCode": 1,
+      "chunk_id": "0b32c5",
+      "wall_time_seconds": 0.8302114,
+      "exit_code": 1,
+      "original_token_count": 696,
+      "output": "✔ P0 metadata quality may pass while architecture freeze is blocked (46.1294ms)\n✔ application dependencies cannot silently enter P0 (1.5104ms)\n✔ floating dependency versions and mismatched runtimes fail the gate (0.6605ms)\n✔ strict mode and Renderer type separation cannot silently weaken (0.5603ms)\n✔ Electron native rebuild cannot replace sidecar Node artifacts (1.2093ms)\n✔ untested platform capabilities cannot be advertised (0.5646ms)\n✔ unresolved decisions cannot be hidden behind a frozen label (0.6686ms)\n✖ editing only the status and blocker list cannot authorize P1 (2.75ms)\n✖ removing the platform capability matrix cannot evade P0 checks (11.8815ms)\n✔ missing platform checksums fail closed (1.2172ms)\n✔ P1 command guard exits nonzero instead of producing a green fake test (126.1183ms)\n✔ non-object JSON configuration is rejected (0.2399ms)\nℹ tests 12\nℹ suites 0\nℹ pass 10\nℹ fail 2\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 427.4486\n\n✖ failing tests:\n\ntest at tests\\p0\\baseline.test.ts:64:1\n✖ editing only the status and blocker list cannot authorize P1 (2.75ms)\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\n      at TestContext.<anonymous> (file:///D:/Operation_Agent/tests/p0/baseline.test.ts:68:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n      at Test.postRun (node:internal/test_runner/test:1542:19)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: /P0_DECISION_NOT_APPROVED/,\n    operator: 'throws',\n    diff: 'simple'\n  }\n\ntest at tests\\p0\\baseline.test.ts:71:1\n✖ removing the platform capability matrix cannot evade P0 checks (11.8815ms)\n  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:\n  \n    assert.ok(validateBaseline(input).some(message => message.includes('Missing platform capability')))\n  \n      at TestContext.<anonymous> (file:///D:/Operation_Agent/tests/p0/baseline.test.ts:74:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n      at Test.postRun (node:internal/test_runner/test:1542:19)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: false,\n    expected: true,\n    operator: '==',\n    diff: 'simple'\n  }\n"
+    },
+    {
+      "purpose": "Strict TypeScript, lint, 29 tests, build and decision evidence verification",
+      "command": "PATH=\"$PWD/.tools/node:$PATH\" PNPM_HOME=\"$PWD/.tools/pnpm\" .tools/node/node.exe .tools/pnpm/bin/pnpm.cjs check",
+      "expectedExitCode": 0,
+      "chunk_id": "876a01",
+      "wall_time_seconds": 0.0000155,
+      "exit_code": 0,
+      "original_token_count": 764,
+      "output": "\n> operation-agent@0.0.0 check D:\\Operation_Agent\n> node scripts/run-checks.mjs\n\n\n> operation-agent@0.0.0 typecheck D:\\Operation_Agent\n> tsc -p tsconfig.tools.json --noEmit\n\n\n> operation-agent@0.0.0 lint D:\\Operation_Agent\n> eslint scripts tests/p0 eslint.config.mjs --max-warnings 0\n\n\n> operation-agent@0.0.0 test D:\\Operation_Agent\n> node --test tests/p0/*.test.ts\n\n✔ P0 metadata quality may pass while architecture freeze is blocked (2.727ms)\n✔ application dependencies cannot silently enter P0 (0.7394ms)\n✔ floating dependency versions and mismatched runtimes fail the gate (0.6204ms)\n✔ strict mode and Renderer type separation cannot silently weaken (0.5289ms)\n✔ Electron native rebuild cannot replace sidecar Node artifacts (0.4945ms)\n✔ untested platform capabilities cannot be advertised (0.5615ms)\n✔ unresolved decisions cannot be hidden behind a frozen label (0.5116ms)\n✔ editing only the status and blocker list cannot authorize P1 (0.4385ms)\n✔ removing the platform capability matrix cannot evade P0 checks (0.5246ms)\n✔ missing platform checksums fail closed (0.6095ms)\n✔ P1 command guard exits nonzero instead of producing a green fake test (78.7365ms)\n✔ non-object JSON configuration is rejected (0.2428ms)\n✔ the actual review package retains valid raw feasibility evidence (9.3023ms)\n✔ prepared evidence with a frozen status still requires explicit approval (5.5237ms)\n✔ approved decision with unapplied specifications cannot exit P0 (4.7584ms)\n✔ specifications cannot be applied before approval (4.6961ms)\n✔ matching approval, specifications and evidence permit architecture exit only (4.3458ms)\n✔ a previous approval does not authorize changed decision package bytes (4.9137ms)\n✔ missing or changed decision documents invalidate approval evidence (20.5193ms)\n✔ missing, empty and tampered raw evidence cannot be replaced by a green summary (93.7611ms)\n✔ rehashed evidence must still prove real parentage and pre-instruction isolation (14.8374ms)\n✔ OS-denied file access must coexist with the legitimate RPC channel (3.851ms)\n✔ surviving processes invalidate cleanup evidence even with matching hashes (15.0749ms)\n✔ known public-creation and Node-spawn failures must not be relabelled PASS (7.7993ms)\n✔ changed prototype sources and unsafe evidence source paths fail closed (7.6132ms)\n✔ deleting source provenance or successful file controls cannot manufacture feasibility (6.7281ms)\n✔ mixed or unreviewed specification versions cannot exit P0 (4.3016ms)\n✔ partial, rejected or unsourced approval receipts are invalid (17.7219ms)\n✔ unsafe fallback and postponed production isolation cannot hide in metadata (10.7515ms)\nℹ tests 29\nℹ suites 0\nℹ pass 29\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 395.4822\n\n> operation-agent@0.0.0 build D:\\Operation_Agent\n> tsc -p tsconfig.tools.json\n\n\n> operation-agent@0.0.0 verify:p0 D:\\Operation_Agent\n> node scripts/p0-check.ts\n\n{\"check\":\"P0_METADATA\",\"passed\":true,\"phaseStatus\":\"review-pending\",\"blockers\":[\"DEC-001-WINDOWS-WORKER-ISOLATION\"],\"decisionApproval\":\"pending\",\"specificationRevision\":\"original\",\"feasibilityEvidenceVerified\":true,\"decisionPackageSha256\":\"01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58\",\"applicationTestsRun\":false,\"productionWorkerQualified\":false}\n"
+    },
+    {
+      "purpose": "P0 exit must reject the unapproved decision",
+      "command": "PATH=\"$PWD/.tools/node:$PATH\" .tools/node/node.exe .tools/pnpm/bin/pnpm.cjs check:p0-exit",
+      "expectedExitCode": 1,
+      "chunk_id": "ddff69",
+      "wall_time_seconds": 0.8553277,
+      "exit_code": 1,
+      "original_token_count": 208,
+      "output": "\n> operation-agent@0.0.0 check:p0-exit D:\\Operation_Agent\n> node scripts/p0-check.ts --require-frozen\n\nfile:///D:/Operation_Agent/scripts/p0-check.ts:79\r\n    throw new Error('P0_NOT_FROZEN: resolve the recorded architecture decision before P1');\r\n          ^\r\n\r\nError: P0_NOT_FROZEN: resolve the recorded architecture decision before P1\r\n    at requireP0Exit (file:///D:/Operation_Agent/scripts/p0-check.ts:79:11)\r\n    at checkWorkspace (file:///D:/Operation_Agent/scripts/p0-check.ts:108:58)\r\n    at file:///D:/Operation_Agent/scripts/p0-check.ts:117:3\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\r\n    at async node:internal/modules/esm/loader:647:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\r\n\r\nNode.js v24.22.1\r\n ELIFECYCLE  Command failed with exit code 1.\n"
+    },
+    {
+      "purpose": "Compiled checker agrees with source checker",
+      "command": ".tools/node/node.exe dist/tooling/scripts/p0-check.js",
+      "expectedExitCode": 0,
+      "chunk_id": "9c77d3",
+      "wall_time_seconds": 0.3987503,
+      "exit_code": 0,
+      "original_token_count": 93,
+      "output": "{\"check\":\"P0_METADATA\",\"passed\":true,\"phaseStatus\":\"review-pending\",\"blockers\":[\"DEC-001-WINDOWS-WORKER-ISOLATION\"],\"decisionApproval\":\"pending\",\"specificationRevision\":\"original\",\"feasibilityEvidenceVerified\":true,\"decisionPackageSha256\":\"01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58\",\"applicationTestsRun\":false,\"productionWorkerQualified\":false}\n"
+    },
+    {
+      "purpose": "Validate the exact normative patch without applying it",
+      "command": "git apply --check docs/adr/ADR-WIN-001-normative.patch",
+      "expectedExitCode": 0,
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "purpose": "Whitespace verification",
+      "command": "git diff --check",
+      "expectedExitCode": 0,
+      "exit_code": 0,
+      "output": ""
+    }
+  ],
+  "limitations": [
+    "No real approval receipt exists; positive approval tests use in-memory synthetic data only.",
+    "Win32 public creation/profile route and OWIP/1 carrier remain P1 work.",
+    "Loopback, broad networking, Node spawnSync, race and installed application safety remain UNKNOWN under SEC-W01.",
+    "P0 native experiment evidence is historical c44d8c9 and was not rerun this turn.",
+    "P0 tooling tests do not establish OS isolation on any platform.",
+    "The staged whitespace check initially flagged literal unified-diff context and Markdown hard breaks; the stored patch alone has blank-at-eol disabled in .gitattributes. Its bytes and approval hash are unchanged."
+  ]
+}

@@ -1,0 +1,250 @@
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index f734e8c..f0bb2bd 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -1,10 +1,10 @@
+ # ARCHITECTURE.md — Electron Agent Desktop
+ 
+-> 状态：**架构草稿 / 待仓库评审**  
+-> 版本：`0.3.1-review`  
+-> 日期：2026-10-23  
++> 状态：**P0 架构决策已批准；平台实现与安全能力仍待逐项验证**  
++> 版本：`0.4.0-p0`  
++> 日期：2026-10-24  
+ > 适用范围：Electron + TypeScript + React + Express + Node.js Agent Worker  
+-> 依据：架构访谈 15 项决策（ADR-001～ADR-015）及三轮架构评审（含 P3a 范围、只读能力矩阵与测试一致性修订）
++> 依据：ADR-001～ADR-015 及已批准 ADR-WIN-001 r1；后者仅修改 Windows Worker 创建、IPC、资格门禁和相关阶段约束。
+ > 选型状态：P0 基线已具体化；实现与平台安全性仍待验证，非已上线证明
+ 
+ ## 0. 文档目的与规范性
+@@ -50,7 +50,7 @@ flowchart TD
+     PRE <-->|白名单 IPC| MAIN[Electron Main\n生命周期 / 代理 / Crypto Bridge]
+     MAIN <-->|内部令牌 HTTP\n首版 Loopback| API[Express / Control Plane\n业务规则 / 权限 / 状态 / 审计]
+     MAIN -. 监管 Express 进程树 / 心跳 / 故障清理 .-> API
+-    API <-->|fork + Node IPC RPC\nJSON-RPC 2.0| AGENT[Agent Worker\nAgent Loop / 规划 / 工具请求]
++    API <-->|平台 WorkerLauncher + IPC RPC\nJSON-RPC 2.0| AGENT[Agent Worker\nAgent Loop / 规划 / 工具请求]
+     API --> STORE[(持久化数据库\n唯一读写方: Express)]
+     API --> GATE[Model Gateway\n凭据使用 / 供应商适配]
+     GATE <-->|授权网络请求| LLM[模型服务]
+@@ -65,6 +65,8 @@ flowchart TD
+ 
+ **“四层”是逻辑分层，不是“只有四个 OS 进程”。** V1 的核心进程角色为 Electron Main、Renderer、Express、Agent Worker；Preload 依附于渲染器的隔离上下文。高危工具以短生命周期子进程运行。**Express 是 Worker 的直接父进程**；Main 负责监管 Express 所在的服务进程树，而不是直接创建/单独管理 Worker。**不设置常驻通用 Tool Executor**。
+ 
++**Windows 创建/通信规范**：Express 进程内原生 WorkerLauncher + 单条受保护的继承 Win32 管道 + OWIP/1 framing / JSON-RPC 2.0，详见 [ADR-WIN-001 r1](docs/adr/ADR-WIN-001.md)。其他 OS 暂保留 fork + Node IPC 适配器；任何平台未满足 Worker Gate 都不得启用生产 Worker。
++
+ ### 2.1 职责所有权表
+ 
+ | 组件 | 唯一允许的主要职责 | 明确禁止 |
+@@ -99,12 +101,12 @@ flowchart TD
+ 2. Main 生成进程实例级高熵令牌，创建受保护的 bootstrap 通道；禁止把秘密写入命令行、日志或公开文件。令牌属于 Main → Express API 身份，不得复用为 Worker 身份。
+ 3. Main 使用**随应用打包的独立 Node.js 运行时**启动 Express（Node sidecar；锁定 Node 版本、架构和可执行文件来源），Express 只监听回环地址动态端口；完成身份握手。`better-sqlite3` 仅由此 Node 进程加载。
+ 4. Express 执行 SQLite schema migration、启动事件对账、加载策略与凭据服务。所有失败均不标记 ready。
+-5. **由 Express 使用 `child_process.fork()` 创建 Agent Worker**，使用父子进程继承的 **Node IPC 通道承载 JSON-RPC 2.0 消息**；进行协议版本、`runId`、角色、能力握手后标记 Worker ready。Worker 不监听网络 RPC，不接受外部进程自行接入。Node IPC 的传输与 JSON-RPC 的报文语义是不同层次。
+-6. Express 完成 Worker 握手和控制面健康检查后向 Main 报告 ready；Main 创建 Renderer，Preload 暴露白名单 IPC；Renderer 拉取快照并订阅增量事件。
++5. **由 Express 经平台 WorkerLauncher 创建直接子 Node Worker**。Windows 使用进程内原生创建、首指令前 OS 限权及单条继承 Win32 管道（OWIP/1 + JSON-RPC 2.0）；其他 OS 暂保留 `child_process.fork()` + Node IPC。只允许批准的公开 API 路线，不使用实验未公开导出或私有 framing 回退。两端完成协议、expressRunId/workerRunId、角色和能力握手；生产 Worker 还必须满足 SEC-W01。无 Worker 监听端口或外部重连入口。
++6. Express 分别报告 controlPlaneReady 与 agentReady。迁移/认证/健康检查通过后可供 P1 独立控制面和空测试窗口验收；仅 Worker 握手且取得对应运行资格后 agentReady 才可为 true。隔离不可用时返回 WORKER_ISOLATION_UNAVAILABLE，禁止生产任务，不启动无隔离临时 Worker。Preload 白名单与正常 UI 数据链不变。
+ 7. **Main 只直接监管 Express 及其服务进程树；Express 直接监控 Worker 的退出与心跳。** Worker 崩溃后任务按 ADR-005 中断；任何进程重启均实施有界退避和重启预算。
+ 8. **Express 崩溃/重启时，旧 Worker 及旧 Express 关联的沙箱进程必须被有界清理并确认退出；新 Express 只能创建新 Worker。禁止旧 Worker 跨 Express 实例存活、重连或继续执行。** 在清理确认前新实例禁止分发有副作用工具。
+ 
+-必须同时验证：Worker ↔ Express 只存在一条继承的 IPC 链路；Main 不暴露 Worker RPC；服务实例以 `expressRunId / workerRunId / taskId` 关联，旧实例消息必须被拒绝。`fork()` 的默认 `env`/`execArgv` 不可直接继承不可信环境，应使用白名单环境、固定 `execPath` 和启动参数。
++必须同时验证：Worker ↔ Express 只存在一条继承的 IPC 链路；Main 不暴露 Worker RPC；服务实例以 `expressRunId / workerRunId / taskId` 关联，旧实例消息必须被拒绝。所有 WorkerLauncher 的 env/cwd/启动参数必须白名单化，固定随包 Node execPath；禁止继承不可信 PATH/NODE_OPTIONS/调试参数。
+ 
+ ### 3.2 通信边界
+ 
+@@ -112,13 +114,13 @@ flowchart TD
+ |---|---|---|---|
+ | Renderer ↔ Preload ↔ Main | Electron 白名单 IPC | 验证 `senderFrame`、窗口和类型，禁止任意代理 | 双向请求/事件 |
+ | Main ↔ Express | `127.0.0.1` 回环 HTTP + 流式受控代理 | Main 令牌、Host/Origin 检查、请求限流；未来迁 OS IPC | 受控请求/响应/事件流 |
+-| Express ↔ Worker | **`child_process.fork()` 继承 Node IPC + JSON-RPC 2.0** | OS 父子关系、进程实例身份、协议/角色握手、运行时 Schema、消息配额；不提供监听端口 | 双向请求/事件 |
++| Express ↔ Worker | **Windows：原生创建 + 继承 Win32 管道 OWIP/1；其他 OS：fork + Node IPC；共同 JSON-RPC 2.0** | OS 父子关系、进程实例身份、协议/角色握手、运行时 Schema、消息配额；不提供监听端口 | 双向请求/事件 |
+ | Express ↔ Main Crypto Bridge | 认证的受限内部 RPC | Express 特定能力、实例绑定、最小操作集合 | 加/解密 |
+ | Express ↔ Model Provider | HTTPS / 本地模型专用传输 | 密钥不交 Worker，超时、取消、背压 | 归一化模型流 |
+ | Express ↔ Sandboxed Tool | 沙箱进程标准流 + 受控执行结果通道 | 固定启动器、能力授予、`attemptId`、有界缓冲和退出监管 | stdout/stderr 实时事件、结果 |
+ | Express ↔ MCP Server | stdio / HTTPS 经受限 MCP Host | 每个 Server 独立权限、身份、网络限制 | 工具调用/事件 |
+ 
+-JSON-RPC 2.0 的调用 ID 仅用于请求关联，不是认证凭据。`process.send()` 的返回/回调与消息确认必须区分；使用有界队列处理背压。进程退出或 IPC 断开必须触发 task 中断与执行清理，不可让 Node IPC 断开后的 Worker 自行延续任务。
++JSON-RPC 2.0 的调用 ID 仅用于请求关联，不是认证凭据。底层通道写入完成（含 Node IPC 的 process.send 返回/回调）与业务消息确认必须区分；使用有界队列处理背压。进程退出或 IPC 断开必须触发 task 中断与执行清理，不可让 Node IPC 断开后的 Worker 自行延续任务。
+ 
+ **CLI 后续接入**：使用独立客户端身份和完全相同的 Express 领域服务，不得复用 Main 私有令牌或 Worker 内部身份。
+ 
+@@ -296,6 +298,13 @@ P3b 对每一个准备向用户开放高危工具的平台分别运行完整安
+ - Worker 可接收已经归一化的模型流事件与工具结果，但不得直接访问任意 `fs`、数据库或公共网络。该限制必须由 OS 与通信白名单配合实现。
+ - 一次只能使用由任务上下文授权的工具集合；提示词中出现“管理员模式”不能扩大工具能力。
+ 
++### 6.1.1 Worker Gate 与 P1 测试边界（ADR-WIN-001）
++
++- P0 冻结架构路线、批准依据和验收分期，不授予平台生产资格；Worker OS 隔离不取消。
++- P1 仅使用固定受限 fixture，必须首指令前应用 OS 限制；不得接触真实工作区、生产 DB、凭据、模型或运行 Agent Loop。隔离失败则对应集成验收 BLOCKED，不用 mock/skip 宣布通过。
++- 生产 Worker 的完整 SEC-W01 最迟在相应平台进入 P3 执行链验证前完成；UNKNOWN/FAILED 均拒绝生产任务。Read/Git/高危工具资格不能代替 Worker Gate。
++- 唯一新增导入例外为受信 transport bootstrap 的窄 Node-API 通道适配器：只操作父端授予的继承通道，不暴露任意句柄、路径、网络、创建进程或 ACL 接口；Agent Runtime 仍只依赖 contracts 与类型化 RPC client。
++
+ ### 6.2 Model Gateway（Express 内部模块）
+ 
+ 职责：模型路由、Provider Adapter、请求/响应规范化、限流与预算接口、超时、取消、错误归类、流式数据背压与重连语义（若支持）。允许 OpenAI-compatible API、Anthropic 类协议和本地模型的适配，但具体适配器不改变 Worker 契约。
+@@ -395,7 +404,8 @@ INTERRUPTED →（核实 + 用户确认）→ QUEUED / RUNNING 或保持中断
+ |---|---|
+ | 输入/Schema 错误 | 标准 `VALIDATION_ERROR`；拒绝，无工具副作用 |
+ | 未授权/过期授权 | `PERMISSION_DENIED` / `APPROVAL_REQUIRED`；不执行 |
+-| OS 沙箱不可用 | `SANDBOX_UNAVAILABLE`；**拒绝高危工具** |
++| Worker 隔离/资格不可用 | `WORKER_ISOLATION_UNAVAILABLE`；agentReady=false，拒绝生产任务，禁止无隔离降级 |
++| OS 工具沙箱不可用 | `SANDBOX_UNAVAILABLE`；**拒绝高危工具** |
+ | 模型超时/供应商限流 | 归一化错误；适当的幂等重试策略，用户可见 |
+ | MCP 连接失败 | 对应工具失败或状态未知；控制面保持正常 |
+ | Worker 崩溃 | `INTERRUPTED`，进程恢复，任务不自动重放 |
+@@ -494,7 +504,7 @@ repo/
+ │   │       ├── credentials/        # 密文存储与内部 Crypto RPC
+ │   │       ├── mcp/                # MCP Host / Adapter
+ │   │       ├── persistence/        # repositories、events、migrations
+-│   │       └── supervision/        # Worker fork + Node IPC、实例绑定、失联清理
++│   │       └── supervision/        # 平台 WorkerLauncher / IPC、实例绑定、失联清理
+ │   └── agent-worker/
+ │       └── src/
+ │           ├── runtime/            # Agent Loop、规划
+@@ -502,7 +512,9 @@ repo/
+ │           └── model-events/       # 归一化模型事件消费
+ ├── packages/
+ │   ├── contracts/                  # Schema、类型、事件、错误和版本
+-│   ├── platform-sandbox/           # linux/macos/windows 原生隔离适配
++│   ├── platform-worker/            # Node ABI 原生创建/窄继承通道，父子端 exports 分离
++│   ├── worker-transport/           # 公共 RPC client 与平台载体适配
++│   ├── platform-sandbox/           # linux/macos/windows 工具隔离适配
+ │   ├── ui/                         # 设计令牌、可复用 UI 原语
+ │   ├── observability/              # 结构化日志规范，安全脱敏
+ │   └── test-utils/                 # 合约测试、故障注入
+@@ -523,7 +535,7 @@ repo/
+ - Preload → `contracts` 和特定 Electron 桥接 API；**禁止**导出原始 Electron 通道。
+ - Main → `contracts`、Desktop lifecycle/proxy/Crypto 实现；**禁止**依赖 Worker 推理、Server 领域实现。
+ - Server → `contracts`、领域接口、平台执行适配；**禁止** import Renderer 组件和 Worker 运行时实现。
+-- Worker → `contracts`、Agent runtime；**禁止**直接 import Server DB、受限系统工具适配器。
++- Worker Runtime → `contracts`、类型化 RPC client；**禁止**直接 import Server DB、系统工具适配器或任意 native addon。仅受信 transport bootstrap 可经窄 Node-API 适配器接管继承通道，边界按 ADR-WIN-001 审查。
+ - `contracts` → 仅纯数据和 Schema 依赖，不反向依赖应用。
+ - **构建期禁止 import 只是最初门槛，运行期 OS 隔离和接口认证才是真正边界。**
+ 
+@@ -549,7 +561,7 @@ repo/
+ | SEC-14 | 无安全 OS 密钥存储时保存密钥 | 拒绝弱保护静默降级；不暴露明文 |
+ | SEC-15 | 本地/远程 MCP 伪造工具 Schema/只读标签 | 不获得超出已授权能力 |
+ | SEC-16 | 打包后的功能 × 平台声明与安全门禁测试 | **声称支持高危工具**的平台逐一通过完整沙箱安全测试（包括 SEC-05～08/12/19/21；若启用 Git 只读另需 SEC-22）；**仅声称支持基础 UI** 的平台至少通过 SEC-01/02/13/14（共同认证底线 SEC-03 不豁免），高危工具一律返回 `SANDBOX_UNAVAILABLE`；**声称支持只读工具**须通过 SEC-08，声称支持 Git 只读还须通过 SEC-22；严禁无沙箱 `spawn` 降级 |
+-| SEC-17 | Express 意外退出后旧 Worker 继续运行/新实例启动 | 旧 Worker 随旧服务进程树终止，旧 runId 请求失效，新 Express 只连接自己 fork 的新 Worker |
++| SEC-17 | Express 意外退出后旧 Worker 继续运行/新实例启动 | 旧 Worker 随旧服务进程树终止，旧 runId 请求失效，新 Express 只连接自己通过平台 WorkerLauncher 创建的新 Worker |
+ | SEC-18 | 打包后加载 `better-sqlite3` 并迁移/读写/重启 | 实际 Node sidecar ABI 匹配、SQL migration 正常，跨 OS/arch CI 产物可用 |
+ | SEC-19 | `npm install` 连续 stdout/stderr、订阅者慢、UI 断线 | 实时 delta、独立通道、有界内存/背压、截断标记、仅关键摘要落盘且可补拉 |
+ | SEC-20 | 密钥首次录入与异常崩溃 | Main 涉密路径短且受限，日志/遥测不泄密，应用级 crash dump/上传默认关闭，标明系统 dump 残余风险 |
+@@ -571,8 +583,8 @@ V1 建立统一 Design Tokens：颜色、间距、字号、字体、圆角、边
+ 
+ | 阶段 | 必须产出 | 退出门槛 |
+ |---|---|---|
+-| **P0 架构冻结** | `ARCHITECTURE.md`、`AGENTS.md`、ADR 选型表；**Worker fork + Node IPC JSON-RPC 2.0**；**SQLite + `better-sqlite3` + SQL migrations**；固定 Node sidecar 和 ABI 打包/CI 方案；P3a/P3b 分平台禁用策略；**将全部评审修订写回第 3.1、3.2、5～9、11、13～15 节** | 无关键 RPC/DB 未定事项；产物与构建策略可验证；安全验收用例已定义 |
+-| **P1 干净骨架与打包冒烟** | Main 启动 Express 服务树；Express `fork()` Worker + 继承 Node IPC；基本认证、退出清理；实际安装包中的 SQLite 原生模块 | Worker RPC/身份与旧实例清理测试通过；**打包后数据库 migration、读/写、关闭、重启恢复成功** |
++| **P0 架构冻结** | `ARCHITECTURE.md`、`AGENTS.md`、ADR 选型表；**平台 WorkerLauncher + 版本化 IPC / JSON-RPC 2.0（Windows 按 ADR-WIN-001）**；**SQLite + `better-sqlite3` + SQL migrations**；固定 Node sidecar 和 ABI 打包/CI 方案；P3a/P3b 分平台禁用策略；**将全部评审修订写回第 3.1、3.2、5～9、11、13～15 节** | 无关键 RPC/DB 未定事项；真实批准记录绑定 ADR/规范补丁/证据哈希；规范同步、产物/构建检查及分期验收定义通过；仅改状态文件不能冻结 |
++| **P1 干净骨架与打包冒烟** | Main 启动 Express 服务树；Express 平台 WorkerLauncher + 受限固定 fixture；Windows 公开管道 OWIP/1；基本认证、退出清理；实际安装包 SQLite；无生产 Worker 权限 | 至少 Windows x64 真实受限 fixture、公开创建/IPC、身份/清理与预算测试通过；**打包后数据库 migration、读/写、关闭、重启恢复成功**；SEC-W01 完整生产门禁保持独立并最迟 P3 前完成 |
+ | **P2 契约与状态** | contracts、统一 Schema、任务状态机、关键事件存储、断线补拉 | SQLite 事务/事件顺序/关键事件重放测试通过 |
+ | **P3a 沙箱选型及最小实现** | OS Sandbox Launcher 接口；**至少一个明确目标平台上的 `write_file` + `bash` 最小 OS 沙箱实现和真实测试**；低权限短命 Read Adapter 及 Read Gate；Shell 模式规则和全局停止时限 | 至少一平台真实通过 SEC-23（工作区外写拒绝、普通 Shell `.git` 禁写、默认禁网、进程树回收）与 SEC-08 Read Gate；**所有未完成本平台 P3b 的平台（含 P3a 平台）高危工具关闭** |
+ | **P3b 分平台安全门禁** | 授权/审批、Git 专用白名单、沙箱攻击测试、工具 stdout/stderr 流式/背压/落盘分级；按平台生成 `ui/read/highRisk` 能力矩阵 | **每个拟开放高危工具的平台独立通过 SEC-05～08/12/16/19/21；启用 Git 只读另需 SEC-22**；未通过即关闭高危工具并返回 `SANDBOX_UNAVAILABLE`；只读能力由本平台 Read Gate / Git Gate 单独决定 |
+@@ -602,7 +614,7 @@ V1 建立统一 Design Tokens：颜色、间距、字号、字体、圆角、边
+ 
+ | ADR | 结论 | V1 状态 |
+ |---|---|---|
+-| ADR-001 | Electron Main 管家、Renderer UI、Preload 安全桥、Express 控制面；**Worker 由 Express fork，Main 监管服务进程树** | **固定** |
++| ADR-001 | Electron Main 管家、Renderer UI、Preload 安全桥、Express 控制面；**Worker 由 Express 直接创建，Windows 原生路线按 ADR-WIN-001；Main 监管服务进程树** | **固定** |
+ | ADR-002 | Worker 的工具请求必须由 Express 审批并中转，不得直达执行能力 | **固定** |
+ | ADR-003 | 薄 Tool Router；只读短命 Read Adapter + 独立 Read Gate；高危短命 OS 沙箱 + 本平台 P3b Gate；分平台 Fail-Closed，无常驻 Executor | **固定** |
+ | ADR-004 | 普通 Shell 永远只读 `.git`；专用 Git 白名单写入通道 | **固定** |
+@@ -612,15 +624,16 @@ V1 建立统一 Design Tokens：颜色、间距、字号、字体、圆角、边
+ | ADR-008 | Express 独占 **SQLite + better-sqlite3 + SQL migrations**，关键事件驱动状态同步、断线补拉 | **固定** |
+ | ADR-009 | 用户停止：TERM→KILL 或平台等价，**默认 5s / 上限 30s**，副作用核实，显示 `STOPPED` | **固定** |
+ | ADR-010 | Express 失联 Fail-Closed、**旧 Express/Worker 同步清理**、OS 死亡绑定、重启对账 | **固定** |
+-| ADR-011 | 独立 contracts 包 + 运行时 Schema + 协议版本/能力协商 | **固定** |
++| ADR-011 | 独立 contracts 包 + 运行时 Schema + 协议版本/能力协商；Windows 公开管道载体按 ADR-WIN-001 | **固定** |
+ | ADR-012 | Express 内 Model Gateway，Worker 不持密钥，只收统一模型事件 | **固定** |
+ | ADR-013 | Express 管凭据；Main 提供 Crypto Bridge，**首次明文经 Renderer/Main**，禁 dump/泄漏及明确残余风险 | **固定** |
+ | ADR-014 | V1 最小受控 MCP；本地受限进程，远程独立授权 | **固定** |
+ | ADR-015 | V1 单 Agent 闭环；**P3a 至少一平台交付真实 `write_file/bash` 最小沙箱 + Read Gate，P3b 每平台完整门禁**；UI/只读/高危分别声明 | **固定** |
++| ADR-WIN-001 r1 | Windows 原生直接创建、公开继承管道 OWIP/1、Worker Gate 与 P1 受限测试边界；D1～D5 已批准 | **固定；实现/平台安全待验** |
+ 
+ ### 14.1 P0 工程基线补充记录（非新增访谈 ADR）
+ 
+-- **ADR-001/010 实施具体化**：`Main → Express（独立 Node sidecar）→ Worker（fork + Node IPC）`，Express 实例死亡禁止旧 Worker 存活。
++- **ADR-001/010 实施具体化**：`Main → Express（独立 Node sidecar）→ Worker（平台 WorkerLauncher + IPC；Windows 公开原生路线）`，Express 实例死亡禁止旧 Worker 存活。
+ - **ADR-008 实施具体化**：SQLite、`better-sqlite3`、SQL migrations；原生模块按**实际运行时 Node ABI**构建；只有模块加载到 Electron 中才需要 Electron ABI 重编译。
+ - **ADR-003/015 实施具体化**：P3a 至少一个平台真正运行 `write_file/bash` 最小沙箱并通过越权/禁网/回收测试，同时完成 Read Gate；每个平台高危工具在其 P3b 完整通过前默认关闭。只读能力仅在本平台 Read Gate / Git 只读门禁通过后开放。
+ - **ADR-006/009 实施具体化**：结构化命令规范化和可执行文件身份、风险能力审批、默认 5s/最大 30s 终止宽限期。
+@@ -632,7 +645,7 @@ V1 建立统一 Design Tokens：颜色、间距、字号、字体、圆角、边
+ 
+ ### 15.1 P0 已冻结的设计与工程选型
+ 
+-- **进程所有权和通信**：Main 启动/监督 Express 的服务进程树；Express `fork()` Worker；Node IPC 承载 JSON-RPC 2.0，带 schema/版本/身份/实例校验；旧实例 Worker 禁止存活。
++- **进程所有权和通信**：Main 启动/监督 Express 的服务进程树；Express 创建直接子 Worker；Windows 原生创建 + 继承 Win32 管道 OWIP/1，其他 OS 暂保留 fork + Node IPC；统一 JSON-RPC 2.0 / Schema / 版本 / 身份；旧实例禁止存活。
+ - **数据存储**：SQLite + `better-sqlite3` + SQL migrations；Express 唯一读写者；Node sidecar ABI 构建、CI、安装包 smoke test。
+ - **控制面和执行安全**：Express 是唯一授权入口；工作区范围/静态工具类型/受控 Launcher；低权限短命 Read Adapter；普通 Shell `.git` 只读；Git 专用写通道。
+ - **平台安全策略**：P3a 至少一平台真实 `write_file/bash` 最小沙箱及 Read Gate；所有平台（包括 P3a 平台）在其 P3b 前高危工具关闭。`read_file` 由本平台 SEC-08 Read Gate 决定，Git 只读另经 SEC-22；UI、只读、高危分别声明支持范围。失败不得回退至无沙箱 spawn；OS 最低版本须按测试结果写入兼容矩阵。
+@@ -646,7 +659,8 @@ V1 建立统一 Design Tokens：颜色、间距、字号、字体、圆角、边
+ |---|---|---|
+ | Node sidecar 的具体版本、签名与打包插件、目标平台原生模块二进制产物路径 | **P0 方案 / P1 烟测** | 仅 Express Node 进程加载 DB；ABI 必须匹配目标 runtime |
+ | SQLite 表结构、索引、备份细节、迁移回滚策略 | P1/P2 | 状态+关键事件原子事务、单写入者 |
+-| OS 沙箱原生启动细节、各 OS 最低版本与内核能力矩阵 | P3a/P3b | P3a 至少一平台实现 `write_file/bash` 最小沙箱；本平台 P3b 完整通过前高危执行禁用 |
++| Worker 公开创建/IPC 的实际实现与隔离 fixture | P1；生产 SEC-W01 最迟 P3 前 | 没有 OS 隔离就拒绝 Worker；不得以 fixture 通过代替生产资格 |
++| 工具 OS 沙箱原生启动细节、各 OS 最低版本与内核能力矩阵 | P3a/P3b | P3a 至少一平台实现 `write_file/bash` 最小沙箱；本平台 P3b 完整通过前高危执行禁用 |
+ | Read Adapter 的路径安全打开/拒绝策略和 Git 防外部程序策略 | SEC-08 Read Gate 最迟 P3a；Git 只读启用前 SEC-22 | 默认受限短命进程；未过 Read Gate 的平台禁止宣称支持只读；不要求高危 P3b 才开启只读；不能把轻量门禁解释为 OS 级任意代码隔离 |
+ | 私有令牌 bootstrap、Crypto Bridge 的句柄与防混淆校验 | P1/P4 | 无秘密日志、Main 不承载领域权限 |
+ | 工具普通输出采样阈值、背压上限、脱敏规则与 UI 缺口展示 | P2/P3b | contract 规定 delta 瞬时、关键摘要落盘、队列有界 |
+@@ -682,4 +696,4 @@ V1 建立统一 Design Tokens：颜色、间距、字号、字体、圆角、边
+ 
+ ---
+ 
+-**架构评审结论（修订草稿）**：ADR-001～015 的职责边界来自访谈；P0 的进程/RPC/DB/平台安全门禁、密钥风险和工具输出策略已按评审确定。**这仍是设计而非已实现证明**：Node sidecar 打包、跨 OS 沙箱、OS 生命周期绑定、凭据 bootstrap、应用级 crash dump 保护等必须经真实安装包和故障注入验证后，才可对外宣称对应安全保证。
++**架构设计冻结结论（不代表平台实现通过）**：ADR-001～015 的职责边界来自访谈；P0 的进程/RPC/DB/平台安全门禁、密钥风险和工具输出策略已按评审确定。**这仍是设计而非已实现证明**：Node sidecar 打包、跨 OS 沙箱、OS 生命周期绑定、凭据 bootstrap、应用级 crash dump 保护等必须经真实安装包和故障注入验证后，才可对外宣称对应安全保证。
+diff --git a/AGENTS.md b/AGENTS.md
+index 182ebf4..42b33f8 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1,6 +1,6 @@
+-# AGENTS.md — Electron Agent Desktop 开发守则（P0 草稿）
++# AGENTS.md — Electron Agent Desktop 开发守则（P0 决策基线）
+ 
+-> 唯一规范性架构来源：`ARCHITECTURE.md`，版本 `0.3.1-review`。本文件是对开发人员和 AI 编程助手的**可执行工程约束**，不得推翻架构决策。现为目标仓库模板；任何“通过验证”需要实际 CI 结果支持。
++> 唯一规范性架构来源：`ARCHITECTURE.md`，版本 `0.4.0-p0`（含已批准 ADR-WIN-001 r1）。本文件是对开发人员和 AI 编程助手的**可执行工程约束**，不得推翻架构决策。现为目标仓库模板；任何“通过验证”需要实际 CI 结果支持。
+ 
+ ## 1. 工作原则
+ 
+@@ -17,19 +17,23 @@
+ | `apps/desktop/src/renderer` | UI、状态视图、`contracts`、设计令牌 | Node builtin、Express、Worker、DB、FS、直接 HTTP 访问 Express、原始 `ipcRenderer` |
+ | `apps/desktop/src/preload` | 窄范围 `contextBridge`、必要 Electron IPC、`contracts` | 通用 `request(url)`、`exec(cmd)`、`readFile(path)`、`getSecret()` |
+ | `apps/desktop/src/main` | Electron 生命周期、Express 服务树监管、白名单 API 代理、Crypto Bridge | Agent Loop、Tool Router 领域规则、业务 DB、直接创建 Worker |
+-| `apps/server` | Express 领域服务、数据库、Worker fork、Tool Registry、Model Gateway、MCP Host | Renderer UI、Worker Runtime 内部实现作为业务依赖 |
+-| `apps/agent-worker` | Agent Loop、RPC、模型/工具意图、`contracts` | `fs`、任意 Shell/网络、业务 DB、直接连接 MCP/模型提供商/Executor |
++| `apps/server` | Express 领域服务、数据库、平台 WorkerLauncher、Tool Registry、Model Gateway、MCP Host | Renderer UI、Worker Runtime 内部实现作为业务依赖 |
++| `apps/agent-worker` | Agent Loop、类型化 RPC client、模型/工具意图、`contracts`；受信 bootstrap 仅窄继承通道适配 | `fs`、任意 Shell/网络、业务 DB、直接连接 MCP/模型提供商/Executor |
+ | `packages/contracts` | 纯 Schema、类型、错误码、事件、版本 | Electron/Express/DB/网络/系统 I/O |
+ 
+ 导入禁令需要 lint/build 自动检验；Node Worker 的权限边界还必须通过 OS 级隔离测试证明。
+ 
+ ## 3. 进程与 RPC（P0/P1）
+ 
+-- 进程关系固定：**Main → Express（打包的 Node sidecar）→ Agent Worker（`child_process.fork()`）**。
+-- **Node IPC 承载 JSON-RPC 2.0**。连接时验证 `expressRunId`、`workerRunId`、协议版本、能力和 Zod Schema；不要开放 Worker RPC 监听端口。
++- 进程关系固定：**Main → Express（打包的 Node sidecar）→ 直接子 Node Worker**。Windows 由 Express 进程内原生 WorkerLauncher 创建；其他 OS 暂保留 fork。禁止中间 launcher、父 PID 伪装、无隔离回退。
++- **Windows 使用公开 Win32 单继承管道 + OWIP/1 framing + JSON-RPC 2.0；其他 OS 暂保留 Node IPC 适配器**。只维护一份 contracts。连接时验证 `expressRunId`、`workerRunId`、协议版本、能力和 Zod Schema；不要开放 Worker RPC 监听端口。
+ - Main 只监管 Express 服务进程树，不直接启动 Worker。Worker 退出由 Express 检测；Express 退出由 Main 触发整棵旧服务树和短命沙箱清理。
+ - 新 Express 必须创建新 Worker；不允许旧 Worker 跨实例存活、重连或继续执行。未完成清理时禁止新有副作用工具派发。
+-- `fork()` 的 `execPath`、环境变量、cwd、启动参数必须显式限制，不继承不可信 PATH/`NODE_OPTIONS`/调试参数等。
++- 所有 WorkerLauncher 的 `execPath`、环境变量、cwd、启动参数必须显式限制，不继承不可信 PATH/`NODE_OPTIONS`/调试参数等。
++
++**Worker Gate**：P1 只运行首指令前已 OS 限权的固定 fixture，不接生产任务/真实数据/凭据/模型。完整 SEC-W01 最迟对应平台进入 P3 执行链验证前通过；未知/失败均拒绝生产 Worker，返回 WORKER_ISOLATION_UNAVAILABLE。控制面可报告 controlPlaneReady，但 agentReady 必须为 false；不可把 Read/P3b 工具门禁当作 Worker 资格。公开创建/管道 fixture 失败则对应 P1 验收 BLOCKED，不用无隔离 fork 或实验未公开导出替代。
++
++**窄原生边界**：仅受信 transport bootstrap 可加载固定随包 Node-API 通道组件；子端只收发/关闭父端授予的继承通道。Agent Runtime 禁止任意 native 加载；不能导出实验 probe 的创建进程/ACL/文件/任意句柄接口。父端创建组件仅 Express 可用。
+ 
+ ## 4. SQLite 与构建（P0/P1）
+ 
+@@ -82,8 +86,11 @@
+ 
+ ## 10. CI / PR 检查清单
+ 
++- [ ] P0 冻结核验绑定 ADR-WIN-001 r1 的真实批准记录、规范更新和原始证据；改 frozen/blockers 不构成批准。
++- [ ] P1 fixture 无生产执行资格；完整 Worker SEC-W01 在 P3 前完成，失败平台 agentReady=false；新 Windows framing/异步 I/O/配额必须真实测试。
++
+ - [ ] 代码导入边界 lint、契约运行时 Schema 和协议版本测试通过。
+-- [ ] Express 失败后旧 Worker 必须退出，新实例只能 fork 新 Worker（SEC-17）。
++- [ ] Express 失败后旧 Worker 必须退出，新实例只能通过平台 WorkerLauncher 创建新 Worker（SEC-17）。
+ - [ ] 安装包 Node sidecar 加载 `better-sqlite3`，迁移、读写、重启烟测成功（SEC-18）。
+ - [ ] P3a 至少一个平台真实 `write_file/bash` 最小 OS 沙箱与 Read Gate 通过（SEC-23 + SEC-08）；**包括 P3a 平台在内**，未通过 P3b 的平台所有高危工具仍拒绝；只读按独立 Read Gate 控制。
+ - [ ] 每个宣称支持高危工具的 OS 通过沙箱、`.git`、网络、进程树完整安全验证（SEC-05～08/12/16/19/21；Git 只读另需 SEC-22）；仅支持基础 UI 的 OS 至少通过 SEC-01/02/13/14（共同 SEC-03 不豁免）；声称 `read_file` 另通过 SEC-08，声称 Git 只读另通过 SEC-22。

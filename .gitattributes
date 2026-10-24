@@ -2,6 +2,8 @@
 # Preserve the supplied normative documents byte for byte.
 ARCHITECTURE.md -text
 AGENTS.md -text
+# A stored unified diff contains required context prefixes and Markdown hard breaks.
+docs/adr/ADR-WIN-001-normative.patch whitespace=-blank-at-eol
 *.png binary
 *.ico binary
 *.icns binary

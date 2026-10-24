@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "ADR-WIN-001",
+  "revision": "r1",
+  "approvalFile": "docs/adr/approvals/ADR-WIN-001-r1.json",
+  "evidenceCommit": "c44d8c9d5c068c84e94053f3b624c0144694c3cb",
+  "policy": {
+    "windowsCreation": "express-native-direct-child",
+    "windowsTransport": "win32-inherited-pipe-OWIP-1-jsonrpc-2.0",
+    "otherPlatforms": "fork-node-ipc",
+    "p1Worker": "isolated-fixture-only",
+    "productionWorkerGate": "SEC-W01-before-P3",
+    "osIsolation": "required-before-first-instruction",
+    "publicWindowsApisOnly": true,
+    "unsafeFallback": false,
+    "productionCapabilityState": "unverified"
+  },
+  "documents": {
+    "docs/adr/ADR-WIN-001.md": "426d52fffc51592c3eb26590dd59563d8c9924ec67e9d324542a7d6a6933616d",
+    "docs/adr/ADR-WIN-001-normative.patch": "cac2681427966825cb2b1cc979e57feba3f6bbd29d0d16c45f8c6cee4f23fd16",
+    "docs/P0-REVIEW.md": "b6a3bb02f9b8fb5df2fb501f28c94a11037ab0c8e7bdb7c42df8730da6f11fe5",
+    "docs/ACCEPTANCE.md": "a27ba87c568b99a397d04318293def4642a25693cabcc111c4d6135bfac2f071"
+  },
+  "specifications": {
+    "ARCHITECTURE.md": {
+      "before": "6e8329073beaa79e6ac0073b389e12539363422931d07bd61cb1377e396242ef",
+      "after": "1652184ed504075e1ad0f63a6f7c4ed1c68220f4e88e4dfbf116262f4e645957"
+    },
+    "AGENTS.md": {
+      "before": "72f322b66eb23f4b5c6a5387001914b6afe6945d351aea6ac45ad538f8df0b49",
+      "after": "5c9505fc5aac2346248bb03ba16f1ea411351156768e94d4e35f8ee82080efcd"
+    }
+  },
+  "evidence": {
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/environment.json": "9bacba525afbc619a85af11c9a09a3843e0f5dff34fec856e0f80ad4f0855b5b",
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/lowbox-permissions.json": "01b4f39fc83e1f957759182f2d3c2d74ddd120311c309725c00aea48674f8855",
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/lowbox-hang.json": "0154dc08c6f8d25b1d8086a5c7200e90e284c5e0972951648adc473068948b34",
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/lowbox-parent-kill.json": "86f4afede715d58e644d09c39fd2e5123e16c5eed45f59563c58802a7a86cb59",
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/lowbox-main-kill.json": "01e497fdd30eb87d1c1d26c6e01aed5b99c3db3ed92817a32e154d68e570dcc2",
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/lowbox-disconnect.json": "69bacec15ba72ec3ebe13ed64e5d0acacf9365aea1833c95dadd2e348b69da26",
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/lowbox-node-spawn.json": "15a3e70ed60519ce604aed8919946e626c594ea3c07466d8091c32fcb115685a",
+    "experiments/windows-worker-isolation/evidence/2026-10-24T04-52-17-103Z-5370b70e/appcontainer-permissions.json": "c1b6ae424cb265ba1f170217b6b7856f7bddc2ae02e688de6b4d432be0e2da15"
+  }
+}

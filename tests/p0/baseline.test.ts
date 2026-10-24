@@ -17,6 +17,7 @@ function baseline(): Baseline {
 
 test('P0 metadata quality may pass while architecture freeze is blocked', () => {
   const input = baseline();
+  input.status.status = 'review-pending';
   assert.deepEqual(validateBaseline(input), []);
   assert.throws(() => requireP0Exit(input.status), /P0_NOT_FROZEN/);
 });
@@ -57,8 +58,22 @@ test('untested platform capabilities cannot be advertised', () => {
 test('unresolved decisions cannot be hidden behind a frozen label', () => {
   const input = baseline();
   input.status.status = 'frozen';
+  input.status.blockers = ['TEST_UNRESOLVED'];
   assert.ok(validateBaseline(input).some(x => x.includes('unresolved blockers')));
   assert.throws(() => requireP0Exit(input.status), /P0_NOT_FROZEN/);
+});
+
+test('editing only the status and blocker list cannot authorize P1', () => {
+  const input = baseline();
+  input.status.status = 'frozen';
+  input.status.blockers = [];
+  assert.throws(() => requireP0Exit(input.status), /P0_DECISION_NOT_APPROVED/);
+});
+
+test('removing the platform capability matrix cannot evade P0 checks', () => {
+  const input = baseline();
+  input.status.platformCapabilities = {};
+  assert.ok(validateBaseline(input).some(message => message.includes('Missing platform capability')));
 });
 
 test('missing platform checksums fail closed', () => {

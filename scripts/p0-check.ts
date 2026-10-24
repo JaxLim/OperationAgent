@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { inspectDecision } from './p0-decision.ts';
+import type { DecisionAssessment } from './p0-decision.ts';
 
 export type JsonObject = Record<string, unknown>;
 
@@ -56,6 +58,13 @@ export function validateBaseline(input: Baseline): string[] {
       require(value === 'unverified', `P0 cannot claim ${platform}/${capability} verified`);
     }
   }
+  for (const platform of ['win32-x64', 'darwin-arm64', 'linux-x64']) {
+    const capabilities = object(status.platformCapabilities)[platform];
+    require(capabilities !== undefined, `Missing platform capability matrix: ${platform}`);
+    if (capabilities !== undefined) for (const capability of ['ui', 'read', 'gitRead', 'highRisk', 'workerIsolation']) {
+      require(object(capabilities)[capability] === 'unverified', `Missing platform capability: ${platform}/${capability}`);
+    }
+  }
   const artifacts = object(runtime.artifacts);
   for (const target of ['win32-x64', 'win32-arm64', 'darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64']) {
     const artifact = object(artifacts[target]);
@@ -65,10 +74,13 @@ export function validateBaseline(input: Baseline): string[] {
   return errors;
 }
 
-export function requireP0Exit(status: JsonObject): void {
+export function requireP0Exit(status: JsonObject, decision?: DecisionAssessment): void {
   if (status.status !== 'frozen' || !Array.isArray(status.blockers) || status.blockers.length !== 0) {
     throw new Error('P0_NOT_FROZEN: resolve the recorded architecture decision before P1');
   }
+  if (!decision || decision.approval !== 'approved') throw new Error('P0_DECISION_NOT_APPROVED: explicit approval of the current decision package is required');
+  if (decision.specifications !== 'updated') throw new Error('P0_SPECIFICATIONS_NOT_UPDATED: approved normative changes must be applied');
+  if (!decision.evidenceVerified || decision.errors.length) throw new Error('P0_DECISION_EVIDENCE_INVALID: inspect decision package errors');
 }
 
 export function checkWorkspace(root: string, requireFrozen: boolean): void {
@@ -80,6 +92,8 @@ export function checkWorkspace(root: string, requireFrozen: boolean): void {
     builder: readJson(resolve(root, 'build/electron-builder.config.json')),
   };
   const errors = validateBaseline(input);
+  const decision = inspectDecision(root);
+  errors.push(...decision.errors);
   if (process.versions.node !== input.runtime.node) errors.push(`Expected Node ${String(input.runtime.node)}, got ${process.versions.node}`);
   if (process.versions.modules !== input.runtime.nodeModuleAbi) errors.push('Node ABI mismatch');
   if (readFileSync(resolve(root, '.node-version'), 'utf8').trim() !== input.runtime.node) errors.push('.node-version mismatch');
@@ -91,8 +105,10 @@ export function checkWorkspace(root: string, requireFrozen: boolean): void {
     if (existsSync(resolve(root, path))) errors.push(`P0 must not create application skeleton: ${path}`);
   }
   if (errors.length > 0) throw new Error(errors.join('\n'));
-  if (requireFrozen) requireP0Exit(input.status);
-  console.log(JSON.stringify({ check: 'P0_METADATA', passed: true, phaseStatus: input.status.status, blockers: input.status.blockers, applicationTestsRun: false }));
+  if (requireFrozen || input.status.status === 'frozen') requireP0Exit(input.status, decision);
+  console.log(JSON.stringify({ check: 'P0_METADATA', passed: true, phaseStatus: input.status.status, blockers: input.status.blockers,
+    decisionApproval: decision.approval, specificationRevision: decision.specifications, feasibilityEvidenceVerified: decision.evidenceVerified,
+    decisionPackageSha256: decision.packageSha256, applicationTestsRun: false, productionWorkerQualified: false }));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

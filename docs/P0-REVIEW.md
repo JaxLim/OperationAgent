@@ -1,8 +1,8 @@
 # P0 工程架构评审与 P1 实施设计
 
-评审日期：2026-10-23（Asia/Shanghai）。规范版本：`0.3.1-review`。
+初次评审：2026-10-23；Windows 决策复核：2026-10-24（Asia/Shanghai）。初始规范版本：`0.3.1-review`。
 
-状态：**评审和最小元数据已形成；用户已选择保留 ADR，DEC-001 待后续原型验证，P0 尚未完整冻结；P1 未开始。** 本文不具有推翻 ARCHITECTURE/AGENTS 的效力。两份规范已逐行完整读取（685/96 行）。
+状态由 `check:p0-exit` 核验，本文不能自行冻结架构。Windows 原型已完成，正式决策见 [ADR-WIN-001 r1](adr/ADR-WIN-001.md)。以下新增路线以 D1～D5 获批并同步规范为生效条件；未批准时原规范继续生效。P1 未开始。两份原始规范已完整读取（685/96 行）。
 
 ## 1. 对目标架构的理解
 
@@ -20,8 +20,8 @@ P3a 需要至少一个 OS 上真实最小 `write_file/bash` 沙箱和 Read Gate�
 |---|---|---|
 | 文件名称 | 初始为 `ARCHITECTURE .md`、`AGENTS .md` | 经用户确认仅去掉空格；重命名前后 SHA-256 相同 |
 | 规范优先级、15 项 ADR | 两文一致；架构是规范来源，AGENTS 是执行约束 | 未覆盖或改写任何正文 |
-| 进程、RPC、DB、原生 ABI | 固定，无重新选型需求 | P1 SEC-03/17/18 验收 |
-| Worker OS 隔离与 Windows fork | 无已证明的 stock fork 路径；详见 DEC-001 | **P0 完整冻结阻塞**；不能擅自修改 ADR |
+| 进程所有权、DB、原生 ABI | 保持固定；Windows 创建 API/载体有正式修改提案 | P1 SEC-03/17/18；批准前不覆盖规范 |
+| Worker OS 隔离与 Windows fork | 原生直接创建有限可行性已有证据；公开 API + OWIP/1 路线见 ADR-WIN-001 r1 | 批准、规范同步及证据检查完成后可解决 P0 架构 blocker；SEC-W01 生产 Gate 仍在 P3 前完成 |
 | 阶段测试归属 | SEC-04 没有完整列入 P3b 退出集合；SEC-16 的 UI 包含 P2/P4 才实现的能力 | 建立补充追踪矩阵：P1 仅内部骨架资格；对外 UI 支持等 SEC-01/02/03/13/14，生产 Worker 隔离另过 SEC-W01；不提前宣称支持 |
 | P0 要 CI/打包方案，P1 才有应用 | 不是必须在 P0 实现应用；两阶段证据容易混淆 | P0 编译检查工具及验证配置；P1 构建应用/实际安装烟测；占位命令必须非零退出 |
 | contracts 在 P2，但 P1 有 RPC | P1 不可能没有最小 Schema | P1 仅版本、握手、health、shutdown、标准错误；业务契约留 P2 |
@@ -54,7 +54,7 @@ P3a 需要至少一个 OS 上真实最小 `write_file/bash` 沙箱和 Read Gate�
 | Schema | Zod **4.6.7** | contracts 的纯运行时依赖；各边界消费，P1 最小握手契约 |
 | UI | React **19.3.1**；Vite **8.3.5** | Renderer/构建；本轮不安装、不制作 UI；React P6 使用前重新审查版本 |
 | 测试 | Node 内置 test runner + tsc + ESLint | P0 无额外测试框架；P1 真实进程集成，Electron E2E 工具版本在 P1 引入时锁定 |
-| RPC | Node IPC serialization:'json' + JSON-RPC 2.0 | Express↔Worker，无监听端口；协议 v1 初始仅精确匹配，升级显式协商 |
+| RPC（待 ADR 生效） | Windows 公开继承管道 OWIP/1 + JSON-RPC 2.0；其他 OS 暂保留 Node IPC serialization:'json' | 共同 contracts；无监听端口；拒绝 Node 私有 framing/未公开导出的生产回退 |
 
 本轮实际新增第三方依赖只有根 devDependencies 五项，均不进入产品进程。Electron/Builder/Express/Zod/SQLite/React/Vite 是已核查的候选锁定版本，应用依赖图与安装闭包必须在各阶段真实验证后再声明已验证。
 
@@ -72,18 +72,18 @@ P3a 需要至少一个 OS 上真实最小 `write_file/bash` 沙箱和 Read Gate�
 
 ### 3.2 协议与 bootstrap
 
-- Main 启动 Express 时用专用继承管道输送随机实例级 token，关闭无关句柄；secret 不在 argv/env/日志/磁盘。端口由 Express bind(127.0.0.1,0) 获取，ready 消息只携端口/版本/runId。ready 前必须 migration、Worker 握手、健康检查全部通过。
+- Main 启动 Express 时用专用继承管道输送随机实例级 token，关闭无关句柄；secret 不在 argv/env/日志/磁盘。端口由 Express bind(127.0.0.1,0) 获取。ADR 生效后区分 controlPlaneReady（migration/认证/健康通过）与 agentReady（还需 Worker 握手及对应资格）；隔离不可用不得接生产任务。
 - Main HTTP 代理仅允许 contracts 列举的方法和路由；精确 Host+端口策略，拒绝不允许的 Origin，CORS 不充当认证。Renderer CSP 禁止直连本地 API。IPC 同时验证 senderFrame、frame URL、窗口和 Schema。
 - Worker 继承一个 IPC channel；JSON-RPC request/response/notification 使用可区分 Schema，拒绝未知方法/字段、错误角色/旧 runId、重复响应、超限 payload。握手失败先清理进程，不开始任务。JSON-RPC request id 不用作授权。
 - P1 建议固定参数：握手 10s、心跳 1s/连续 3 次失效、停机宽限 5s、重启预算 60s 内最多 3 次；均集中配置、可注入 fake clock 测边界。任务级最长终止 30s 属 P3，不因这些值改变原文。
 - Main↔Express Crypto Bridge 预留独立能力、request correlation 和实例绑定。P1 不实现解密；P4 细化认证双向流/继承通道，不能给 Renderer 增加通用 decrypt API或 Main HTTP 监听旁路。
-- 建议 P1 单消息 256 KiB、每方向最多 64 个在途调用/1 MiB 排队字节，错误与取消有保留预算。数值需集成压测调整；调整集中配置，不在业务端维护多套配额。
+- ADR-WIN-001 r1 固定 OWIP/1 为 8 字节头、严格 UTF-8、单消息 256 KiB、每方向 64 个在途调用/1 MiB 数据队列和最多 16 KiB 保留控制帧；P1 验证边界，修改走版本回归，不维护多套权限契约。
 
 ## 4. 最终推荐目录（本轮不创建应用目录）
 
 ```text
 OperationAgent/
-├── ARCHITECTURE.md / AGENTS.md          # 保持原文
+├── ARCHITECTURE.md / AGENTS.md          # 仅按已批准 ADR 修改
 ├── package.json / pnpm-lock.yaml / pnpm-workspace.yaml
 ├── tsconfig.base.json / eslint.config.mjs
 ├── apps/
@@ -94,7 +94,7 @@ OperationAgent/
 │   │   └── tsconfig.{main,preload,renderer}.json
 │   ├── server/src/
 │   │   ├── transport/                 # HTTP、内部 RPC 入口
-│   │   ├── supervision/               # fork、握手、实例和失联处理
+│   │   ├── supervision/               # 平台 WorkerLauncher、握手、实例和失联处理
 │   │   ├── persistence/{migrations,repositories}/
 │   │   ├── domain/                    # P2
 │   │   ├── policies/                  # P3
@@ -108,6 +108,8 @@ OperationAgent/
 ├── packages/
 │   ├── contracts/src/{ipc,api,rpc,tools,events,errors,version}/
 │   ├── platform-supervision/          # 生命周期原生辅助；P1；无工具业务
+│   ├── platform-worker/               # Node ABI 原生创建/窄通道；父子端 exports 分离
+│   ├── worker-transport/              # 公共 RPC client 与载体适配；无领域权限
 │   ├── platform-sandbox/src/{windows,macos,linux}/ # P3
 │   ├── observability/                 # 脱敏日志；不导入领域模块
 │   ├── test-utils/                    # 仅 dev dependency
@@ -133,7 +135,8 @@ OperationAgent/
 | Preload | contracts、必要 Electron contextBridge/ipcRenderer | Server/Worker、通用文件/HTTP/shell/secret 代理 |
 | Main | contracts、platform-supervision、窄日志 | Worker runtime、Server domain/db、Tool Router、platform-sandbox 工具业务 |
 | Server | contracts、领域内部模块、平台接口、日志 | Renderer、Worker runtime 的代码（仅把构建路径当进程入口） |
-| Worker | contracts、纯 runtime/model-events | fs/net/http/child_process/DB/MCP/Provider、native addon 动态加载 |
+| Worker Runtime | contracts、纯 runtime/model-events、类型化 RPC client | fs/net/http/child_process/DB/MCP/Provider、任意 native addon 动态加载 |
+| 受信 Worker transport bootstrap（待 ADR 生效） | 固定 Node-API 继承通道收发/关闭组件 | 创建进程、ACL、任意路径/句柄/网络；不把实验 probe 接口带入正式组件 |
 | contracts | Zod 等纯 Schema | 应用、Node/Electron/网络/IO、运行时单例 |
 | platform-supervision | 系统 API/最小内部类型 | 领域权限、模型循环、数据库 |
 | platform-sandbox | contracts 的执行 policy 类型、OS接口 | 自行审批、任意 Shell 旁路 |
@@ -148,7 +151,7 @@ P1 使用包 exports、独立 TS projects、运行/开发依赖分离及 ESLint 
 2. 查官方资料和 registry，锁定 Node/Electron/pnpm/TypeScript/Builder；登记依赖用途与进程归属。
 3. 写入最小 metadata、严格 TS 配置、P0 检查工具、负例门禁测试、CI。无 apps/packages 运行时代码。
 4. 明确 Sidecar 资源布局、ABI 构建隔离、六种目标归档 SHA-256 与签名/验收方案。
-5. 将 DEC-001 提交用户决策；未解决时 `check:p0-exit` 必须失败，不能标记 P0 frozen。
+5. 完成 ADR-WIN-001 r1 批准、规范同步及真实证据绑定；`check:p0-exit` 必须拒绝仅改 frozen/blockers、旧批准或失效证据；P0 冻结不改变生产能力。
 6. 初始化 main 分支，纳入原文和工程基线，创建 JaxLim/OperationAgent 私有仓库并推送；验证本地/远端 SHA 一致，不修改全局 Git 身份。
 7. 出具实际命令/结果、环境限制与 P1 的明确授权入口。本轮停止在 P0。
 
@@ -159,12 +162,14 @@ P1 使用包 exports、独立 TS projects、运行/开发依赖分离及 ESLint 
 | P1.1 | contracts 最小 v1、三个应用包、进程独立 TS 配置和包 exports | build/typecheck/lint；越界 import 负例；未知字段/版本/角色拒绝 |
 | P1.2 | 官方 Node staging、最小 Express health、SQLite 基础 migration 与测试记录表 | Node ABI manifest、事务回滚/幂等迁移/数据库关闭重开；无任务业务表扩展 |
 | P1.3 | Main 安全启动、bootstrap 令牌、只回环 HTTP、有限 IPC | 外部无 token/错误 Host Origin 拒绝；合法 Main 成功；日志无 token |
-| P1.4 | Express fork 心跳 Worker、单继承 IPC、握手/健康/停机，暂不实现 Agent Loop | 父子 PID 树正确；未知 runId/重复响应/断链/超时/背压都可测试 |
+| P1.4 | Express 平台 WorkerLauncher；Windows 公开创建 API + OWIP/1；首指令前受限的固定 fixture，无 Agent Loop | Windows x64 真实受限 fixture/安装路径验证；父子进程、未知 runId/重复响应/断链/超时/背压；失败标 BLOCKED，不启无隔离 Worker |
 | P1.5 | 原生服务树监督、两阶段清理、预算和 orphan 检测 | SEC-17；强杀 Express/Main、卡死 Worker、重复启动，不残留旧 Worker |
 | P1.6 | 签名准备、原生产物/Sidecar 引入安装包、内部空窗口/测试 harness | 清洁安装后的 SEC-18；实际资源 execPath，不能误用开发机 Node |
 | P1.7 | 三 OS 已选 CPU 的 CI + 故障证据归档；未具备环境的目标明确失败/待验 | 所有声称已通过的目标有安装/重启证据；未过不发布能力；P1退出报告 |
 
 P1 不实现：任务规划/模型供应商/密钥服务/工具执行/授权产品流/MCP/业务 UI。数据库仅建立迁移机制与烟测记录，P2 定义完整领域模型；不得把计划中的功能 mock 成“已支持”。
+
+P1 的开发入口、P1 退出和生产 Worker 资格是三个独立结论。控制面/DB 可以先做独立开发；P1 总退出至少要求 Windows x64 真实受限 fixture + 新载体和安装包 DB 验收。完整 Worker SEC-W01 最迟该平台进入 P3 执行链验证前完成，回环、spawnSync、句柄/竞态等 UNKNOWN 不能后移或自动豁免。工具 P3a/P3b 和 Read Gate 保持原门槛。
 
 ## 6. Windows 环境与跨平台策略
 
