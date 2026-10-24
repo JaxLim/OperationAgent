@@ -1,0 +1,86 @@
+{
+  "mode": "lowbox",
+  "scenario": "permissions",
+  "runId": "4ceeb4f5-22c2-43a4-9981-cec23c3ef2f9",
+  "hostPid": 28732,
+  "workerPid": 11872,
+  "elapsedMs": 22516.3109,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "WORKER_RPC_NOT_READY",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "4ceeb4f5-22c2-43a4-9981-cec23c3ef2f9",
+      "data": {
+        "identity": {
+          "pid": 28732,
+          "ppid": 21056,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 55921,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "4ceeb4f5-22c2-43a4-9981-cec23c3ef2f9",
+      "data": {
+        "path": "native-startup-attributes",
+        "id": 1,
+        "pid": 11872,
+        "beforeResume": {
+          "pid": 11872,
+          "ppid": 28732,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-972380016-2436630708-2343613171-3374278242-1983925186-2878303723-1742932098",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 28732,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1052,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "4ceeb4f5-22c2-43a4-9981-cec23c3ef2f9",
+      "data": {
+        "reason": "experiment-hard-deadline",
+        "pid": 11872,
+        "elapsedMs": 9.873600000002625,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 0
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "mode": "restricted",
+  "scenario": "permissions",
+  "runId": "3de7cd03-87e4-42f3-8cf8-97ca8063a95c",
+  "hostPid": 25408,
+  "workerPid": 27400,
+  "elapsedMs": 2294.4797,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": null,
+  "stderr": "",
+  "workerAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "3de7cd03-87e4-42f3-8cf8-97ca8063a95c",
+      "data": {
+        "identity": {
+          "pid": 25408,
+          "ppid": 23916,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 54212,
+        "mode": "restricted",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "3de7cd03-87e4-42f3-8cf8-97ca8063a95c",
+      "data": {
+        "path": "native-startup-attributes",
+        "id": 1,
+        "pid": 27400,
+        "beforeResume": {
+          "pid": 27400,
+          "ppid": 25408,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 25408,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1052,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "3de7cd03-87e4-42f3-8cf8-97ca8063a95c",
+      "data": {
+        "workerExitCode": 3221225794,
+        "step": 0
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "3de7cd03-87e4-42f3-8cf8-97ca8063a95c",
+      "data": {
+        "reason": "worker-exited",
+        "pid": 27400,
+        "elapsedMs": 0.313499999999749,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 3221225794
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

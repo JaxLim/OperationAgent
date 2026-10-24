@@ -1,0 +1,66 @@
+{
+  "metadata": {
+    "batch": "2026-10-23T12-22-38-986Z-4cc91d61",
+    "time": "2026-10-23T12:22:43.903Z",
+    "os": "10.0.26300",
+    "node": "v24.22.1",
+    "arch": "x64",
+    "nodeAbi": "137",
+    "controller": {
+      "pid": 18688,
+      "ppid": 29796,
+      "appContainer": false,
+      "restricted": false,
+      "elevated": false,
+      "integrityRid": 8192,
+      "capabilityCount": 0,
+      "restrictedSidCount": 0,
+      "appContainerSid": "",
+      "childPolicyQuerySucceeded": true,
+      "noChildProcessCreation": false,
+      "inJob": true
+    },
+    "moniker": "OperationAgent.Dec001.36cbf731-14dd-4cae-ab3e-bb8d5002989b",
+    "sid": "S-1-15-2-3614419985-458488891-3228744496-917594980-1525271593-946234256-1396323830",
+    "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-23T12-22-38-986Z-4cc91d61\\runtime 空格",
+    "targets": [
+      {
+        "label": "workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-23T12-22-38-986Z-4cc91d61\\fixtures\\workspace\\synthetic-marker.txt"
+      },
+      {
+        "label": "database",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-23T12-22-38-986Z-4cc91d61\\fixtures\\database\\synthetic-marker.txt"
+      },
+      {
+        "label": "credentials",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-23T12-22-38-986Z-4cc91d61\\fixtures\\credentials\\synthetic-marker.txt"
+      },
+      {
+        "label": "outside-workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-23T12-22-38-986Z-4cc91d61\\fixtures\\outside-workspace\\synthetic-marker.txt"
+      }
+    ],
+    "profileCreated": false,
+    "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+    "addonSha256": "ddf6a6ca021cc5aeb6a1512f2d4385e360631ac4497f4d3c682bc404682cf537"
+  },
+  "results": [
+    {
+      "mode": "plain-native",
+      "scenario": "permissions",
+      "workerPid": 2552,
+      "ready": false,
+      "probe": null,
+      "workerAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ],
+  "productionSandbox": false,
+  "dec001Closed": false
+}

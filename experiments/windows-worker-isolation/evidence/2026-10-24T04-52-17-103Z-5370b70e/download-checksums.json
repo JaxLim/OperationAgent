@@ -1,0 +1,20 @@
+[
+  {
+    "url": "https://nodejs.org/dist/v24.22.1/SHASUMS256.txt",
+    "name": "SHASUMS256.txt",
+    "sha256": "fdfbffc969c0f604beff0124d409b33a43b53f5c681d6220f80023e0d6df9dc4",
+    "verifiedAgainstOfficialManifest": false
+  },
+  {
+    "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-headers.tar.gz",
+    "name": "node-headers.tar.gz",
+    "sha256": "322e0a27db9088093ab8347bdc8c7e0aaa21dc9ed548390bf06b394494c09267",
+    "verifiedAgainstOfficialManifest": true
+  },
+  {
+    "url": "https://nodejs.org/dist/v24.22.1/win-x64/node.lib",
+    "name": "node.lib",
+    "sha256": "a0a84aa03917b578d286010b7521837e9ff1136ffb2e4a406c14316c33fd06f7",
+    "verifiedAgainstOfficialManifest": true
+  }
+]

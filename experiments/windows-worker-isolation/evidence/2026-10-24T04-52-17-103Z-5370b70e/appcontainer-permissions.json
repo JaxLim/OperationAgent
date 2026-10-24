@@ -1,0 +1,61 @@
+{
+  "mode": "appcontainer",
+  "scenario": "permissions",
+  "runId": "76d1ec5f-1784-45ee-b4dd-01e88cf5cbae",
+  "supervisorPid": null,
+  "hostPid": 22976,
+  "workerPid": 0,
+  "elapsedMs": 486.45130000000063,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "{\"message\":\"CreateProcess with startup restrictions (win32=2)\"}",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "expressAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "76d1ec5f-1784-45ee-b4dd-01e88cf5cbae",
+      "data": {
+        "identity": {
+          "pid": 22976,
+          "ppid": 25508,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 49368,
+        "mode": "appcontainer",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "76d1ec5f-1784-45ee-b4dd-01e88cf5cbae",
+      "data": {
+        "message": "CreateProcess with startup restrictions (win32=2)"
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "76d1ec5f-1784-45ee-b4dd-01e88cf5cbae",
+      "data": {
+        "reason": "launch-failed",
+        "pid": 0,
+        "elapsedMs": 0.006300000000010186,
+        "nativeResult": null,
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

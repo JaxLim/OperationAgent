@@ -1,0 +1,23 @@
+{
+  "name": "strict-types",
+  "args": [
+    "D:\\Operation_Agent\\node_modules\\typescript\\bin\\tsc",
+    "-p",
+    "tsconfig.json"
+  ],
+  "cwd": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\",
+  "expected": 0,
+  "command": [
+    "D:\\Operation_Agent\\.tools\\node\\node.exe",
+    "D:\\Operation_Agent\\node_modules\\typescript\\bin\\tsc",
+    "-p",
+    "tsconfig.json"
+  ],
+  "exitCode": 0,
+  "signal": null,
+  "elapsedMs": 2291,
+  "stdout": "",
+  "stderr": "",
+  "error": null,
+  "passed": true
+}

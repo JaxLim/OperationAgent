@@ -1,0 +1,66 @@
+{
+  "metadata": {
+    "batch": "2026-10-24T04-29-37-001Z-545230b5",
+    "time": "2026-10-24T04:29:37.919Z",
+    "os": "10.0.26300",
+    "node": "v24.22.1",
+    "arch": "x64",
+    "nodeAbi": "137",
+    "controller": {
+      "pid": 15988,
+      "ppid": 16480,
+      "appContainer": false,
+      "restricted": false,
+      "elevated": false,
+      "integrityRid": 8192,
+      "capabilityCount": 0,
+      "restrictedSidCount": 0,
+      "appContainerSid": "",
+      "childPolicyQuerySucceeded": true,
+      "noChildProcessCreation": false,
+      "inJob": true
+    },
+    "moniker": "OperationAgent.Dec001.c31fbf27-3293-4481-b5fe-25c2fee0f5d9",
+    "sid": "S-1-15-2-250950099-911201873-3153063294-1515978557-2424254464-2281327595-3680275519",
+    "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-29-37-001Z-545230b5\\runtime 空格",
+    "targets": [
+      {
+        "label": "workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-29-37-001Z-545230b5\\fixtures\\workspace\\synthetic-marker.txt"
+      },
+      {
+        "label": "database",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-29-37-001Z-545230b5\\fixtures\\database\\synthetic-marker.txt"
+      },
+      {
+        "label": "credentials",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-29-37-001Z-545230b5\\fixtures\\credentials\\synthetic-marker.txt"
+      },
+      {
+        "label": "outside-workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-29-37-001Z-545230b5\\fixtures\\outside-workspace\\synthetic-marker.txt"
+      }
+    ],
+    "profileCreated": false,
+    "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+    "addonSha256": "5a18b66434d958f3857390ae06515ee4ab0779ca981d2161ff14a83a0fe0fc2f"
+  },
+  "results": [
+    {
+      "mode": "appcontainer",
+      "scenario": "permissions",
+      "workerPid": 0,
+      "ready": false,
+      "probe": null,
+      "workerAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ],
+  "productionSandbox": false,
+  "dec001Closed": false
+}

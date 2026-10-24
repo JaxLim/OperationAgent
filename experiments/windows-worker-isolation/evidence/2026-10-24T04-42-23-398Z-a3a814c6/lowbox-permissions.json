@@ -1,0 +1,128 @@
+{
+  "mode": "lowbox",
+  "scenario": "permissions",
+  "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+  "hostPid": 26036,
+  "workerPid": 26112,
+  "elapsedMs": 22492.8947,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "{\"message\":\"EXPERIMENT_HARD_DEADLINE\"}",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "identity": {
+          "pid": 26036,
+          "ppid": 14140,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 58276,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "path": "native-startup-attributes",
+        "id": 1,
+        "pid": 26112,
+        "beforeResume": {
+          "pid": 26112,
+          "ppid": 26036,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2164977373-1383447749-2353832832-3699704577-2063628752-1375582102-1506938636",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 26036,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1064,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "text": "DEC001_CHECKPOINT: eval started\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "text": "DEC001_CHECKPOINT: worker modules imported\nDEC001_CHECKPOINT: native addon loaded\nDEC001_PROBE_BEGIN: identity\nDEC001_PROBE_END: identity\nDEC001_PROBE_BEGIN: read-workspace\nDEC001_PROBE_END: read-workspace\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-database\nDEC001_PROBE_END: read-database\nDEC001_PROBE_BEGIN: read-credentials\nDEC001_PROBE_END: read-credentials\nDEC001_PROBE_BEGIN: read-outside-workspace\nDEC001_PROBE_END: read-outside-workspace\nDEC001_PROBE_BEGIN: externalTcp\nDEC001_PROBE_END: externalTcp\nDEC001_PROBE_BEGIN: loopbackTcp\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp\nDEC001_PROBE_BEGIN: nativeSpawn\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "text": "DEC001_PROBE_END: nativeSpawn\nDEC001_PROBE_BEGIN: breakawaySpawn\nDEC001_PROBE_END: breakawaySpawn\nDEC001_PROBE_BEGIN: nodeSpawn\n"
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "message": "EXPERIMENT_HARD_DEADLINE"
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "f02136f2-d648-4d51-b605-2b103f04140a",
+      "data": {
+        "reason": "experiment-hard-deadline",
+        "pid": 26112,
+        "elapsedMs": 8.660100000000966,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 0
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

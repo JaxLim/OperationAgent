@@ -1,0 +1,46 @@
+{
+  "batch": "2026-10-24T04-42-23-398Z-a3a814c6",
+  "time": "2026-10-24T04:42:24.339Z",
+  "os": "10.0.26300",
+  "node": "v24.22.1",
+  "arch": "x64",
+  "nodeAbi": "137",
+  "controller": {
+    "pid": 14140,
+    "ppid": 13996,
+    "appContainer": false,
+    "restricted": false,
+    "elevated": false,
+    "integrityRid": 8192,
+    "capabilityCount": 0,
+    "restrictedSidCount": 0,
+    "appContainerSid": "",
+    "childPolicyQuerySucceeded": true,
+    "noChildProcessCreation": false,
+    "inJob": true
+  },
+  "moniker": "OperationAgent.Dec001.1c37a9e7-3e76-4cab-835c-d9484c8d4baa",
+  "sid": "S-1-15-2-2164977373-1383447749-2353832832-3699704577-2063628752-1375582102-1506938636",
+  "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-42-23-398Z-a3a814c6\\runtime 空格",
+  "targets": [
+    {
+      "label": "workspace",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-42-23-398Z-a3a814c6\\fixtures\\workspace\\synthetic-marker.txt"
+    },
+    {
+      "label": "database",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-42-23-398Z-a3a814c6\\fixtures\\database\\synthetic-marker.txt"
+    },
+    {
+      "label": "credentials",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-42-23-398Z-a3a814c6\\fixtures\\credentials\\synthetic-marker.txt"
+    },
+    {
+      "label": "outside-workspace",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-42-23-398Z-a3a814c6\\fixtures\\outside-workspace\\synthetic-marker.txt"
+    }
+  ],
+  "profileCreated": false,
+  "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+  "addonSha256": "e28cab234d5a44c51a0b5be99475e69b67f73dc45d54a6f6e37bfb43fbea089d"
+}

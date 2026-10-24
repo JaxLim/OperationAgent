@@ -1,0 +1,21 @@
+{
+  "name": "root-p0-checks",
+  "args": [
+    ".tools/pnpm/bin/pnpm.cjs",
+    "check"
+  ],
+  "cwd": "D:\\Operation_Agent",
+  "expected": 0,
+  "command": [
+    "D:\\Operation_Agent\\.tools\\node\\node.exe",
+    ".tools/pnpm/bin/pnpm.cjs",
+    "check"
+  ],
+  "exitCode": 0,
+  "signal": null,
+  "elapsedMs": 8365,
+  "stdout": "\n> operation-agent@0.0.0 check D:\\Operation_Agent\n> node scripts/run-checks.mjs\n\n\n> operation-agent@0.0.0 typecheck D:\\Operation_Agent\n> tsc -p tsconfig.tools.json --noEmit\n\n\n> operation-agent@0.0.0 lint D:\\Operation_Agent\n> eslint scripts tests/p0 eslint.config.mjs --max-warnings 0\n\n\n> operation-agent@0.0.0 test D:\\Operation_Agent\n> node --test tests/p0/*.test.ts\n\n✔ P0 metadata quality may pass while architecture freeze is blocked (45.6789ms)\n✔ application dependencies cannot silently enter P0 (0.8893ms)\n✔ floating dependency versions and mismatched runtimes fail the gate (0.6318ms)\n✔ strict mode and Renderer type separation cannot silently weaken (0.7559ms)\n✔ Electron native rebuild cannot replace sidecar Node artifacts (0.5631ms)\n✔ untested platform capabilities cannot be advertised (0.507ms)\n✔ unresolved decisions cannot be hidden behind a frozen label (0.662ms)\n✔ missing platform checksums fail closed (0.5122ms)\n✔ P1 command guard exits nonzero instead of producing a green fake test (85.1875ms)\n✔ non-object JSON configuration is rejected (0.3948ms)\nℹ tests 10\nℹ suites 0\nℹ pass 10\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 279.4577\n\n> operation-agent@0.0.0 build D:\\Operation_Agent\n> tsc -p tsconfig.tools.json\n\n\n> operation-agent@0.0.0 verify:p0 D:\\Operation_Agent\n> node scripts/p0-check.ts\n\n{\"check\":\"P0_METADATA\",\"passed\":true,\"phaseStatus\":\"review-pending\",\"blockers\":[\"DEC-001-WINDOWS-WORKER-ISOLATION\"],\"applicationTestsRun\":false}\n",
+  "stderr": "",
+  "error": null,
+  "passed": true
+}

@@ -1,0 +1,892 @@
+{
+  "metadata": {
+    "batch": "2026-10-24T04-47-41-133Z-475dc2c8",
+    "time": "2026-10-24T04:47:42.012Z",
+    "os": "10.0.26300",
+    "node": "v24.22.1",
+    "arch": "x64",
+    "nodeAbi": "137",
+    "controller": {
+      "pid": 23928,
+      "ppid": 27204,
+      "appContainer": false,
+      "restricted": false,
+      "elevated": false,
+      "integrityRid": 8192,
+      "capabilityCount": 0,
+      "restrictedSidCount": 0,
+      "appContainerSid": "",
+      "childPolicyQuerySucceeded": true,
+      "noChildProcessCreation": false,
+      "inJob": true
+    },
+    "moniker": "OperationAgent.Dec001.c97afb84-d4bd-41dd-be70-bb230bf5a5a4",
+    "sid": "S-1-15-2-2150622309-2839663011-823749436-1393256901-1474275623-1269258221-3683508102",
+    "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-47-41-133Z-475dc2c8\\runtime 空格",
+    "targets": [
+      {
+        "label": "workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-47-41-133Z-475dc2c8\\fixtures\\workspace\\synthetic-marker.txt"
+      },
+      {
+        "label": "database",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-47-41-133Z-475dc2c8\\fixtures\\database\\synthetic-marker.txt"
+      },
+      {
+        "label": "credentials",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-47-41-133Z-475dc2c8\\fixtures\\credentials\\synthetic-marker.txt"
+      },
+      {
+        "label": "outside-workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-47-41-133Z-475dc2c8\\fixtures\\outside-workspace\\synthetic-marker.txt"
+      }
+    ],
+    "profileCreated": false,
+    "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+    "addonSha256": "0bc89d02af0c4406be06b8ab0a28eb4727adc0347cbbe28c9f8687f2b64c5f31"
+  },
+  "results": [
+    {
+      "mode": "lowbox",
+      "scenario": "permissions",
+      "workerPid": 504,
+      "ready": true,
+      "probe": {
+        "identity": {
+          "pid": 504,
+          "ppid": 26888,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2150622309-2839663011-823749436-1393256901-1474275623-1269258221-3683508102",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "files": [
+          {
+            "label": "workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "database",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "credentials",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "outside-workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          }
+        ],
+        "externalTcp": {
+          "allowed": false,
+          "error": 10013
+        },
+        "loopbackTcp": {
+          "allowed": false,
+          "error": 10060
+        },
+        "nativeSpawn": {
+          "allowed": false,
+          "error": 367
+        },
+        "breakawaySpawn": {
+          "allowed": false,
+          "error": 5
+        },
+        "nodeSpawn": {
+          "allowed": false,
+          "code": "NOT_RUN_SEPARATE_SCENARIO"
+        },
+        "parentAccess": {
+          "allowed": false,
+          "error": 5
+        },
+        "canaryHandle": {
+          "resolved": false,
+          "path": "",
+          "error": 6,
+          "exceptionCode": 3221225480
+        },
+        "nodePermissionEnabled": false,
+        "rpcAvailable": true
+      },
+      "workerAliveAfter": false,
+      "expressAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "lowbox",
+      "scenario": "disconnect",
+      "workerPid": 22724,
+      "ready": true,
+      "probe": {
+        "identity": {
+          "pid": 22724,
+          "ppid": 31008,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2150622309-2839663011-823749436-1393256901-1474275623-1269258221-3683508102",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "files": [
+          {
+            "label": "workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "database",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "credentials",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "outside-workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          }
+        ],
+        "externalTcp": {
+          "allowed": false,
+          "error": 10013
+        },
+        "loopbackTcp": {
+          "allowed": false,
+          "error": 10060
+        },
+        "nativeSpawn": {
+          "allowed": false,
+          "error": 367
+        },
+        "breakawaySpawn": {
+          "allowed": false,
+          "error": 5
+        },
+        "nodeSpawn": {
+          "allowed": false,
+          "code": "NOT_RUN_SEPARATE_SCENARIO"
+        },
+        "parentAccess": {
+          "allowed": false,
+          "error": 5
+        },
+        "canaryHandle": {
+          "resolved": false,
+          "path": "",
+          "error": 6,
+          "exceptionCode": 3221225480
+        },
+        "nodePermissionEnabled": false,
+        "rpcAvailable": true
+      },
+      "workerAliveAfter": false,
+      "expressAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "lowbox",
+      "scenario": "hang",
+      "workerPid": 31580,
+      "ready": true,
+      "probe": {
+        "identity": {
+          "pid": 31580,
+          "ppid": 7836,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2150622309-2839663011-823749436-1393256901-1474275623-1269258221-3683508102",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "files": [
+          {
+            "label": "workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "database",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "credentials",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "outside-workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          }
+        ],
+        "externalTcp": {
+          "allowed": false,
+          "error": 10013
+        },
+        "loopbackTcp": {
+          "allowed": false,
+          "error": 10060
+        },
+        "nativeSpawn": {
+          "allowed": false,
+          "error": 367
+        },
+        "breakawaySpawn": {
+          "allowed": false,
+          "error": 5
+        },
+        "nodeSpawn": {
+          "allowed": false,
+          "code": "NOT_RUN_SEPARATE_SCENARIO"
+        },
+        "parentAccess": {
+          "allowed": false,
+          "error": 5
+        },
+        "canaryHandle": {
+          "resolved": false,
+          "path": "",
+          "error": 6,
+          "exceptionCode": 3221225480
+        },
+        "nodePermissionEnabled": false,
+        "rpcAvailable": true
+      },
+      "workerAliveAfter": false,
+      "expressAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    },
+    {
+      "mode": "lowbox",
+      "scenario": "parent-kill",
+      "workerPid": 14012,
+      "ready": true,
+      "probe": {
+        "identity": {
+          "pid": 14012,
+          "ppid": 24988,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2150622309-2839663011-823749436-1393256901-1474275623-1269258221-3683508102",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "files": [
+          {
+            "label": "workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "database",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "credentials",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "outside-workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          }
+        ],
+        "externalTcp": {
+          "allowed": false,
+          "error": 10013
+        },
+        "loopbackTcp": {
+          "allowed": false,
+          "error": 10060
+        },
+        "nativeSpawn": {
+          "allowed": false,
+          "error": 367
+        },
+        "breakawaySpawn": {
+          "allowed": false,
+          "error": 5
+        },
+        "nodeSpawn": {
+          "allowed": false,
+          "code": "NOT_RUN_SEPARATE_SCENARIO"
+        },
+        "parentAccess": {
+          "allowed": false,
+          "error": 5
+        },
+        "canaryHandle": {
+          "resolved": false,
+          "path": "",
+          "error": 6,
+          "exceptionCode": 3221225480
+        },
+        "nodePermissionEnabled": false,
+        "rpcAvailable": true
+      },
+      "workerAliveAfter": false,
+      "expressAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    },
+    {
+      "mode": "lowbox",
+      "scenario": "main-kill",
+      "workerPid": 4196,
+      "ready": true,
+      "probe": {
+        "identity": {
+          "pid": 4196,
+          "ppid": 31944,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2150622309-2839663011-823749436-1393256901-1474275623-1269258221-3683508102",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "files": [
+          {
+            "label": "workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "database",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "credentials",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "outside-workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          }
+        ],
+        "externalTcp": {
+          "allowed": false,
+          "error": 10013
+        },
+        "loopbackTcp": {
+          "allowed": false,
+          "error": 10060
+        },
+        "nativeSpawn": {
+          "allowed": false,
+          "error": 367
+        },
+        "breakawaySpawn": {
+          "allowed": false,
+          "error": 5
+        },
+        "nodeSpawn": {
+          "allowed": false,
+          "code": "NOT_RUN_SEPARATE_SCENARIO"
+        },
+        "parentAccess": {
+          "allowed": false,
+          "error": 5
+        },
+        "canaryHandle": {
+          "resolved": false,
+          "path": "",
+          "error": 6,
+          "exceptionCode": 3221225480
+        },
+        "nodePermissionEnabled": false,
+        "rpcAvailable": true
+      },
+      "workerAliveAfter": false,
+      "expressAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    },
+    {
+      "mode": "lowbox",
+      "scenario": "node-spawn",
+      "workerPid": 33812,
+      "ready": true,
+      "probe": {
+        "identity": {
+          "pid": 33812,
+          "ppid": 34460,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2150622309-2839663011-823749436-1393256901-1474275623-1269258221-3683508102",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "files": [
+          {
+            "label": "workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "database",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "credentials",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          },
+          {
+            "label": "outside-workspace",
+            "nativeRead": {
+              "allowed": false,
+              "error": 5
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeRead": {
+              "allowed": false,
+              "code": "EPERM"
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EPERM"
+            }
+          }
+        ],
+        "externalTcp": {
+          "allowed": false,
+          "error": 10013
+        },
+        "loopbackTcp": {
+          "allowed": false,
+          "error": 10060
+        },
+        "nativeSpawn": {
+          "allowed": false,
+          "error": 367
+        },
+        "breakawaySpawn": {
+          "allowed": false,
+          "error": 5
+        },
+        "nodeSpawn": {
+          "allowed": false,
+          "code": "NOT_RUN_SEPARATE_SCENARIO"
+        },
+        "parentAccess": {
+          "allowed": false,
+          "error": 5
+        },
+        "canaryHandle": {
+          "resolved": false,
+          "path": "",
+          "error": 6,
+          "exceptionCode": 3221225480
+        },
+        "nodePermissionEnabled": false,
+        "rpcAvailable": true
+      },
+      "workerAliveAfter": false,
+      "expressAliveAfter": false,
+      "failure": "{\"message\":\"NODE_SPAWN_PROBE_TIMEOUT_UNKNOWN\"}",
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ],
+  "productionSandbox": false,
+  "dec001Closed": false
+}

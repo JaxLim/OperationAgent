@@ -1,0 +1,190 @@
+{
+  "metadata": {
+    "batch": "2026-10-24T04-28-20-045Z-fb989619",
+    "time": "2026-10-24T04:28:21.310Z",
+    "os": "10.0.26300",
+    "node": "v24.22.1",
+    "arch": "x64",
+    "nodeAbi": "137",
+    "controller": {
+      "pid": 19376,
+      "ppid": 36452,
+      "appContainer": false,
+      "restricted": false,
+      "elevated": false,
+      "integrityRid": 8192,
+      "capabilityCount": 0,
+      "restrictedSidCount": 0,
+      "appContainerSid": "",
+      "childPolicyQuerySucceeded": true,
+      "noChildProcessCreation": false,
+      "inJob": true
+    },
+    "moniker": "OperationAgent.Dec001.e1455a81-2e8f-4768-bd24-89a0718267cb",
+    "sid": "S-1-15-2-699545541-2263237432-4160645214-3730180568-3501095708-3209780039-2283034219",
+    "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-28-20-045Z-fb989619\\runtime 空格",
+    "targets": [
+      {
+        "label": "workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-28-20-045Z-fb989619\\fixtures\\workspace\\synthetic-marker.txt"
+      },
+      {
+        "label": "database",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-28-20-045Z-fb989619\\fixtures\\database\\synthetic-marker.txt"
+      },
+      {
+        "label": "credentials",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-28-20-045Z-fb989619\\fixtures\\credentials\\synthetic-marker.txt"
+      },
+      {
+        "label": "outside-workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-28-20-045Z-fb989619\\fixtures\\outside-workspace\\synthetic-marker.txt"
+      }
+    ],
+    "profileCreated": false,
+    "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+    "addonSha256": "fb641ab42041dee0f6621f2a51f8cf7b0f0be2e15c72d5ab64aba53b5a7cd66a"
+  },
+  "results": [
+    {
+      "mode": "plain-native",
+      "scenario": "permissions",
+      "workerPid": 13736,
+      "ready": true,
+      "probe": {
+        "identity": {
+          "pid": 13736,
+          "ppid": 30424,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "files": [
+          {
+            "label": "workspace",
+            "nativeRead": {
+              "allowed": true,
+              "error": 0
+            },
+            "nativeWrite": {
+              "allowed": true,
+              "error": 0
+            },
+            "nodeRead": {
+              "allowed": true,
+              "code": ""
+            },
+            "nodeWrite": {
+              "allowed": true,
+              "code": ""
+            }
+          },
+          {
+            "label": "database",
+            "nativeRead": {
+              "allowed": true,
+              "error": 0
+            },
+            "nativeWrite": {
+              "allowed": true,
+              "error": 0
+            },
+            "nodeRead": {
+              "allowed": true,
+              "code": ""
+            },
+            "nodeWrite": {
+              "allowed": true,
+              "code": ""
+            }
+          },
+          {
+            "label": "credentials",
+            "nativeRead": {
+              "allowed": true,
+              "error": 0
+            },
+            "nativeWrite": {
+              "allowed": false,
+              "error": 32
+            },
+            "nodeRead": {
+              "allowed": true,
+              "code": ""
+            },
+            "nodeWrite": {
+              "allowed": false,
+              "code": "EBUSY"
+            }
+          },
+          {
+            "label": "outside-workspace",
+            "nativeRead": {
+              "allowed": true,
+              "error": 0
+            },
+            "nativeWrite": {
+              "allowed": true,
+              "error": 0
+            },
+            "nodeRead": {
+              "allowed": true,
+              "code": ""
+            },
+            "nodeWrite": {
+              "allowed": true,
+              "code": ""
+            }
+          }
+        ],
+        "externalTcp": {
+          "allowed": false,
+          "error": 10060
+        },
+        "loopbackTcp": {
+          "allowed": true,
+          "error": 0
+        },
+        "nativeSpawn": {
+          "allowed": false,
+          "error": 367
+        },
+        "breakawaySpawn": {
+          "allowed": false,
+          "error": 5
+        },
+        "nodeSpawn": {
+          "allowed": false,
+          "code": "UNKNOWN"
+        },
+        "parentAccess": {
+          "allowed": true,
+          "error": 0
+        },
+        "canaryHandle": {
+          "resolved": false,
+          "path": "",
+          "error": 6
+        },
+        "nodePermissionEnabled": false,
+        "rpcAvailable": true
+      },
+      "workerAliveAfter": false,
+      "failure": null,
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ],
+  "productionSandbox": false,
+  "dec001Closed": false
+}

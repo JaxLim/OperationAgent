@@ -1,0 +1,21 @@
+{
+  "name": "root-p0-freeze-must-stay-blocked",
+  "args": [
+    "scripts/p0-check.ts",
+    "--require-frozen"
+  ],
+  "cwd": "D:\\Operation_Agent",
+  "expected": 1,
+  "command": [
+    "D:\\Operation_Agent\\.tools\\node\\node.exe",
+    "scripts/p0-check.ts",
+    "--require-frozen"
+  ],
+  "exitCode": 1,
+  "signal": null,
+  "elapsedMs": 130,
+  "stdout": "",
+  "stderr": "file:///D:/Operation_Agent/scripts/p0-check.ts:70\r\n    throw new Error('P0_NOT_FROZEN: resolve the recorded architecture decision before P1');\r\n          ^\r\n\r\nError: P0_NOT_FROZEN: resolve the recorded architecture decision before P1\r\n    at requireP0Exit (file:///D:/Operation_Agent/scripts/p0-check.ts:70:11)\r\n    at checkWorkspace (file:///D:/Operation_Agent/scripts/p0-check.ts:94:22)\r\n    at file:///D:/Operation_Agent/scripts/p0-check.ts:101:3\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)\r\n    at async node:internal/modules/esm/loader:647:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\r\n\r\nNode.js v24.22.1\r\n",
+  "error": null,
+  "passed": true
+}

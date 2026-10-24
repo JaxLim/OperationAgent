@@ -1,0 +1,23 @@
+{
+  "name": "protocol-and-evidence-tests",
+  "args": [
+    "--test",
+    "_build/js/wire.test.js",
+    "_build/js/evaluate.test.js"
+  ],
+  "cwd": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\",
+  "expected": 0,
+  "command": [
+    "D:\\Operation_Agent\\.tools\\node\\node.exe",
+    "--test",
+    "_build/js/wire.test.js",
+    "_build/js/evaluate.test.js"
+  ],
+  "exitCode": 0,
+  "signal": null,
+  "elapsedMs": 302,
+  "stdout": "✔ timeouts, sharing conflicts and absent observations cannot count as denied (0.7581ms)\n✔ a failed launch never passes RPC, cleanup or access isolation (3.7128ms)\n✔ reconstructs a message fragmented at every transport byte (1.9584ms)\n✔ preserves UTF8 characters split across libuv data frames (0.3379ms)\n✔ rejects invalid UTF8 instead of silently replacing bytes (0.3478ms)\n✔ rejects handle transfers, oversized messages and transport buffers (0.5791ms)\n✔ rejects incorrect protocol, unknown fields, invalid IDs and ambiguous responses (3.872ms)\nℹ tests 7\nℹ suites 0\nℹ pass 7\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 218.8423\n",
+  "stderr": "",
+  "error": null,
+  "passed": true
+}

@@ -1,0 +1,101 @@
+{
+  "mode": "lowbox",
+  "scenario": "permissions",
+  "runId": "9b781bcf-5162-42e4-b1b3-b5ac24f77e22",
+  "hostPid": 26180,
+  "workerPid": 15240,
+  "elapsedMs": 2524.0150000000003,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "{\"workerExitCode\":1,\"step\":0}",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "9b781bcf-5162-42e4-b1b3-b5ac24f77e22",
+      "data": {
+        "identity": {
+          "pid": 26180,
+          "ppid": 31704,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 54039,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "9b781bcf-5162-42e4-b1b3-b5ac24f77e22",
+      "data": {
+        "path": "native-startup-attributes",
+        "id": 1,
+        "pid": 15240,
+        "beforeResume": {
+          "pid": 15240,
+          "ppid": 26180,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-3400419025-3111766406-2337834581-3458134396-939543759-3875558587-484363625",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 26180,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1048,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "9b781bcf-5162-42e4-b1b3-b5ac24f77e22",
+      "data": {
+        "text": "node:fs:2830\r\n    const out = binding.lstat(\r\n                        ^\r\n\r\nError: EPERM: operation not permitted, lstat 'D:\\'\r\n    at Object.realpathSync (node:fs:2830:25)\r\n    at toRealPath (node:internal/modules/helpers:67:13)\r\n    at Module._findPath (node:internal/modules/cjs/loader:850:22)\r\n    at resolveMainPath (node:internal/modules/run_main:35:21)\r\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:146:20)\r\n    at node:internal/main/run_main_module:33:47 {\r\n  errno: -4048,\r\n  code: 'EPERM',\r\n  syscall: 'lstat',\r\n  path: 'D:\\\\'\r\n}\r\n\r\nNode.js v24.22.1\r\n"
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "9b781bcf-5162-42e4-b1b3-b5ac24f77e22",
+      "data": {
+        "workerExitCode": 1,
+        "step": 0
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "9b781bcf-5162-42e4-b1b3-b5ac24f77e22",
+      "data": {
+        "reason": "worker-exited",
+        "pid": 15240,
+        "elapsedMs": 3.1891999999998006,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 1
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "mode": "lowbox",
+  "scenario": "permissions",
+  "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+  "hostPid": 24680,
+  "workerPid": 7548,
+  "elapsedMs": 22556.7912,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "{\"message\":\"EXPERIMENT_HARD_DEADLINE\"}",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+      "data": {
+        "identity": {
+          "pid": 24680,
+          "ppid": 28664,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 61189,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+      "data": {
+        "path": "native-startup-attributes",
+        "id": 1,
+        "pid": 7548,
+        "beforeResume": {
+          "pid": 7548,
+          "ppid": 24680,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2500419182-2853858138-1515786476-237860958-936230670-4265290699-2630042970",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 24680,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1060,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+      "data": {
+        "text": "DEC001_CHECKPOINT: eval started\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+      "data": {
+        "text": "DEC001_CHECKPOINT: worker modules imported\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+      "data": {
+        "text": "DEC001_CHECKPOINT: native addon loaded\n"
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+      "data": {
+        "message": "EXPERIMENT_HARD_DEADLINE"
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "dede4f34-fab3-45e1-a134-8005274fe018",
+      "data": {
+        "reason": "experiment-hard-deadline",
+        "pid": 7548,
+        "elapsedMs": 8.957699999999022,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 0
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

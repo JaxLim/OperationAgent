@@ -1,0 +1,27 @@
+{
+  "passed": false,
+  "productionSandbox": false,
+  "dec001Closed": false,
+  "checks": [
+    {
+      "name": "native-build",
+      "passed": true
+    },
+    {
+      "name": "strict-types",
+      "passed": true
+    },
+    {
+      "name": "lint",
+      "passed": true
+    },
+    {
+      "name": "protocol-and-evidence-tests",
+      "passed": true
+    },
+    {
+      "name": "root-p0-checks",
+      "passed": false
+    }
+  ]
+}

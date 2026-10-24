@@ -1,0 +1,117 @@
+{
+  "mode": "lowbox",
+  "scenario": "permissions",
+  "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+  "supervisorPid": null,
+  "hostPid": 17328,
+  "workerPid": 19424,
+  "elapsedMs": 5054.9087,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "{\"workerExitCode\":3221225480,\"step\":0}",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "expressAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+      "data": {
+        "identity": {
+          "pid": 17328,
+          "ppid": 23312,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 54182,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+      "data": {
+        "id": 1,
+        "pid": 19424,
+        "beforeResume": {
+          "pid": 19424,
+          "ppid": 17328,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-1264167030-2237088711-3626035141-4286099758-1675928746-74198094-3946379576",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 17328,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1060,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false,
+        "path": "native-startup-attributes"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+      "data": {
+        "text": "DEC001_CHECKPOINT: eval started\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+      "data": {
+        "text": "DEC001_CHECKPOINT: worker modules imported\nDEC001_CHECKPOINT: native addon loaded\nDEC001_PROBE_BEGIN: identity 1792817122815\nDEC001_PROBE_END: identity 1792817122816\nDEC001_PROBE_BEGIN: read-workspace 1792817122816\nDEC001_PROBE_END: read-workspace 1792817122817\nDEC001_PROBE_BEGIN: read-database 1792817122817\nDEC001_PROBE_END: read-database 1792817122817\nDEC001_PROBE_BEGIN: read-credentials 1792817122817\nDEC001_PROBE_END: read-credentials 1792817122817\nDEC001_PROBE_BEGIN: read-outside-workspace 1792817122817\nDEC001_PROBE_END: read-outside-workspace 1792817122818\nDEC001_PROBE_BEGIN: externalTcp 1792817122818\nDEC001_PROBE_END: externalTcp 1792817122818\nDEC001_PROBE_BEGIN: loopbackTcp 1792817122818\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp 1792817124325\nDEC001_PROBE_BEGIN: nativeSpawn 1792817124325\nDEC001_PROBE_END: nativeSpawn 1792817124326\nDEC001_PROBE_BEGIN: breakawaySpawn 1792817124326\nDEC001_PROBE_END: breakawaySpawn 1792817124326\n"
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+      "data": {
+        "workerExitCode": 3221225480,
+        "step": 0
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "2379c413-b8f1-4d0b-92cb-8c51ba9fafde",
+      "data": {
+        "reason": "worker-exited",
+        "pid": 19424,
+        "elapsedMs": 0.39909999999963475,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 3221225480
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "mode": "lowbox",
+  "scenario": "parent-kill",
+  "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+  "supervisorPid": null,
+  "hostPid": 12768,
+  "workerPid": 9252,
+  "elapsedMs": 2179.8948999999993,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "{\"workerExitCode\":3221225480,\"step\":0}",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "expressAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "identity": {
+          "pid": 12768,
+          "ppid": 23312,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 63137,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "id": 1,
+        "pid": 9252,
+        "beforeResume": {
+          "pid": 9252,
+          "ppid": 12768,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-1264167030-2237088711-3626035141-4286099758-1675928746-74198094-3946379576",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 12768,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1060,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false,
+        "path": "native-startup-attributes"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "text": "DEC001_CHECKPOINT: eval started\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "text": "DEC001_CHECKPOINT: worker modules imported\nDEC001_CHECKPOINT: native addon loaded\nDEC001_PROBE_BEGIN: identity 1792817129382\nDEC001_PROBE_END: identity 1792817129383\nDEC001_PROBE_BEGIN: read-workspace 1792817129383\nDEC001_PROBE_END: read-workspace 1792817129383\nDEC001_PROBE_BEGIN: read-database 1792817129383\nDEC001_PROBE_END: read-database 1792817129383\nDEC001_PROBE_BEGIN: read-credentials 1792817129383\nDEC001_PROBE_END: read-credentials 1792817129384\nDEC001_PROBE_BEGIN: read-outside-workspace 1792817129384\nDEC001_PROBE_END: read-outside-workspace 1792817129384\nDEC001_PROBE_BEGIN: externalTcp 1792817129384\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "text": "DEC001_PROBE_END: externalTcp 1792817129384\nDEC001_PROBE_BEGIN: loopbackTcp 1792817129384\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp 1792817130886\nDEC001_PROBE_BEGIN: nativeSpawn 1792817130886\nDEC001_PROBE_END: nativeSpawn 1792817130887\nDEC001_PROBE_BEGIN: breakawaySpawn 1792817130887\nDEC001_PROBE_END: breakawaySpawn 1792817130887\n"
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "workerExitCode": 3221225480,
+        "step": 0
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "46c176ca-92a1-4684-bab1-a8d2b3c8c6de",
+      "data": {
+        "reason": "worker-exited",
+        "pid": 9252,
+        "elapsedMs": 0.5294000000001233,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 3221225480
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

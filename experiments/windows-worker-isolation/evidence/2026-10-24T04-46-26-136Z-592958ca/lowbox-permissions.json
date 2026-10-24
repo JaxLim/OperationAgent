@@ -1,0 +1,131 @@
+{
+  "mode": "lowbox",
+  "scenario": "permissions",
+  "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+  "supervisorPid": null,
+  "hostPid": 18852,
+  "workerPid": 29880,
+  "elapsedMs": 5336.996499999999,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": "{\"workerExitCode\":3221225480,\"step\":0}",
+  "stderr": "",
+  "workerAliveAfter": false,
+  "expressAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "identity": {
+          "pid": 18852,
+          "ppid": 5128,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 50533,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "id": 1,
+        "pid": 29880,
+        "beforeResume": {
+          "pid": 29880,
+          "ppid": 18852,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-2030722490-735566854-163281022-4102380532-3758206306-1081319330-110115457",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 18852,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1048,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false,
+        "path": "native-startup-attributes"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "text": "DEC001_CHECKPOINT: eval started\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "text": "DEC001_CHECKPOINT: worker modules imported\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "text": "DEC001_CHECKPOINT: native addon loaded\nDEC001_PROBE_BEGIN: identity 1792817192407\nDEC001_PROBE_END: identity 1792817192408\nDEC001_PROBE_BEGIN: read-workspace 1792817192408\nDEC001_PROBE_END: read-workspace 1792817192408\nDEC001_PROBE_BEGIN: read-database 1792817192408\nDEC001_PROBE_END: read-database 1792817192408\nDEC001_PROBE_BEGIN: read-credentials 1792817192409\nDEC001_PROBE_END: read-credentials 1792817192409\nDEC001_PROBE_BEGIN: read-outside-workspace 1792817192409\nDEC001_PROBE_END: read-outside-workspace 1792817192409\nDEC001_PROBE_BEGIN: externalTcp 1792817192409\nDEC001_PROBE_END: externalTcp 1792817192410\nDEC001_PROBE_BEGIN: loopbackTcp 1792817192410\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp 1792817193919\nDEC001_PROBE_BEGIN: nativeSpawn 1792817193919\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "text": "DEC001_PROBE_END: nativeSpawn 1792817193920\nDEC001_PROBE_BEGIN: breakawaySpawn 1792817193920\nDEC001_PROBE_END: breakawaySpawn 1792817193921\nDEC001_PROBE_BEGIN: parentAccess 1792817193921\nDEC001_PROBE_END: parentAccess 1792817193921\nDEC001_PROBE_BEGIN: canaryHandle 1792817193921\n"
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "workerExitCode": 3221225480,
+        "step": 0
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "a3120ca1-87af-4579-b899-a35d6f06f50c",
+      "data": {
+        "reason": "worker-exited",
+        "pid": 29880,
+        "elapsedMs": 0.9823999999998705,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 3221225480
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

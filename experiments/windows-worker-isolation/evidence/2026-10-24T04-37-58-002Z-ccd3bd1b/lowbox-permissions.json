@@ -1,0 +1,94 @@
+{
+  "mode": "lowbox",
+  "scenario": "permissions",
+  "runId": "a4e24496-3b44-4d78-95d8-9d9ec458003f",
+  "hostPid": 21340,
+  "workerPid": 6080,
+  "elapsedMs": 10794.943800000001,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": null,
+  "stderr": "",
+  "workerAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "a4e24496-3b44-4d78-95d8-9d9ec458003f",
+      "data": {
+        "identity": {
+          "pid": 21340,
+          "ppid": 20524,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 58878,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "a4e24496-3b44-4d78-95d8-9d9ec458003f",
+      "data": {
+        "path": "native-startup-attributes",
+        "id": 1,
+        "pid": 6080,
+        "beforeResume": {
+          "pid": 6080,
+          "ppid": 21340,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-1793201951-3107032316-2341044737-3239378542-4272921617-2960982842-550072363",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 21340,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1056,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false
+      }
+    },
+    {
+      "kind": "failure",
+      "runId": "a4e24496-3b44-4d78-95d8-9d9ec458003f",
+      "data": {
+        "workerExitCode": 1,
+        "step": 0
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "a4e24496-3b44-4d78-95d8-9d9ec458003f",
+      "data": {
+        "reason": "worker-exited",
+        "pid": 6080,
+        "elapsedMs": 0.3257999999987078,
+        "nativeResult": {
+          "wait": 0,
+          "exitCode": 1
+        },
+        "aliveImmediatelyAfter": false
+      }
+    }
+  ]
+}

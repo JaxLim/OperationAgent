@@ -1,0 +1,6 @@
+_build/
+_runs/
+_downloads/
+_tmp/
+node_modules/
+*.tsbuildinfo

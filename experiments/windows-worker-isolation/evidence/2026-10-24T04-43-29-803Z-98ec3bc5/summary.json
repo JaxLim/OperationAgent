@@ -1,0 +1,66 @@
+{
+  "metadata": {
+    "batch": "2026-10-24T04-43-29-803Z-98ec3bc5",
+    "time": "2026-10-24T04:43:31.215Z",
+    "os": "10.0.26300",
+    "node": "v24.22.1",
+    "arch": "x64",
+    "nodeAbi": "137",
+    "controller": {
+      "pid": 17276,
+      "ppid": 32020,
+      "appContainer": false,
+      "restricted": false,
+      "elevated": false,
+      "integrityRid": 8192,
+      "capabilityCount": 0,
+      "restrictedSidCount": 0,
+      "appContainerSid": "",
+      "childPolicyQuerySucceeded": true,
+      "noChildProcessCreation": false,
+      "inJob": true
+    },
+    "moniker": "OperationAgent.Dec001.854eaa82-0822-4e17-be32-65de5a3830ad",
+    "sid": "S-1-15-2-2227020413-3193843929-1653649458-445941950-336391756-4087723946-2755396383",
+    "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-43-29-803Z-98ec3bc5\\runtime 空格",
+    "targets": [
+      {
+        "label": "workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-43-29-803Z-98ec3bc5\\fixtures\\workspace\\synthetic-marker.txt"
+      },
+      {
+        "label": "database",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-43-29-803Z-98ec3bc5\\fixtures\\database\\synthetic-marker.txt"
+      },
+      {
+        "label": "credentials",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-43-29-803Z-98ec3bc5\\fixtures\\credentials\\synthetic-marker.txt"
+      },
+      {
+        "label": "outside-workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-43-29-803Z-98ec3bc5\\fixtures\\outside-workspace\\synthetic-marker.txt"
+      }
+    ],
+    "profileCreated": false,
+    "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+    "addonSha256": "e28cab234d5a44c51a0b5be99475e69b67f73dc45d54a6f6e37bfb43fbea089d"
+  },
+  "results": [
+    {
+      "mode": "lowbox",
+      "scenario": "permissions",
+      "workerPid": 22968,
+      "ready": false,
+      "probe": null,
+      "workerAliveAfter": false,
+      "failure": "{\"message\":\"EXPERIMENT_HARD_DEADLINE\"}",
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ],
+  "productionSandbox": false,
+  "dec001Closed": false
+}

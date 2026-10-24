@@ -1,0 +1,67 @@
+{
+  "metadata": {
+    "batch": "2026-10-24T04-46-26-136Z-592958ca",
+    "time": "2026-10-24T04:46:26.999Z",
+    "os": "10.0.26300",
+    "node": "v24.22.1",
+    "arch": "x64",
+    "nodeAbi": "137",
+    "controller": {
+      "pid": 5128,
+      "ppid": 8936,
+      "appContainer": false,
+      "restricted": false,
+      "elevated": false,
+      "integrityRid": 8192,
+      "capabilityCount": 0,
+      "restrictedSidCount": 0,
+      "appContainerSid": "",
+      "childPolicyQuerySucceeded": true,
+      "noChildProcessCreation": false,
+      "inJob": true
+    },
+    "moniker": "OperationAgent.Dec001.dfa59a21-79c6-40ab-9672-fc406704fae7",
+    "sid": "S-1-15-2-2030722490-735566854-163281022-4102380532-3758206306-1081319330-110115457",
+    "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-46-26-136Z-592958ca\\runtime 空格",
+    "targets": [
+      {
+        "label": "workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-46-26-136Z-592958ca\\fixtures\\workspace\\synthetic-marker.txt"
+      },
+      {
+        "label": "database",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-46-26-136Z-592958ca\\fixtures\\database\\synthetic-marker.txt"
+      },
+      {
+        "label": "credentials",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-46-26-136Z-592958ca\\fixtures\\credentials\\synthetic-marker.txt"
+      },
+      {
+        "label": "outside-workspace",
+        "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-46-26-136Z-592958ca\\fixtures\\outside-workspace\\synthetic-marker.txt"
+      }
+    ],
+    "profileCreated": false,
+    "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+    "addonSha256": "421fde0059b55e2454e53e81c6a85c3654789e10db0378c3edf8954a93eccdd3"
+  },
+  "results": [
+    {
+      "mode": "lowbox",
+      "scenario": "permissions",
+      "workerPid": 29880,
+      "ready": false,
+      "probe": null,
+      "workerAliveAfter": false,
+      "expressAliveAfter": false,
+      "failure": "{\"workerExitCode\":3221225480,\"step\":0}",
+      "stderr": "",
+      "exit": {
+        "code": 0,
+        "signal": null
+      }
+    }
+  ],
+  "productionSandbox": false,
+  "dec001Closed": false
+}

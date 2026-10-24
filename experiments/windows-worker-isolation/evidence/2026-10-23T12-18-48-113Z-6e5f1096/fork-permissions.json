@@ -1,0 +1,378 @@
+{
+  "mode": "fork",
+  "scenario": "permissions",
+  "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+  "hostPid": 30636,
+  "workerPid": 12380,
+  "elapsedMs": 10594.8425,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": null,
+  "stderr": "",
+  "workerAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "identity": {
+          "pid": 30636,
+          "ppid": 24932,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 51481,
+        "mode": "fork",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "path": "stock-fork",
+        "pid": 12380,
+        "parentPid": 30636,
+        "jobAssignedAfterCreate": false
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+        "method": "ready",
+        "params": {
+          "early": {
+            "identity": {
+              "pid": 12380,
+              "ppid": 30636,
+              "appContainer": false,
+              "restricted": false,
+              "elevated": false,
+              "integrityRid": 8192,
+              "capabilityCount": 0,
+              "restrictedSidCount": 0,
+              "appContainerSid": "",
+              "childPolicyQuerySucceeded": true,
+              "noChildProcessCreation": false,
+              "inJob": true
+            },
+            "files": [
+              {
+                "label": "workspace",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              },
+              {
+                "label": "database",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              },
+              {
+                "label": "credentials",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              },
+              {
+                "label": "outside-workspace",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              }
+            ],
+            "externalTcp": {
+              "allowed": false,
+              "error": 10060
+            },
+            "loopbackTcp": {
+              "allowed": true,
+              "error": 0
+            },
+            "nativeSpawn": {
+              "allowed": true,
+              "error": 0
+            },
+            "breakawaySpawn": {
+              "allowed": true,
+              "error": 0
+            },
+            "nodeSpawn": {
+              "allowed": true,
+              "code": ""
+            },
+            "parentAccess": {
+              "allowed": true,
+              "error": 0
+            },
+            "canaryHandle": {
+              "resolved": false,
+              "path": "",
+              "error": 6
+            },
+            "nodePermissionEnabled": false,
+            "rpcAvailable": true
+          }
+        }
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+        "id": 1,
+        "result": {
+          "challenge": "challenge-1",
+          "pid": 12380
+        }
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+        "id": 2,
+        "result": {
+          "identity": {
+            "pid": 12380,
+            "ppid": 30636,
+            "appContainer": false,
+            "restricted": false,
+            "elevated": false,
+            "integrityRid": 8192,
+            "capabilityCount": 0,
+            "restrictedSidCount": 0,
+            "appContainerSid": "",
+            "childPolicyQuerySucceeded": true,
+            "noChildProcessCreation": false,
+            "inJob": true
+          },
+          "files": [
+            {
+              "label": "workspace",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            },
+            {
+              "label": "database",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            },
+            {
+              "label": "credentials",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            },
+            {
+              "label": "outside-workspace",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            }
+          ],
+          "externalTcp": {
+            "allowed": false,
+            "error": 10060
+          },
+          "loopbackTcp": {
+            "allowed": true,
+            "error": 0
+          },
+          "nativeSpawn": {
+            "allowed": true,
+            "error": 0
+          },
+          "breakawaySpawn": {
+            "allowed": true,
+            "error": 0
+          },
+          "nodeSpawn": {
+            "allowed": true,
+            "code": ""
+          },
+          "parentAccess": {
+            "allowed": true,
+            "error": 0
+          },
+          "canaryHandle": {
+            "resolved": false,
+            "path": "",
+            "error": 6
+          },
+          "nodePermissionEnabled": false,
+          "rpcAvailable": true
+        }
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+        "id": 3,
+        "error": {
+          "code": "STALE_RUN_ID",
+          "message": "Rejected stale experiment instance"
+        }
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+        "id": 0,
+        "error": {
+          "code": "VALIDATION_ERROR",
+          "message": "Rejected experimental RPC schema"
+        }
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "34d8457d-1afa-44bf-a013-5b46df6af065",
+      "data": {
+        "reason": "permissions-finished",
+        "pid": 12380,
+        "elapsedMs": 0.21560000000135915,
+        "nativeResult": {
+          "killRequested": true
+        },
+        "aliveImmediatelyAfter": true
+      }
+    }
+  ]
+}

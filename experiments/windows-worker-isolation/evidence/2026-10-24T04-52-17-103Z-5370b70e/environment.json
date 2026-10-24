@@ -1,0 +1,120 @@
+{
+  "batch": "2026-10-24T04-52-17-103Z-5370b70e",
+  "time": "2026-10-24T04:52:19.649Z",
+  "os": "10.0.26300",
+  "node": "v24.22.1",
+  "arch": "x64",
+  "nodeAbi": "137",
+  "controller": {
+    "pid": 25508,
+    "ppid": 33756,
+    "appContainer": false,
+    "restricted": false,
+    "elevated": false,
+    "integrityRid": 8192,
+    "capabilityCount": 0,
+    "restrictedSidCount": 0,
+    "appContainerSid": "",
+    "childPolicyQuerySucceeded": true,
+    "noChildProcessCreation": false,
+    "inJob": true
+  },
+  "moniker": "OperationAgent.Dec001.907dd27f-268f-4ef7-908a-aad9092ac4f2",
+  "sid": "S-1-15-2-739027708-3220167649-2966694687-2928840045-312263929-596981211-520974632",
+  "runtime": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-52-17-103Z-5370b70e\\runtime 空格",
+  "targets": [
+    {
+      "label": "workspace",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-52-17-103Z-5370b70e\\fixtures\\workspace\\synthetic-marker.txt"
+    },
+    {
+      "label": "database",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-52-17-103Z-5370b70e\\fixtures\\database\\synthetic-marker.txt"
+    },
+    {
+      "label": "credentials",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-52-17-103Z-5370b70e\\fixtures\\credentials\\synthetic-marker.txt"
+    },
+    {
+      "label": "outside-workspace",
+      "path": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_runs\\2026-10-24T04-52-17-103Z-5370b70e\\fixtures\\outside-workspace\\synthetic-marker.txt"
+    }
+  ],
+  "profileCreated": false,
+  "nodeSha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5",
+  "addonSha256": "0012a873d3e27debd0f3c2a5e7b6d116d7cbf1ce4af27de7adac4ceb211bf97e",
+  "sourceHashes": {
+    "native/probe.cc": "02f32354f380dca59f08e289bfafc793e8ceac537d32b458563b98aea1f41164",
+    "src/contracts.ts": "e01d19f09e58d241ef42ae0920e912010946d6569c2387e428cc2ed329c25faa",
+    "src/native.ts": "b83cb1a26beb9067f126b749fd139233ff1057436e9269562882e78ca2932626",
+    "src/worker.ts": "17c5fd41010c5b262445881388f6b56c8e684a616131582cf56f375c43bb292c",
+    "src/host.ts": "9acf08c881fce51f7e5ebabb00bf3768162d0d776cd66b2b42acd451a747b7d4",
+    "src/run.ts": "833fb3e8483d25876d6f1416493de6d3e3fcc2ec67edd32801ce8a94fd1f7346",
+    "src/wire.ts": "7c5390e29e31e4ac60abc47289891808eb9aabdb25d20c2b08115f464b87e681",
+    "src/evaluate.ts": "7beda734d7d30b434273e2b74b750b4d43bfca2b88f59fccb6f20a3ab9dc02af",
+    "src/supervisor.ts": "ad98b736e8e7222e92fb58042a575ad1efac071a49b8fe8f511cda4697ec0a2a",
+    "package.json": "c9e32ee0fd14b5ca29e10877cc667e83ef196019b4b9741e9006c82f25f1fd6e",
+    "pnpm-lock.yaml": "57bcdc08d04a867525c20b560221cf28fa7734946c63ed49e572004c02f97e90",
+    "build.mjs": "4ae07418bc1e387243298944f6cb3c0eb6861d9ed018c0a919484cb3382ea8fb"
+  },
+  "fixtureHashes": {
+    "workspace": "4569686962d6a16bef34895d5898892696c66e418c52ccf8df24c1b303269dc4",
+    "database": "8679259f5416fcebf18b48010e5662a5d7c514a527ca931339339002602669a8",
+    "credentials": "b1f851b76a60d4c10f3522e2110faf3f7bebd0646bedfc35a880ceebbaf30353",
+    "outside-workspace": "ad78a1384c851060be8f7a65b1d59c247075c8d4be229a06007b68b9793f25ec"
+  },
+  "positiveControls": {
+    "files": [
+      {
+        "label": "workspace",
+        "read": {
+          "allowed": true,
+          "error": 0
+        },
+        "write": {
+          "allowed": true,
+          "error": 0
+        }
+      },
+      {
+        "label": "database",
+        "read": {
+          "allowed": true,
+          "error": 0
+        },
+        "write": {
+          "allowed": true,
+          "error": 0
+        }
+      },
+      {
+        "label": "credentials",
+        "read": {
+          "allowed": true,
+          "error": 0
+        },
+        "write": {
+          "allowed": true,
+          "error": 0
+        }
+      },
+      {
+        "label": "outside-workspace",
+        "read": {
+          "allowed": true,
+          "error": 0
+        },
+        "write": {
+          "allowed": true,
+          "error": 0
+        }
+      }
+    ],
+    "externalTcp": {
+      "allowed": false,
+      "error": 10060
+    }
+  },
+  "architectureSha256": "6e8329073beaa79e6ac0073b389e12539363422931d07bd61cb1377e396242ef",
+  "agentsSha256": "72f322b66eb23f4b5c6a5387001914b6afe6945d351aea6ac45ad538f8df0b49"
+}

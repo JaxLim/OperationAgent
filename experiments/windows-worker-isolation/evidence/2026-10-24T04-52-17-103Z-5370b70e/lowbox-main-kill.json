@@ -1,0 +1,557 @@
+{
+  "mode": "lowbox",
+  "scenario": "main-kill",
+  "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+  "supervisorPid": 26860,
+  "hostPid": 22084,
+  "workerPid": 25908,
+  "elapsedMs": 3858.1786999999968,
+  "killCleanupMs": 39.42389999999432,
+  "exit": {
+    "code": null,
+    "signal": "SIGKILL"
+  },
+  "failure": null,
+  "stderr": "",
+  "workerAliveAfter": false,
+  "expressAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "identity": {
+          "pid": 22084,
+          "ppid": 26860,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 62634,
+        "mode": "lowbox",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "id": 1,
+        "pid": 25908,
+        "beforeResume": {
+          "pid": 25908,
+          "ppid": 22084,
+          "appContainer": true,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 4096,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "S-1-15-2-739027708-3220167649-2966694687-2928840045-312263929-596981211-520974632",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": true,
+          "inJob": true
+        },
+        "creatorPid": 22084,
+        "suspendedBeforeVerification": true,
+        "jobAssignedAtCreation": true,
+        "leakHandle": 1080,
+        "inheritedHandleCount": 3,
+        "rpcChannelCount": 1,
+        "profileCreated": false,
+        "lpacRequested": false,
+        "path": "native-startup-attributes"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "text": "DEC001_CHECKPOINT: eval started\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "text": "DEC001_CHECKPOINT: worker modules imported\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "text": "DEC001_CHECKPOINT: native addon loaded\nDEC001_PROBE_BEGIN: identity 1792817588207\nDEC001_PROBE_END: identity 1792817588208\nDEC001_PROBE_BEGIN: read-workspace 1792817588208\nDEC001_PROBE_END: read-workspace 1792817588208\nDEC001_PROBE_BEGIN: read-database 1792817588209\nDEC001_PROBE_END: read-database 1792817588209\nDEC001_PROBE_BEGIN: read-credentials 1792817588209\nDEC001_PROBE_END: read-credentials 1792817588209\nDEC001_PROBE_BEGIN: read-outside-workspace 1792817588209\nDEC001_PROBE_END: read-outside-workspace 1792817588209\nDEC001_PROBE_BEGIN: externalTcp 1792817588209\nDEC001_PROBE_END: externalTcp 1792817588210\nDEC001_PROBE_BEGIN: loopbackTcp 1792817588210\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp 1792817589708\nDEC001_PROBE_BEGIN: nativeSpawn 1792817589708\nDEC001_PROBE_END: nativeSpawn 1792817589709\nDEC001_PROBE_BEGIN: breakawaySpawn 1792817589709\nDEC001_PROBE_END: breakawaySpawn 1792817589709\nDEC001_PROBE_BEGIN: parentAccess 1792817589709\nDEC001_PROBE_END: parentAccess 1792817589709\nDEC001_PROBE_BEGIN: canaryHandle 1792817589709\nDEC001_PROBE_END: canaryHandle 1792817589709\n"
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "worker-to-host",
+        "bytes": "AQAAAAAAAACLBgAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsIm1ldGhvZCI6InJlYWR5IiwicGFyYW1zIjp7ImVhcmx5Ijp7ImlkZW50aXR5Ijp7InBpZCI6MjU5MDgsInBwaWQiOjIyMDg0LCJhcHBDb250YWluZXIiOnRydWUsInJlc3RyaWN0ZWQiOmZhbHNlLCJlbGV2YXRlZCI6ZmFsc2UsImludGVncml0eVJpZCI6NDA5NiwiY2FwYWJpbGl0eUNvdW50IjowLCJyZXN0cmljdGVkU2lkQ291bnQiOjAsImFwcENvbnRhaW5lclNpZCI6IlMtMS0xNS0yLTczOTAyNzcwOC0zMjIwMTY3NjQ5LTI5NjY2OTQ2ODctMjkyODg0MDA0NS0zMTIyNjM5MjktNTk2OTgxMjExLTUyMDk3NDYzMiIsImNoaWxkUG9saWN5UXVlcnlTdWNjZWVkZWQiOnRydWUsIm5vQ2hpbGRQcm9jZXNzQ3JlYXRpb24iOnRydWUsImluSm9iIjp0cnVlfSwiZmlsZXMiOlt7ImxhYmVsIjoid29ya3NwYWNlIiwibmF0aXZlUmVhZCI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjV9LCJuYXRpdmVXcml0ZSI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjV9LCJub2RlUmVhZCI6eyJhbGxvd2VkIjpmYWxzZSwiY29kZSI6IkVQRVJNIn0sIm5vZGVXcml0ZSI6eyJhbGxvd2VkIjpmYWxzZSwiY29kZSI6IkVQRVJNIn19LHsibGFiZWwiOiJkYXRhYmFzZSIsIm5hdGl2ZVJlYWQiOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjo1fSwibmF0aXZlV3JpdGUiOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjo1fSwibm9kZVJlYWQiOnsiYWxsb3dlZCI6ZmFsc2UsImNvZGUiOiJFUEVSTSJ9LCJub2RlV3JpdGUiOnsiYWxsb3dlZCI6ZmFsc2UsImNvZGUiOiJFUEVSTSJ9fSx7ImxhYmVsIjoiY3JlZGVudGlhbHMiLCJuYXRpdmVSZWFkIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sIm5hdGl2ZVdyaXRlIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sIm5vZGVSZWFkIjp7ImFsbG93ZWQiOmZhbHNlLCJjb2RlIjoiRVBFUk0ifSwibm9kZVdyaXRlIjp7ImFsbG93ZWQiOmZhbHNlLCJjb2RlIjoiRVBFUk0ifX0seyJsYWJlbCI6Im91dHNpZGUtd29ya3NwYWNlIiwibmF0aXZlUmVhZCI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjV9LCJuYXRpdmVXcml0ZSI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjV9LCJub2RlUmVhZCI6eyJhbGxvd2VkIjpmYWxzZSwiY29kZSI6IkVQRVJNIn0sIm5vZGVXcml0ZSI6eyJhbGxvd2VkIjpmYWxzZSwiY29kZSI6IkVQRVJNIn19XSwiZXh0ZXJuYWxUY3AiOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjoxMDAxM30sImxvb3BiYWNrVGNwIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6MTAwNjB9LCJuYXRpdmVTcGF3biI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjM2N30sImJyZWFrYXdheVNwYXduIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sIm5vZGVTcGF3biI6eyJhbGxvd2VkIjpmYWxzZSwiY29kZSI6Ik5PVF9SVU5fU0VQQVJBVEVfU0NFTkFSSU8ifSwicGFyZW50QWNjZXNzIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sImNhbmFyeUhhbmRsZSI6eyJyZXNvbHZlZCI6ZmFsc2UsInBhdGgiOiIiLCJlcnJvciI6NiwiZXhjZXB0aW9uQ29kZSI6MzIyMTIyNTQ4MH0sIm5vZGVQZXJtaXNzaW9uRW5hYmxlZCI6ZmFsc2UsInJwY0F2YWlsYWJsZSI6dHJ1ZX19fQo="
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+        "method": "ready",
+        "params": {
+          "early": {
+            "identity": {
+              "pid": 25908,
+              "ppid": 22084,
+              "appContainer": true,
+              "restricted": false,
+              "elevated": false,
+              "integrityRid": 4096,
+              "capabilityCount": 0,
+              "restrictedSidCount": 0,
+              "appContainerSid": "S-1-15-2-739027708-3220167649-2966694687-2928840045-312263929-596981211-520974632",
+              "childPolicyQuerySucceeded": true,
+              "noChildProcessCreation": true,
+              "inJob": true
+            },
+            "files": [
+              {
+                "label": "workspace",
+                "nativeRead": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nativeWrite": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nodeRead": {
+                  "allowed": false,
+                  "code": "EPERM"
+                },
+                "nodeWrite": {
+                  "allowed": false,
+                  "code": "EPERM"
+                }
+              },
+              {
+                "label": "database",
+                "nativeRead": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nativeWrite": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nodeRead": {
+                  "allowed": false,
+                  "code": "EPERM"
+                },
+                "nodeWrite": {
+                  "allowed": false,
+                  "code": "EPERM"
+                }
+              },
+              {
+                "label": "credentials",
+                "nativeRead": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nativeWrite": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nodeRead": {
+                  "allowed": false,
+                  "code": "EPERM"
+                },
+                "nodeWrite": {
+                  "allowed": false,
+                  "code": "EPERM"
+                }
+              },
+              {
+                "label": "outside-workspace",
+                "nativeRead": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nativeWrite": {
+                  "allowed": false,
+                  "error": 5
+                },
+                "nodeRead": {
+                  "allowed": false,
+                  "code": "EPERM"
+                },
+                "nodeWrite": {
+                  "allowed": false,
+                  "code": "EPERM"
+                }
+              }
+            ],
+            "externalTcp": {
+              "allowed": false,
+              "error": 10013
+            },
+            "loopbackTcp": {
+              "allowed": false,
+              "error": 10060
+            },
+            "nativeSpawn": {
+              "allowed": false,
+              "error": 367
+            },
+            "breakawaySpawn": {
+              "allowed": false,
+              "error": 5
+            },
+            "nodeSpawn": {
+              "allowed": false,
+              "code": "NOT_RUN_SEPARATE_SCENARIO"
+            },
+            "parentAccess": {
+              "allowed": false,
+              "error": 5
+            },
+            "canaryHandle": {
+              "resolved": false,
+              "path": "",
+              "error": 6,
+              "exceptionCode": 3221225480
+            },
+            "nodePermissionEnabled": false,
+            "rpcAvailable": true
+          }
+        }
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "host-to-worker",
+        "bytes": "AQAAAAAAAACUAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjoxLCJtZXRob2QiOiJoZWxsbyIsInBhcmFtcyI6eyJjaGFsbGVuZ2UiOiJjaGFsbGVuZ2UtMSJ9fQo="
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "worker-to-host",
+        "bytes": "AQAAAAAAAACPAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjoxLCJyZXN1bHQiOnsiY2hhbGxlbmdlIjoiY2hhbGxlbmdlLTEiLCJwaWQiOjI1OTA4fX0K"
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+        "id": 1,
+        "result": {
+          "challenge": "challenge-1",
+          "pid": 25908
+        }
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "host-to-worker",
+        "bytes": "AQAAAAAAAACUAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjoyLCJtZXRob2QiOiJwcm9iZSIsInBhcmFtcyI6eyJjaGFsbGVuZ2UiOiJjaGFsbGVuZ2UtMiJ9fQo="
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: identity 1792817589734\nDEC001_PROBE_END: identity 1792817589735\nDEC001_PROBE_BEGIN: read-workspace 1792817589735\nDEC001_PROBE_END: read-workspace 1792817589735\nDEC001_PROBE_BEGIN: read-database 1792817589736\nDEC001_PROBE_END: read-database 1792817589736\nDEC001_PROBE_BEGIN: read-credentials 1792817589736\nDEC001_PROBE_END: read-credentials 1792817589736\nDEC001_PROBE_BEGIN: read-outside-workspace 1792817589736\nDEC001_PROBE_END: read-outside-workspace 1792817589736\nDEC001_PROBE_BEGIN: externalTcp 1792817589736\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "text": "DEC001_PROBE_END: externalTcp 1792817589750\nDEC001_PROBE_BEGIN: loopbackTcp 1792817589750\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp 1792817591253\nDEC001_PROBE_BEGIN: nativeSpawn 1792817591253\nDEC001_PROBE_END: nativeSpawn 1792817591254\nDEC001_PROBE_BEGIN: breakawaySpawn 1792817591254\nDEC001_PROBE_END: breakawaySpawn 1792817591254\nDEC001_PROBE_BEGIN: parentAccess 1792817591254\nDEC001_PROBE_END: parentAccess 1792817591254\nDEC001_PROBE_BEGIN: canaryHandle 1792817591254\nDEC001_PROBE_END: canaryHandle 1792817591254\n"
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "worker-to-host",
+        "bytes": "AQAAAAAAAAB3BgAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjoyLCJyZXN1bHQiOnsiaWRlbnRpdHkiOnsicGlkIjoyNTkwOCwicHBpZCI6MjIwODQsImFwcENvbnRhaW5lciI6dHJ1ZSwicmVzdHJpY3RlZCI6ZmFsc2UsImVsZXZhdGVkIjpmYWxzZSwiaW50ZWdyaXR5UmlkIjo0MDk2LCJjYXBhYmlsaXR5Q291bnQiOjAsInJlc3RyaWN0ZWRTaWRDb3VudCI6MCwiYXBwQ29udGFpbmVyU2lkIjoiUy0xLTE1LTItNzM5MDI3NzA4LTMyMjAxNjc2NDktMjk2NjY5NDY4Ny0yOTI4ODQwMDQ1LTMxMjI2MzkyOS01OTY5ODEyMTEtNTIwOTc0NjMyIiwiY2hpbGRQb2xpY3lRdWVyeVN1Y2NlZWRlZCI6dHJ1ZSwibm9DaGlsZFByb2Nlc3NDcmVhdGlvbiI6dHJ1ZSwiaW5Kb2IiOnRydWV9LCJmaWxlcyI6W3sibGFiZWwiOiJ3b3Jrc3BhY2UiLCJuYXRpdmVSZWFkIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sIm5hdGl2ZVdyaXRlIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sIm5vZGVSZWFkIjp7ImFsbG93ZWQiOmZhbHNlLCJjb2RlIjoiRVBFUk0ifSwibm9kZVdyaXRlIjp7ImFsbG93ZWQiOmZhbHNlLCJjb2RlIjoiRVBFUk0ifX0seyJsYWJlbCI6ImRhdGFiYXNlIiwibmF0aXZlUmVhZCI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjV9LCJuYXRpdmVXcml0ZSI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjV9LCJub2RlUmVhZCI6eyJhbGxvd2VkIjpmYWxzZSwiY29kZSI6IkVQRVJNIn0sIm5vZGVXcml0ZSI6eyJhbGxvd2VkIjpmYWxzZSwiY29kZSI6IkVQRVJNIn19LHsibGFiZWwiOiJjcmVkZW50aWFscyIsIm5hdGl2ZVJlYWQiOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjo1fSwibmF0aXZlV3JpdGUiOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjo1fSwibm9kZVJlYWQiOnsiYWxsb3dlZCI6ZmFsc2UsImNvZGUiOiJFUEVSTSJ9LCJub2RlV3JpdGUiOnsiYWxsb3dlZCI6ZmFsc2UsImNvZGUiOiJFUEVSTSJ9fSx7ImxhYmVsIjoib3V0c2lkZS13b3Jrc3BhY2UiLCJuYXRpdmVSZWFkIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sIm5hdGl2ZVdyaXRlIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6NX0sIm5vZGVSZWFkIjp7ImFsbG93ZWQiOmZhbHNlLCJjb2RlIjoiRVBFUk0ifSwibm9kZVdyaXRlIjp7ImFsbG93ZWQiOmZhbHNlLCJjb2RlIjoiRVBFUk0ifX1dLCJleHRlcm5hbFRjcCI6eyJhbGxvd2VkIjpmYWxzZSwiZXJyb3IiOjEwMDEzfSwibG9vcGJhY2tUY3AiOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjoxMDA2MH0sIm5hdGl2ZVNwYXduIjp7ImFsbG93ZWQiOmZhbHNlLCJlcnJvciI6MzY3fSwiYnJlYWthd2F5U3Bhd24iOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjo1fSwibm9kZVNwYXduIjp7ImFsbG93ZWQiOmZhbHNlLCJjb2RlIjoiTk9UX1JVTl9TRVBBUkFURV9TQ0VOQVJJTyJ9LCJwYXJlbnRBY2Nlc3MiOnsiYWxsb3dlZCI6ZmFsc2UsImVycm9yIjo1fSwiY2FuYXJ5SGFuZGxlIjp7InJlc29sdmVkIjpmYWxzZSwicGF0aCI6IiIsImVycm9yIjo2LCJleGNlcHRpb25Db2RlIjozMjIxMjI1NDgwfSwibm9kZVBlcm1pc3Npb25FbmFibGVkIjpmYWxzZSwicnBjQXZhaWxhYmxlIjp0cnVlfX0K"
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+        "id": 2,
+        "result": {
+          "identity": {
+            "pid": 25908,
+            "ppid": 22084,
+            "appContainer": true,
+            "restricted": false,
+            "elevated": false,
+            "integrityRid": 4096,
+            "capabilityCount": 0,
+            "restrictedSidCount": 0,
+            "appContainerSid": "S-1-15-2-739027708-3220167649-2966694687-2928840045-312263929-596981211-520974632",
+            "childPolicyQuerySucceeded": true,
+            "noChildProcessCreation": true,
+            "inJob": true
+          },
+          "files": [
+            {
+              "label": "workspace",
+              "nativeRead": {
+                "allowed": false,
+                "error": 5
+              },
+              "nativeWrite": {
+                "allowed": false,
+                "error": 5
+              },
+              "nodeRead": {
+                "allowed": false,
+                "code": "EPERM"
+              },
+              "nodeWrite": {
+                "allowed": false,
+                "code": "EPERM"
+              }
+            },
+            {
+              "label": "database",
+              "nativeRead": {
+                "allowed": false,
+                "error": 5
+              },
+              "nativeWrite": {
+                "allowed": false,
+                "error": 5
+              },
+              "nodeRead": {
+                "allowed": false,
+                "code": "EPERM"
+              },
+              "nodeWrite": {
+                "allowed": false,
+                "code": "EPERM"
+              }
+            },
+            {
+              "label": "credentials",
+              "nativeRead": {
+                "allowed": false,
+                "error": 5
+              },
+              "nativeWrite": {
+                "allowed": false,
+                "error": 5
+              },
+              "nodeRead": {
+                "allowed": false,
+                "code": "EPERM"
+              },
+              "nodeWrite": {
+                "allowed": false,
+                "code": "EPERM"
+              }
+            },
+            {
+              "label": "outside-workspace",
+              "nativeRead": {
+                "allowed": false,
+                "error": 5
+              },
+              "nativeWrite": {
+                "allowed": false,
+                "error": 5
+              },
+              "nodeRead": {
+                "allowed": false,
+                "code": "EPERM"
+              },
+              "nodeWrite": {
+                "allowed": false,
+                "code": "EPERM"
+              }
+            }
+          ],
+          "externalTcp": {
+            "allowed": false,
+            "error": 10013
+          },
+          "loopbackTcp": {
+            "allowed": false,
+            "error": 10060
+          },
+          "nativeSpawn": {
+            "allowed": false,
+            "error": 367
+          },
+          "breakawaySpawn": {
+            "allowed": false,
+            "error": 5
+          },
+          "nodeSpawn": {
+            "allowed": false,
+            "code": "NOT_RUN_SEPARATE_SCENARIO"
+          },
+          "parentAccess": {
+            "allowed": false,
+            "error": 5
+          },
+          "canaryHandle": {
+            "resolved": false,
+            "path": "",
+            "error": 6,
+            "exceptionCode": 3221225480
+          },
+          "nodePermissionEnabled": false,
+          "rpcAvailable": true
+        }
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "host-to-worker",
+        "bytes": "AQAAAAAAAACUAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImIyZWQ1Mzk1LWY3MWEtNDgyOS1iMjYzLTE5NWQ5OGM1MGRjMSIsImlkIjozLCJtZXRob2QiOiJoZWxsbyIsInBhcmFtcyI6eyJjaGFsbGVuZ2UiOiJjaGFsbGVuZ2UtMyJ9fQo="
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "worker-to-host",
+        "bytes": "AQAAAAAAAADGAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjozLCJlcnJvciI6eyJjb2RlIjotMzIwMDEsIm1lc3NhZ2UiOiJSZWplY3RlZCBzdGFsZSBleHBlcmltZW50IGluc3RhbmNlIiwiZGF0YSI6eyJyZWFzb24iOiJTVEFMRV9SVU5fSUQifX19Cg=="
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+        "id": 3,
+        "error": {
+          "code": -32001,
+          "message": "Rejected stale experiment instance",
+          "data": {
+            "reason": "STALE_RUN_ID"
+          }
+        }
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "host-to-worker",
+        "bytes": "AQAAAAAAAACmAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjo0LCJtZXRob2QiOiJoZWxsbyIsInBhcmFtcyI6eyJjaGFsbGVuZ2UiOiJjaGFsbGVuZ2UtNCJ9LCJ1bmV4cGVjdGVkIjp0cnVlfQo="
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "worker-to-host",
+        "bytes": "AQAAAAAAAADIAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjowLCJlcnJvciI6eyJjb2RlIjotMzI2MDAsIm1lc3NhZ2UiOiJSZWplY3RlZCBleHBlcmltZW50YWwgUlBDIHNjaGVtYSIsImRhdGEiOnsicmVhc29uIjoiVkFMSURBVElPTl9FUlJPUiJ9fX0K"
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+        "id": 0,
+        "error": {
+          "code": -32600,
+          "message": "Rejected experimental RPC schema",
+          "data": {
+            "reason": "VALIDATION_ERROR"
+          }
+        }
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "host-to-worker",
+        "bytes": "AQAAAAAAAACTAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjo1LCJtZXRob2QiOiJoYW5nIiwicGFyYW1zIjp7ImNoYWxsZW5nZSI6ImNoYWxsZW5nZS01In19Cg=="
+      }
+    },
+    {
+      "kind": "raw-frame",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "direction": "worker-to-host",
+        "bytes": "AQAAAAAAAACPAAAAAAAAAHsianNvbnJwYyI6IjIuMCIsInByb3RvY29sIjoiZGVjMDAxLzEiLCJydW5JZCI6ImI4ODhmNTFmLTE4ZjEtNGE3Ni05ZmIwLWZhYjM1YThhYjlkMiIsImlkIjo1LCJyZXN1bHQiOnsiY2hhbGxlbmdlIjoiY2hhbGxlbmdlLTUiLCJwaWQiOjI1OTA4fX0K"
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+        "id": 5,
+        "result": {
+          "challenge": "challenge-5",
+          "pid": 25908
+        }
+      }
+    },
+    {
+      "kind": "scenario",
+      "runId": "b888f51f-18f1-4a76-9fb0-fab35a8ab9d2",
+      "data": {
+        "action": "worker-hung",
+        "pid": 25908,
+        "scenario": "main-kill",
+        "graceMs": 5000
+      }
+    }
+  ]
+}

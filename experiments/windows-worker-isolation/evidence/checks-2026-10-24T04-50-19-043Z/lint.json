@@ -1,0 +1,25 @@
+{
+  "name": "lint",
+  "args": [
+    "D:\\Operation_Agent\\node_modules\\eslint\\bin\\eslint.js",
+    ".",
+    "--max-warnings",
+    "0"
+  ],
+  "cwd": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\",
+  "expected": 0,
+  "command": [
+    "D:\\Operation_Agent\\.tools\\node\\node.exe",
+    "D:\\Operation_Agent\\node_modules\\eslint\\bin\\eslint.js",
+    ".",
+    "--max-warnings",
+    "0"
+  ],
+  "exitCode": 0,
+  "signal": null,
+  "elapsedMs": 36379,
+  "stdout": "",
+  "stderr": "",
+  "error": null,
+  "passed": true
+}

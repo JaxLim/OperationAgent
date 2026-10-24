@@ -1,0 +1,19 @@
+{
+  "name": "native-build",
+  "args": [
+    "build.mjs"
+  ],
+  "cwd": "D:\\Operation_Agent\\experiments\\windows-worker-isolation\\",
+  "expected": 0,
+  "command": [
+    "D:\\Operation_Agent\\.tools\\node\\node.exe",
+    "build.mjs"
+  ],
+  "exitCode": 0,
+  "signal": null,
+  "elapsedMs": 2114,
+  "stdout": "probe.cc\r\n  正在创建库 D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_build\\native\\probe.lib 和对象 D:\\Operation_Agent\\experiments\\windows-worker-isolation\\_build\\native\\probe.exp\r\nBuilt experimental Node-API addon; not a production sandbox.\n",
+  "stderr": "",
+  "error": null,
+  "passed": true
+}

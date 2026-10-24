@@ -1,0 +1,612 @@
+{
+  "mode": "fork",
+  "scenario": "permissions",
+  "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+  "supervisorPid": null,
+  "hostPid": 31652,
+  "workerPid": 16884,
+  "elapsedMs": 8033.409600000001,
+  "killCleanupMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "failure": null,
+  "stderr": "",
+  "workerAliveAfter": false,
+  "expressAliveAfter": false,
+  "events": [
+    {
+      "kind": "host-ready",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "identity": {
+          "pid": 31652,
+          "ppid": 25508,
+          "appContainer": false,
+          "restricted": false,
+          "elevated": false,
+          "integrityRid": 8192,
+          "capabilityCount": 0,
+          "restrictedSidCount": 0,
+          "appContainerSid": "",
+          "childPolicyQuerySucceeded": true,
+          "noChildProcessCreation": false,
+          "inJob": true
+        },
+        "port": 60516,
+        "mode": "fork",
+        "expressVersion": "5.3.0"
+      }
+    },
+    {
+      "kind": "worker-launched",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "path": "stock-fork",
+        "pid": 16884,
+        "parentPid": 31652,
+        "jobAssignedAfterCreate": false
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_CHECKPOINT: worker modules imported\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_CHECKPOINT: native addon loaded\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: identity 1792817546656\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: identity 1792817546664\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-workspace 1792817546664\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: read-workspace 1792817546664\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-database 1792817546665\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: read-database 1792817546665\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-credentials 1792817546665\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: read-credentials 1792817546666\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-outside-workspace 1792817546666\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: read-outside-workspace 1792817546666\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: externalTcp 1792817546667\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: externalTcp 1792817548168\nDEC001_PROBE_BEGIN: loopbackTcp 1792817548168\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp 1792817548183\nDEC001_PROBE_BEGIN: nativeSpawn 1792817548183\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: nativeSpawn 1792817548201\nDEC001_PROBE_BEGIN: breakawaySpawn 1792817548201\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: breakawaySpawn 1792817548212\nDEC001_PROBE_BEGIN: parentAccess 1792817548212\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: parentAccess 1792817548212\nDEC001_PROBE_BEGIN: canaryHandle 1792817548212\nDEC001_PROBE_END: canaryHandle 1792817548212\n"
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+        "method": "ready",
+        "params": {
+          "early": {
+            "identity": {
+              "pid": 16884,
+              "ppid": 31652,
+              "appContainer": false,
+              "restricted": false,
+              "elevated": false,
+              "integrityRid": 8192,
+              "capabilityCount": 0,
+              "restrictedSidCount": 0,
+              "appContainerSid": "",
+              "childPolicyQuerySucceeded": true,
+              "noChildProcessCreation": false,
+              "inJob": true
+            },
+            "files": [
+              {
+                "label": "workspace",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              },
+              {
+                "label": "database",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              },
+              {
+                "label": "credentials",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              },
+              {
+                "label": "outside-workspace",
+                "nativeRead": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nativeWrite": {
+                  "allowed": true,
+                  "error": 0
+                },
+                "nodeRead": {
+                  "allowed": true,
+                  "code": ""
+                },
+                "nodeWrite": {
+                  "allowed": true,
+                  "code": ""
+                }
+              }
+            ],
+            "externalTcp": {
+              "allowed": false,
+              "error": 10060
+            },
+            "loopbackTcp": {
+              "allowed": true,
+              "error": 0
+            },
+            "nativeSpawn": {
+              "allowed": true,
+              "error": 0
+            },
+            "breakawaySpawn": {
+              "allowed": true,
+              "error": 0
+            },
+            "nodeSpawn": {
+              "allowed": false,
+              "code": "NOT_RUN_SEPARATE_SCENARIO"
+            },
+            "parentAccess": {
+              "allowed": true,
+              "error": 0
+            },
+            "canaryHandle": {
+              "resolved": false,
+              "path": "",
+              "error": 6,
+              "exceptionCode": 0
+            },
+            "nodePermissionEnabled": false,
+            "rpcAvailable": true
+          }
+        }
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+        "id": 1,
+        "result": {
+          "challenge": "challenge-1",
+          "pid": 16884
+        }
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: identity 1792817548236\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: identity 1792817548244\nDEC001_PROBE_BEGIN: read-workspace 1792817548244\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: read-workspace 1792817548244\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-database 1792817548245\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: read-database 1792817548245\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-credentials 1792817548245\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: read-credentials 1792817548245\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: read-outside-workspace 1792817548245\nDEC001_PROBE_END: read-outside-workspace 1792817548245\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: externalTcp 1792817548245\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: externalTcp 1792817549737\nDEC001_PROBE_BEGIN: loopbackTcp 1792817549737\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: loopbackTcp 1792817549739\nDEC001_PROBE_BEGIN: nativeSpawn 1792817549739\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: nativeSpawn 1792817549753\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_BEGIN: breakawaySpawn 1792817549753\n"
+      }
+    },
+    {
+      "kind": "diagnostic",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "text": "DEC001_PROBE_END: breakawaySpawn 1792817549765\nDEC001_PROBE_BEGIN: parentAccess 1792817549765\nDEC001_PROBE_END: parentAccess 1792817549765\nDEC001_PROBE_BEGIN: canaryHandle 1792817549765\nDEC001_PROBE_END: canaryHandle 1792817549765\n"
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+        "id": 2,
+        "result": {
+          "identity": {
+            "pid": 16884,
+            "ppid": 31652,
+            "appContainer": false,
+            "restricted": false,
+            "elevated": false,
+            "integrityRid": 8192,
+            "capabilityCount": 0,
+            "restrictedSidCount": 0,
+            "appContainerSid": "",
+            "childPolicyQuerySucceeded": true,
+            "noChildProcessCreation": false,
+            "inJob": true
+          },
+          "files": [
+            {
+              "label": "workspace",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            },
+            {
+              "label": "database",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            },
+            {
+              "label": "credentials",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            },
+            {
+              "label": "outside-workspace",
+              "nativeRead": {
+                "allowed": true,
+                "error": 0
+              },
+              "nativeWrite": {
+                "allowed": true,
+                "error": 0
+              },
+              "nodeRead": {
+                "allowed": true,
+                "code": ""
+              },
+              "nodeWrite": {
+                "allowed": true,
+                "code": ""
+              }
+            }
+          ],
+          "externalTcp": {
+            "allowed": false,
+            "error": 10060
+          },
+          "loopbackTcp": {
+            "allowed": true,
+            "error": 0
+          },
+          "nativeSpawn": {
+            "allowed": true,
+            "error": 0
+          },
+          "breakawaySpawn": {
+            "allowed": true,
+            "error": 0
+          },
+          "nodeSpawn": {
+            "allowed": false,
+            "code": "NOT_RUN_SEPARATE_SCENARIO"
+          },
+          "parentAccess": {
+            "allowed": true,
+            "error": 0
+          },
+          "canaryHandle": {
+            "resolved": false,
+            "path": "",
+            "error": 6,
+            "exceptionCode": 0
+          },
+          "nodePermissionEnabled": false,
+          "rpcAvailable": true
+        }
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+        "id": 3,
+        "error": {
+          "code": -32001,
+          "message": "Rejected stale experiment instance",
+          "data": {
+            "reason": "STALE_RUN_ID"
+          }
+        }
+      }
+    },
+    {
+      "kind": "worker-message",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "jsonrpc": "2.0",
+        "protocol": "dec001/1",
+        "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+        "id": 0,
+        "error": {
+          "code": -32600,
+          "message": "Rejected experimental RPC schema",
+          "data": {
+            "reason": "VALIDATION_ERROR"
+          }
+        }
+      }
+    },
+    {
+      "kind": "cleanup",
+      "runId": "55bf7fbc-09e0-44cc-a3d1-0027b4522a49",
+      "data": {
+        "reason": "permissions-finished",
+        "pid": 16884,
+        "elapsedMs": 0.2922000000007756,
+        "nativeResult": {
+          "killRequested": true
+        },
+        "aliveImmediatelyAfter": true
+      }
+    }
+  ]
+}
