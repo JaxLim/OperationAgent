@@ -1,4 +1,4 @@
-# P0 实际执行与验证记录
+# 实际执行与验证记录
 
 初始记录：2026-10-23（Asia/Shanghai）。以下初始阶段记录保留原貌；2026-10-24/25 的 ADR 批准与冻结验证见末节。生产功能和平台安全能力仍全部未验证。
 
@@ -167,3 +167,18 @@ GitHub 插件用于确认账户和新仓库权限/可见性；插件没有创建
 建议在下一次取得实施授权后，按 P1.1～P1.7 开始：最小 contracts 与导入边界 → Express/SQLite/Node ABI → Main bootstrap → 公开 Windows 创建/OWIP/1 受限 fixture → 服务树故障回收 → 真实安装包 DB 烟测。控制面可独立测试，未经隔离门禁的 Worker 不能执行生产任务。
 
 公开 profile/创建路径和新协议尚未实现或验证；旧原型使用未公开导出和私有 framing，不作为生产回退。网络全矩阵/回环、Node spawnSync、危险句柄、竞态、实际 Electron/安装包及其他 OS 隔离仍未完成，按 P1 与 SEC-W01 分阶段验收。所有平台能力保持 unverified，P0 冻结不改变该状态。
+
+## P1.0 阶段迁移（2026-10-25）
+
+基于已核对的 main `04d07bea89b70265a6b1fb1d79272b710623775b` 创建 `codex/p1-foundation`。对应 P0 CI [40155608430](https://github.com/JaxLim/OperationAgent/actions/runs/40155608430) 三个平台均 success。Git HTTPS fetch 超时，使用已连接 GitHub API 核实远端 SHA；没有改写 main。
+
+变更：保留原 P0 检查器/批准/规范/实验字节，新增 `p0-history.ts`、`p1-check.ts`、P1 状态与三平台 workflow、迁移正负例、P1 验收文档；根 scripts 切换至阶段感知入口。无应用进程或持久化业务数据；只在工作区 `.cache` 写入并清理历史重放快照。
+
+实际命令与结果：
+
+- 修改前 `pnpm check`：退出 0，29/29 tests；`check:p0-exit`：退出 0。
+- Red：`node --test tests/p1/stage.test.ts` 退出 1，`ERR_MODULE_NOT_FOUND`，新检查器尚未实现。
+- Green：`pnpm check:p1` 退出 0；strict TypeScript、ESLint 零警告、32/32 tests（0 skipped）、build、P0 历史退出重放、P1 范围/冻结校验全部通过。
+- `git diff --check` 退出 0。
+
+P1.0 工程迁移已实现；P1.1 在此批尚未实施。后续可以新增有归属的应用包，但不能改写 P0 证据或提升能力。产品集成、Worker 隔离、数据库和安装包：NOT RUN，未创建 AppContainer profile。
