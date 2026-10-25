@@ -1,8 +1,8 @@
 # DEC-001：Windows Worker 创建与 OS 隔离的可验证实现路径
 
-状态：**用户于 2026-10-23 选择方案 A；技术验证仍阻塞 P0 完整冻结，不阻塞原文版本控制和 P0 评审资料保存**。
+状态：**架构决策已解决**。用户于 2026-10-24 正式批准 [ADR-WIN-001 r1](ADR-WIN-001.md) D1～D5；规范已同步。P0 总退出仍须由 `check:p0-exit` 核验；生产 Worker 的 SEC-W01 尚未通过。
 
-这是已记录处理路线的决策请求，不是修改架构的新 ADR，不替换 ADR-001/002/010/011。后续 Windows 原型需要单独授权，本轮不启动。
+以下原始问题和方案 A/B 保留为 2026-10-23 的历史记录；当时选择 A，随后已授权并完成独立原型。本文件不替换规范，当前决策以已批准 ADR-WIN-001 r1 为准。
 
 ## 已冻结要求
 
@@ -35,3 +35,10 @@ Node 24 官方 `fork()` 选项没有 Windows AppContainer / 受限令牌 / `STAR
 5. Windows 之外逐平台建立相同的目标行为测试；一个平台通过不继承给其他平台。
 
 来源（2026-10-23 核查）：[Node 24 child_process](https://nodejs.org/docs/latest-v24.x/api/child_process.html)、[Node 24 permissions](https://nodejs.org/docs/latest-v24.x/api/permissions.html)、[Microsoft Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[AppContainer isolation](https://learn.microsoft.com/en-us/windows/win32/secauthz/appcontainer-isolation)。
+
+## 2026-10-24 批准后的处置
+
+- 真实批准见 [r1 批准记录](approvals/ADR-WIN-001-r1.json)，绑定决策包 SHA-256 `01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58`；用户原话为“批准 r1 全部修改（推荐）”。
+- Windows 改为 Express 进程内原生直接创建 + 公开 Win32 继承管道 OWIP/1 / JSON-RPC 2.0。直接父进程、唯一控制面和首指令前 OS 限权不变；未公开令牌导出和 Node 私有 framing 不进入正式方案。
+- 原型证据保持原样。公开 profile/创建路径与新管道受限 fixture 属 P1 必须通过的验收；完整 SEC-W01 最迟进入相应平台 P3 执行链验证前通过，UNKNOWN/FAILED 均拒绝生产 Worker。
+- 本次只关闭架构选择冲突，不宣称生产沙箱完成，不授权开始 P1。P1 实施建议见 P0-REVIEW 的 P1.1～P1.7。

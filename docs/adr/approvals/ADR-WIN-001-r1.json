@@ -1,0 +1,16 @@
+{
+  "id": "ADR-WIN-001",
+  "revision": "r1",
+  "outcome": "approved",
+  "decisionPackageSha256": "01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58",
+  "approvedBy": "project-owner",
+  "approvedChanges": ["D1", "D2", "D3", "D4", "D5"],
+  "approvedAt": "2026-10-24T10:21:12.000Z",
+  "source": {
+    "kind": "user-message",
+    "reference": "codex://threads/01a167a8-bf51-7fe3-9111-0ba9794eeeb2",
+    "questionItemId": "[\"request_user_input_async\",\"call_ff1a92a2dc384f55a54f0bdec47cf6c0\",0]",
+    "quote": "批准 r1 全部修改（推荐）"
+  },
+  "scope": "Approve the exact r1 D1-D5 decision and normative patch, synchronize specifications and verify P0 exit. No P1 implementation or production Worker authorization."
+}

@@ -1,6 +1,6 @@
 # P0 实际执行与验证记录
 
-日期：2026-10-23（Asia/Shanghai）。本记录只陈述真实动作；生产功能和平台安全能力仍全部未验证。
+初始记录：2026-10-23（Asia/Shanghai）。以下初始阶段记录保留原貌；2026-10-24/25 的 ADR 批准与冻结验证见末节。生产功能和平台安全能力仍全部未验证。
 
 ## 已完成
 
@@ -134,3 +134,36 @@ GitHub 插件用于确认账户和新仓库权限/可见性；插件没有创建
 新增文档：`README.md`、`docs/P0-REVIEW.md`、`docs/ACCEPTANCE.md`、`docs/EXECUTION.md`、`docs/adr/DEC-001-worker-isolation.md`。
 
 本地忽略产物：`.git/`、`.tools/`、`.cache/`、`.pnpm-store/`、`node_modules/`、`dist/tooling/`。未创建 `apps/` 或 `packages/`；未修改工作区之外的文件。
+
+## ADR-WIN-001 r1 批准与 P0 退出（2026-10-24/25）
+
+已完整复读规范、P0 评审、DEC-001 和验收文档，并审查提交 `c44d8c9` 的既有原型原始证据。本轮没有扩展沙箱原型，没有新增依赖或启动 P1。
+
+2026-10-24，用户明确回复“批准 r1 全部修改（推荐）”。[批准记录](adr/approvals/ADR-WIN-001-r1.json) 绑定 `build/p0-decision.json` 的 SHA-256 `01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58`。随后才应用已审阅补丁，同步 ARCHITECTURE/AGENTS 至 0.4.0-p0，并在核验批准、规范目标 hash 和证据后更新 P0 状态摘要。DEC-001 的架构冲突已关闭，完整生产 Worker SEC-W01 仍未通过。
+
+### 真正执行的验证
+
+| 检查 | 实际结果 |
+|---|---|
+| 修改前的两项门禁负例 | 12 项中 2 项失败，重现“只改 frozen”和“删除能力矩阵”可绕过旧检查 |
+| 扩展证据完整性测试 | 初次发现源码清单可被清空，修复后强制完整源码集合与文件正向对照 |
+| `pnpm check`（批准前、规范同步后） | 两次完整通过：strict typecheck、零警告 lint、29/29 tests、build、verify:p0 |
+| `pnpm check:p0-exit` | 批准前退出 1；正式批准及规范同步后退出 0 |
+| `node dist/tooling/scripts/p0-check.js --require-frozen` | 退出 0；approved / updated / evidenceVerified=true |
+| `git apply --check docs/adr/ADR-WIN-001-normative.patch` | 应用前通过；正式批准后才执行 `git apply` |
+| `git diff --check` / staged 检查 | 通过；保存的 unified diff 与 ARCHITECTURE 中合法 Markdown 双空格换行采用明确文件级 whitespace 属性 |
+
+原始命令、退出码和输出保存在 [ADR 验证记录](adr/ADR-WIN-001-validation.json)。正向审批单元测试仅使用内存合成数据；唯一落盘 approved 记录来自上述真实用户答复。CI 的 docs 忽略规则已移除，决策与批准文档变更也会触发门禁。后续 GitHub CI 结果以实际运行链接为准，不能套用旧提交的结果。
+
+### 本次文件变更
+
+- 规范与入口：`ARCHITECTURE.md`、`AGENTS.md`、`README.md`、`.gitattributes`。
+- 决策和追踪：`docs/adr/ADR-WIN-001.md`、规范 patch、validation JSON、approvals/r1 JSON、`DEC-001-worker-isolation.md`、`docs/P0-REVIEW.md`、`docs/ACCEPTANCE.md`、本文件。
+- 门禁与配置：`build/p0-decision.json`、`build/p0-status.json`、`scripts/p0-check.ts`、`scripts/p0-decision.ts`、`tests/p0/baseline.test.ts`、`tests/p0/decision.test.ts`、`.github/workflows/p0.yml`。
+- 忽略的辅助产物：`.cache/adr-r1/` 中补丁目标副本/hash、决策包生成脚本及验证/上传辅助数据，`dist/tooling/` 编译产物；都仅位于工作区。
+
+### P1 建议与仍未完成的验证
+
+建议在下一次取得实施授权后，按 P1.1～P1.7 开始：最小 contracts 与导入边界 → Express/SQLite/Node ABI → Main bootstrap → 公开 Windows 创建/OWIP/1 受限 fixture → 服务树故障回收 → 真实安装包 DB 烟测。控制面可独立测试，未经隔离门禁的 Worker 不能执行生产任务。
+
+公开 profile/创建路径和新协议尚未实现或验证；旧原型使用未公开导出和私有 framing，不作为生产回退。网络全矩阵/回环、Node spawnSync、危险句柄、竞态、实际 Electron/安装包及其他 OS 隔离仍未完成，按 P1 与 SEC-W01 分阶段验收。所有平台能力保持 unverified，P0 冻结不改变该状态。

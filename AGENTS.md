@@ -1,6 +1,6 @@
-# AGENTS.md — Electron Agent Desktop 开发守则（P0 草稿）
+# AGENTS.md — Electron Agent Desktop 开发守则（P0 决策基线）
 
-> 唯一规范性架构来源：`ARCHITECTURE.md`，版本 `0.3.1-review`。本文件是对开发人员和 AI 编程助手的**可执行工程约束**，不得推翻架构决策。现为目标仓库模板；任何“通过验证”需要实际 CI 结果支持。
+> 唯一规范性架构来源：`ARCHITECTURE.md`，版本 `0.4.0-p0`（含已批准 ADR-WIN-001 r1）。本文件是对开发人员和 AI 编程助手的**可执行工程约束**，不得推翻架构决策。现为目标仓库模板；任何“通过验证”需要实际 CI 结果支持。
 
 ## 1. 工作原则
 
@@ -17,19 +17,23 @@
 | `apps/desktop/src/renderer` | UI、状态视图、`contracts`、设计令牌 | Node builtin、Express、Worker、DB、FS、直接 HTTP 访问 Express、原始 `ipcRenderer` |
 | `apps/desktop/src/preload` | 窄范围 `contextBridge`、必要 Electron IPC、`contracts` | 通用 `request(url)`、`exec(cmd)`、`readFile(path)`、`getSecret()` |
 | `apps/desktop/src/main` | Electron 生命周期、Express 服务树监管、白名单 API 代理、Crypto Bridge | Agent Loop、Tool Router 领域规则、业务 DB、直接创建 Worker |
-| `apps/server` | Express 领域服务、数据库、Worker fork、Tool Registry、Model Gateway、MCP Host | Renderer UI、Worker Runtime 内部实现作为业务依赖 |
-| `apps/agent-worker` | Agent Loop、RPC、模型/工具意图、`contracts` | `fs`、任意 Shell/网络、业务 DB、直接连接 MCP/模型提供商/Executor |
+| `apps/server` | Express 领域服务、数据库、平台 WorkerLauncher、Tool Registry、Model Gateway、MCP Host | Renderer UI、Worker Runtime 内部实现作为业务依赖 |
+| `apps/agent-worker` | Agent Loop、类型化 RPC client、模型/工具意图、`contracts`；受信 bootstrap 仅窄继承通道适配 | `fs`、任意 Shell/网络、业务 DB、直接连接 MCP/模型提供商/Executor |
 | `packages/contracts` | 纯 Schema、类型、错误码、事件、版本 | Electron/Express/DB/网络/系统 I/O |
 
 导入禁令需要 lint/build 自动检验；Node Worker 的权限边界还必须通过 OS 级隔离测试证明。
 
 ## 3. 进程与 RPC（P0/P1）
 
-- 进程关系固定：**Main → Express（打包的 Node sidecar）→ Agent Worker（`child_process.fork()`）**。
-- **Node IPC 承载 JSON-RPC 2.0**。连接时验证 `expressRunId`、`workerRunId`、协议版本、能力和 Zod Schema；不要开放 Worker RPC 监听端口。
+- 进程关系固定：**Main → Express（打包的 Node sidecar）→ 直接子 Node Worker**。Windows 由 Express 进程内原生 WorkerLauncher 创建；其他 OS 暂保留 fork。禁止中间 launcher、父 PID 伪装、无隔离回退。
+- **Windows 使用公开 Win32 单继承管道 + OWIP/1 framing + JSON-RPC 2.0；其他 OS 暂保留 Node IPC 适配器**。只维护一份 contracts。连接时验证 `expressRunId`、`workerRunId`、协议版本、能力和 Zod Schema；不要开放 Worker RPC 监听端口。
 - Main 只监管 Express 服务进程树，不直接启动 Worker。Worker 退出由 Express 检测；Express 退出由 Main 触发整棵旧服务树和短命沙箱清理。
 - 新 Express 必须创建新 Worker；不允许旧 Worker 跨实例存活、重连或继续执行。未完成清理时禁止新有副作用工具派发。
-- `fork()` 的 `execPath`、环境变量、cwd、启动参数必须显式限制，不继承不可信 PATH/`NODE_OPTIONS`/调试参数等。
+- 所有 WorkerLauncher 的 `execPath`、环境变量、cwd、启动参数必须显式限制，不继承不可信 PATH/`NODE_OPTIONS`/调试参数等。
+
+**Worker Gate**：P1 只运行首指令前已 OS 限权的固定 fixture，不接生产任务/真实数据/凭据/模型。完整 SEC-W01 最迟对应平台进入 P3 执行链验证前通过；未知/失败均拒绝生产 Worker，返回 WORKER_ISOLATION_UNAVAILABLE。控制面可报告 controlPlaneReady，但 agentReady 必须为 false；不可把 Read/P3b 工具门禁当作 Worker 资格。公开创建/管道 fixture 失败则对应 P1 验收 BLOCKED，不用无隔离 fork 或实验未公开导出替代。
+
+**窄原生边界**：仅受信 transport bootstrap 可加载固定随包 Node-API 通道组件；子端只收发/关闭父端授予的继承通道。Agent Runtime 禁止任意 native 加载；不能导出实验 probe 的创建进程/ACL/文件/任意句柄接口。父端创建组件仅 Express 可用。
 
 ## 4. SQLite 与构建（P0/P1）
 
@@ -82,8 +86,11 @@
 
 ## 10. CI / PR 检查清单
 
+- [ ] P0 冻结核验绑定 ADR-WIN-001 r1 的真实批准记录、规范更新和原始证据；改 frozen/blockers 不构成批准。
+- [ ] P1 fixture 无生产执行资格；完整 Worker SEC-W01 在 P3 前完成，失败平台 agentReady=false；新 Windows framing/异步 I/O/配额必须真实测试。
+
 - [ ] 代码导入边界 lint、契约运行时 Schema 和协议版本测试通过。
-- [ ] Express 失败后旧 Worker 必须退出，新实例只能 fork 新 Worker（SEC-17）。
+- [ ] Express 失败后旧 Worker 必须退出，新实例只能通过平台 WorkerLauncher 创建新 Worker（SEC-17）。
 - [ ] 安装包 Node sidecar 加载 `better-sqlite3`，迁移、读写、重启烟测成功（SEC-18）。
 - [ ] P3a 至少一个平台真实 `write_file/bash` 最小 OS 沙箱与 Read Gate 通过（SEC-23 + SEC-08）；**包括 P3a 平台在内**，未通过 P3b 的平台所有高危工具仍拒绝；只读按独立 Read Gate 控制。
 - [ ] 每个宣称支持高危工具的 OS 通过沙箱、`.git`、网络、进程树完整安全验证（SEC-05～08/12/16/19/21；Git 只读另需 SEC-22）；仅支持基础 UI 的 OS 至少通过 SEC-01/02/13/14（共同 SEC-03 不豁免）；声称 `read_file` 另通过 SEC-08，声称 Git 只读另通过 SEC-22。

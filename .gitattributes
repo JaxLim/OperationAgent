@@ -1,6 +1,6 @@
 * text=auto eol=lf
-# Preserve the supplied normative documents byte for byte.
-ARCHITECTURE.md -text
+# Preserve approved normative bytes; Markdown hard breaks are intentional.
+ARCHITECTURE.md -text whitespace=-blank-at-eol
 AGENTS.md -text
 # A stored unified diff contains required context prefixes and Markdown hard breaks.
 docs/adr/ADR-WIN-001-normative.patch whitespace=-blank-at-eol
