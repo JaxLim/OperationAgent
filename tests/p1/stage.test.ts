@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import { readJson } from '../../scripts/p0-check.ts';
 import { validateStage, validateFrozenFiles } from '../../scripts/p1-check.ts';
 
@@ -20,4 +21,11 @@ test('freeze verification detects changed, removed and missing historical eviden
   assert.deepEqual(validateFrozenFiles(original, original), []);
   assert.notEqual(validateFrozenFiles(original, new Map([['ARCHITECTURE.md', 'edited']])).length, 0);
   assert.notEqual(validateFrozenFiles(new Map(), original).length, 0);
+});
+
+test('unchanged P0 checker still rejects the actual P1 application directories', () => {
+  const result = spawnSync(process.execPath, ['scripts/p0-check.ts', '--require-frozen'], { encoding: 'utf8', windowsHide: true });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /P0 must not create application skeleton: apps/);
+  assert.match(result.stderr, /P0 must not create application skeleton: packages/);
 });

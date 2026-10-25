@@ -182,3 +182,22 @@ GitHub 插件用于确认账户和新仓库权限/可见性；插件没有创建
 - `git diff --check` 退出 0。
 
 P1.0 工程迁移已实现；P1.1 在此批尚未实施。后续可以新增有归属的应用包，但不能改写 P0 证据或提升能力。产品集成、Worker 隔离、数据库和安装包：NOT RUN，未创建 AppContainer profile。
+
+## P1.1 工程骨架（2026-10-25）
+
+实际新增文件分组：三个 `apps/*` 包及其分进程源文件/tsconfig；contracts 的 version/errors/rpc/ipc/URL 实例类型；worker-transport 和两个平台接口包；根 tsconfig 引用图；构建、产物、依赖边界检查脚本；ESLint 边界规则；contracts/boundaries/workspace/disabled-worker 测试。更新 root scripts、workspace 配置、锁文件和 P1 状态。完整机器可读命令/退出码/stdout/stderr 保存在 [P1-validation.json](P1-validation.json)。
+
+| 验证批次 | 实际结果 |
+|---|---|
+| 测试先行 | 退出 1：契约文件不存在、Renderer 的 node:fs 未被拦截；实现规则与 Schema 后修复 |
+| 首次全工程 typecheck | 退出 2：Zod 缺 URL 实例类型、Electron 共享声明缺 Web 类型；修复独立类型配置，未关闭 strict/skipLibCheck |
+| 补充配置负例 | 包/tsconfig 拒绝测试通过；类型负例测试首次因 Windows 路径分隔符匹配错误失败，规范化诊断路径后 3/3 通过 |
+| 根级与各包 typecheck | 全部通过，包含 Desktop 三个独立进程配置 |
+| `pnpm check:p1` | 退出 0：42/42 tests，0 skipped；ESLint 零警告、依赖方向、build、P0 重放、P1 状态检查通过 |
+| 构建产物复核 | 发现 Vite 默认 module-preload 注入 fetch；关闭后 `pnpm build` 退出 0，Preload 仅 require electron、Renderer 无 fetch/require、所有关键编译入口存在 |
+| `pnpm install --frozen-lockfile --ignore-scripts --offline` | 退出 0，锁文件可重验，无 lifecycle scripts |
+| `test:integration` / `package` / `test:smoke` | 均实际退出 1 / NOT_IMPLEMENTED，产品测试本身 NOT RUN |
+
+已完成：P1.0/P1.1 工程与静态约束。未完成：P1.2～P1.7、真实 Electron 启动、受控 HTTP/IPC、数据库、原生 Worker/OWIP、隔离和安装验收；所有平台能力仍 unverified。冻结架构、ADR 批准记录、P0 原始检查器和原始实验均保持字节不变，未将实验代码引入生产包。
+
+本轮用户确认缺失 ps-utf8-io 时按 UTF-8 规范继续；每个 PowerShell 入口均设置 UTF-8。所有代码、依赖缓存和测试快照位于仓库内。未合并 main，未创建 AppContainer profile。

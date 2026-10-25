@@ -6,6 +6,8 @@
 
 当前阶段记录和命令语义见 [P1 验收](docs/P1-ACCEPTANCE.md) 与 `build/p1-status.json`。P0 文件保持为冻结历史，不用改写旧批准记录推进阶段。
 
+已建立七个 workspace 包和 Main/Preload/Renderer 独立 TypeScript 项目。`pnpm build` 生成工程骨架产物；Express 尚不监听，Worker 入口明确拒绝启动。实际测试输出见 [P1 验证记录](docs/P1-validation.json)，不代表产品集成、安装包或 OS 隔离通过。
+
 - [P0 评审、选型、目录与 P1 计划](docs/P0-REVIEW.md)
 - [验收命令和阶段门禁](docs/ACCEPTANCE.md)
 - [实际执行记录](docs/EXECUTION.md)

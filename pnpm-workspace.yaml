@@ -12,5 +12,5 @@ managePackageManagerVersions: false
 updateNotifier: false
 storeDir: .pnpm-store
 cacheDir: .cache/pnpm
-# P0 has no native/runtime dependencies and authorizes no lifecycle scripts.
+# P1.1 installs build-time packages only; no lifecycle/native/Electron download scripts.
 allowBuilds: {}

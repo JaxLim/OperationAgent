@@ -9,7 +9,7 @@
     "date": "2026-10-25",
     "quote": "本次正式授权启动 P1 工程实施，但当前执行范围仅为 P1.0 和 P1.1，不授权跳过阶段完成后续业务功能。"
   },
-  "implementation": { "P1.0": "implemented", "P1.1": "not-started" },
+  "implementation": { "P1.0": "implemented", "P1.1": "implemented" },
   "agentReady": false,
   "productionWorkerQualified": false,
   "integrationTests": "NOT_RUN",
