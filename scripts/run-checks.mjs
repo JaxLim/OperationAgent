@@ -1,11 +1,28 @@
 import { spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const packageManager = process.env.npm_execpath;
 if (!packageManager) throw new Error('Run this command through the pinned pnpm version.');
-for (const name of ['typecheck', 'lint', 'check:boundaries', 'test', 'build', 'verify:p0', 'verify:p1']) {
+const engineeringOnly = process.argv[2] === '--engineering-only';
+if (process.argv.length > (engineeringOnly ? 3 : 2)) throw new Error('UNKNOWN_CHECK_OPTION');
+const target = `${process.platform}-${process.arch}`;
+const output = resolve('artifacts/p1', target); mkdirSync(output, { recursive: true });
+const source = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }).stdout?.trim();
+const sourceDirty = Boolean(spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', windowsHide: true }).stdout?.trim());
+const results = [];
+const names = ['typecheck', 'lint', 'check:boundaries', 'test', 'build', 'verify:p0', 'verify:p1', ...(engineeringOnly ? [] : ['test:integration'])];
+for (const name of names) {
   const result = spawnSync(process.execPath, [packageManager, 'run', name], {
-    stdio: 'inherit', shell: false, windowsHide: true,
+    encoding: 'utf8', shell: false, windowsHide: true, maxBuffer: 16 * 1024 * 1024,
   });
+  const log = (result.stdout ?? '') + (result.stderr ?? ''); process.stdout.write(log);
+  const logFile = `check-${name.replaceAll(':', '-')}.log`; writeFileSync(resolve(output, logFile), log, 'utf8');
+  results.push({ command: `pnpm ${name}`, exitCode: result.status, logFile });
+  writeFileSync(resolve(output, 'checks.json'), JSON.stringify({ finishedAt: new Date().toISOString(), source, sourceDirty, target,
+    scope: engineeringOnly ? 'engineering-only' : 'P1.2_P1.3', passed: results.length === names.length && results.every(row => row.exitCode === 0),
+    processIntegration: engineeringOnly ? 'NOT_RUN' : results.find(row => row.command === 'pnpm test:integration')?.exitCode === 0 ? 'PASS' : 'NOT_PASSED',
+    installedSmoke: 'NOT_RUN', workerIsolation: 'NOT_RUN', results }, null, 2) + '\n', 'utf8');
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

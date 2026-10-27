@@ -1,11 +1,13 @@
-import { FoundationInfoSchema } from '@operation-agent/contracts';
+import { ControlHealthSchema } from '@operation-agent/contracts';
 import type { DesktopApi } from '@operation-agent/contracts';
 
 declare global { interface Window { readonly operationAgent: DesktopApi } }
 const status = document.querySelector('#status');
-try {
-  const info = FoundationInfoSchema.parse(window.operationAgent.getFoundationInfo());
-  if (status) status.textContent = `${info.phase} 工程骨架 · Agent 未启用`;
-} catch {
-  if (status) status.textContent = '工程宿主不可用';
+async function refresh(): Promise<void> {
+  try {
+    const info = ControlHealthSchema.parse(await window.operationAgent.getControlPlaneHealth());
+    if (status) status.textContent = `P1.3 控制面已连接 · 数据库 v${info.databaseVersion} · Agent 未启用`;
+  } catch { if (status) status.textContent = '控制面暂不可用 · Agent 未启用'; }
 }
+void refresh();
+setInterval(() => { void refresh(); }, 2000);

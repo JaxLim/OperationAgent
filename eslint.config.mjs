@@ -12,8 +12,9 @@ export default [
     rules: { 'architecture/boundaries': 'error' },
   },
   {
-    files: ['scripts/**/*.mjs'],
-    languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', URL: 'readonly', AbortSignal: 'readonly', fetch: 'readonly' } },
+    files: ['scripts/**/*.mjs', 'tests/integration/**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', URL: 'readonly', AbortSignal: 'readonly', fetch: 'readonly',
+      setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly' } },
   },
   {
     files: ['**/*.ts'],
