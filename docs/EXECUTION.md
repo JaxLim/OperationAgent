@@ -257,6 +257,16 @@ git diff --check
 
 ### GitHub CI 与剩余范围
 
-本轮 CI 尚待推送后执行；不得用 PR #1 的历史绿色状态替代。CI 的 Windows x64 job 运行完整 `check:p1` 和真实 Electron/独立 Node/SQLite；macOS/Linux 只运行 `check:engineering`，进程测试明确 NOT_RUN。CI 上传 `p1-evidence-*` artifact，保存完整命令日志与 runtime/checks/integration JSON。
+2026-10-27 已提交并通过常规 Git push 上传代码提交 `a1d3ef2833ea913dd2c1b2ab9fbfe7cc5b541214`。该提交的 [P1 CI 40463899742](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742) 与 [P0 重放 40463899772](https://github.com/JaxLim/OperationAgent/actions/runs/40463899772) 均为 success；逐个读取 P1 job 原始日志，结果如下。本节及 JSON 的 CI 索引是后续纯证据提交，不将被引用提交伪装为自指 SHA。
+
+| Job | 实际结果 | 证据 |
+|---|---|---|
+| Windows 2025 / x64 | 44/44 工程/DB + 10/10 真实进程，0 fail、0 skipped；Electron 45.0.0 官方归档 SHA-256 校验、Node 24.22.1 / ABI 137 / NAPI 10、SQLite 3.53.4 | [122054626694](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626694) |
+| macOS 15 / arm64 | 44/44 工程/DB，0 fail、0 skipped；进程集成 NOT_RUN | [122054626341](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626341) |
+| Ubuntu 24.04 / x64 | 44/44 工程/DB，0 fail、0 skipped；进程集成 NOT_RUN | [122054626637](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626637) |
+
+三个 P0 job 均成功，重放固定历史提交 `04d07be`。本轮 Windows x64 job 运行完整 `check:p1` 和真实 Electron/独立 Node/SQLite；macOS/Linux 只运行 `check:engineering`。三份 `p1-evidence-*` artifact 均上传成功，保存完整命令日志与 runtime/checks/integration JSON，保留 14 天；artifact ID/digest/到期日见 `P1-validation.json`。本轮没有 CI 失败；upload-artifact v4 的上游 Node 20 runtime 收到弃用提示，runner 实际以 Node 24 执行且上传成功。
+
+上传命令：`git commit -m "feat(p1): run authenticated Electron sidecar with durable SQLite"`、`git -c http.version=HTTP/1.1 push -u origin codex/p1-control-plane`，退出码均为 0。分支未合并；审查 PR 仅在本轮验收和 CI 通过后创建。
 
 仍为 NOT_RUN：macOS/Linux 进程链路、原生 WorkerLauncher、OWIP/1、AppContainer、原生服务树监管、安装器与安装后 SEC-18、完整 SEC-03/17/SEC-W01、P1 总退出。当前无后代执行器；父通道/租约清理不等同卡死或恶意后代的 OS 强制清理。产物 hash 不等同代码签名，也不抵抗同用户本地恶意修改整个应用；回环监听器可能被本地进程造成拒绝服务，所有异常保持 fail closed。`agentReady=false`，不启用 Worker/Agent Loop/Shell/文件写工具/真实模型。

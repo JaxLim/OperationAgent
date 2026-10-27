@@ -149,7 +149,100 @@
       }
     ],
     "githubCi": {
-      "status": "PENDING_PUSH"
+      "status": "success",
+      "headSha": "a1d3ef2833ea913dd2c1b2ab9fbfe7cc5b541214",
+      "event": "push",
+      "p1": {
+        "runId": 40463899742,
+        "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "id": 122054626341,
+            "name": "P1 engineering and scoped process gate (macos-15)",
+            "conclusion": "success",
+            "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626341",
+            "engineeringTests": {
+              "passed": 44,
+              "failed": 0,
+              "skipped": 0
+            },
+            "processIntegration": "NOT_RUN"
+          },
+          {
+            "id": 122054626637,
+            "name": "P1 engineering and scoped process gate (ubuntu-24.04)",
+            "conclusion": "success",
+            "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626637",
+            "engineeringTests": {
+              "passed": 44,
+              "failed": 0,
+              "skipped": 0
+            },
+            "processIntegration": "NOT_RUN"
+          },
+          {
+            "id": 122054626694,
+            "name": "P1 engineering and scoped process gate (windows-2025)",
+            "conclusion": "success",
+            "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626694",
+            "engineeringTests": {
+              "passed": 44,
+              "failed": 0,
+              "skipped": 0
+            },
+            "processIntegration": {
+              "passed": 10,
+              "failed": 0,
+              "skipped": 0
+            }
+          }
+        ]
+      },
+      "p0": {
+        "runId": 40463899772,
+        "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899772",
+        "conclusion": "success",
+        "frozenCommit": "04d07bea89b70265a6b1fb1d79272b710623775b",
+        "jobs": [
+          {
+            "id": 122054626347,
+            "name": "P0 metadata (macos-15)",
+            "conclusion": "success"
+          },
+          {
+            "id": 122054626396,
+            "name": "P0 metadata (windows-2025)",
+            "conclusion": "success"
+          },
+          {
+            "id": 122054627063,
+            "name": "P0 metadata (ubuntu-24.04)",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "artifacts": [
+        {
+          "id": 12715875545,
+          "name": "p1-evidence-macos-15",
+          "digest": "sha256:4973deaf91f8e4d92ff5f26698358223ac49749628ff04e9d8f2a1f49d994a5a",
+          "expiresAt": "2026-11-10T06:55:11Z"
+        },
+        {
+          "id": 12715626861,
+          "name": "p1-evidence-windows-2025",
+          "digest": "sha256:c9557299372747c1b715af5c2429724fb17aa72c6ec4620c70b12b791e9b1ac7",
+          "expiresAt": "2026-11-10T06:56:33Z"
+        },
+        {
+          "id": 12715522341,
+          "name": "p1-evidence-ubuntu-24.04",
+          "digest": "sha256:bca925459019614557e0baf0ea1898e885a9675b62d3c8e3421e3ac723cb871e",
+          "expiresAt": "2026-11-10T06:55:16Z"
+        }
+      ],
+      "scope": "Windows x64 P1.2/P1.3 only; all other OS process gates, Worker isolation and installer gates remain NOT_RUN"
     },
     "notRun": [
       "macOS/Linux process integration",
