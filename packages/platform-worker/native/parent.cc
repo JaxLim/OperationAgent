@@ -171,8 +171,15 @@ void create(Run& run) {
   attributes.add(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES, &capabilities, sizeof(capabilities));
   wchar_t windows[MAX_PATH]{}; const UINT count = GetWindowsDirectoryW(windows, MAX_PATH);
   if (!count || count >= MAX_PATH) fail("WINDOWS_DIRECTORY");
-  const std::vector<std::wstring> entries = {L"OA_INHERITED_CHANNEL=" + std::to_wstring(reinterpret_cast<uintptr_t>(child.value)),
-    L"SystemRoot=" + std::wstring(windows), L"WINDIR=" + std::wstring(windows)};
+  // AppContainer creation rewrites LOCALAPPDATA/TEMP/TMP to the container's own folders and fails with
+  // ERROR_ENVVAR_NOT_FOUND when they are absent. Nothing else is inherited; the block is sorted.
+  wchar_t local[MAX_PATH]{};
+  const DWORD localLength = GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH);
+  if (!localLength || localLength >= MAX_PATH) fail("LOCALAPPDATA_UNAVAILABLE");
+  const std::wstring temp = std::wstring(local) + L"\\Temp";
+  const std::vector<std::wstring> entries = {L"LOCALAPPDATA=" + std::wstring(local),
+    L"OA_INHERITED_CHANNEL=" + std::to_wstring(reinterpret_cast<uintptr_t>(child.value)),
+    L"SystemRoot=" + std::wstring(windows), L"TEMP=" + temp, L"TMP=" + temp, L"WINDIR=" + std::wstring(windows)};
   std::vector<wchar_t> environment;
   for (const auto& entry : entries) { environment.insert(environment.end(), entry.begin(), entry.end()); environment.push_back(0); }
   environment.push_back(0);
