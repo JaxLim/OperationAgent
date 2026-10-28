@@ -59,6 +59,7 @@ test('failed SQL migrations roll back and altered migration history is rejected 
   const database = resolve(directory, 'data');
   try {
     writeFileSync(resolve(migrations, '002-string-length.sql'), readFileSync('apps/server/migrations/002-string-length.sql'));
+    writeFileSync(resolve(migrations, '003-workbench.sql'), readFileSync('apps/server/migrations/003-workbench.sql'));
     writeFileSync(file, sql + '\nCREATE TABLE rollback_probe(id INTEGER);\nINVALID SQL;', 'utf8');
     assert.throws(() => openStore(database, randomUUID(), migrations));
     writeFileSync(file, sql + '\nCREATE TABLE rollback_probe(id INTEGER);', 'utf8');
@@ -89,14 +90,14 @@ test('001 databases upgrade without changing data, run history or the original m
   try {
     const store = openStore(directory, randomUUID());
     try {
-      assert.equal(store.databaseVersion, 2); assert.equal(store.recoveredRuns, 0);
+      assert.equal(store.databaseVersion, 3); assert.equal(store.recoveredRuns, 0);
       assert.deepEqual(store.listRecords(), [{ id, value: 'old\u0000data', createdAt: timestamp }]);
       store.insertRecords([{ id: randomUUID(), value: '\u0000upgraded' }]);
     } finally { store.close(true); }
     const inspect = new DatabaseSync(path);
     try {
       assert.equal(inspect.prepare('SELECT sha256 FROM schema_migrations WHERE version = 1').get()?.sha256, hash);
-      assert.equal(inspect.prepare('SELECT count(*) AS count FROM schema_migrations').get()?.count, 2);
+      assert.equal(inspect.prepare('SELECT count(*) AS count FROM schema_migrations').get()?.count, 3);
       assert.equal(inspect.prepare('SELECT outcome FROM control_plane_runs WHERE id = ?').get(oldRun)?.outcome, 'CLEAN');
       inspect.prepare('UPDATE schema_migrations SET sha256 = ? WHERE version = 2').run('tampered');
     } finally { inspect.close(); }
@@ -113,6 +114,7 @@ test('a failed 002 upgrade rolls back the original table, data and migration his
   const second = readFileSync('apps/server/migrations/002-string-length.sql', 'utf8');
   writeFileSync(resolve(migrations, '001-control-plane.sql'), first);
   writeFileSync(resolve(migrations, '002-string-length.sql'), second + '\nINVALID SQL;');
+  writeFileSync(resolve(migrations, '003-workbench.sql'), readFileSync('apps/server/migrations/003-workbench.sql'));
   const legacy = new DatabaseSync(path);
   legacy.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, sha256 TEXT NOT NULL) STRICT'); legacy.exec(first);
   legacy.prepare('INSERT INTO schema_migrations VALUES (?, ?)').run(1, createHash('sha256').update(first).digest('hex'));
@@ -131,4 +133,31 @@ test('a failed 002 upgrade rolls back the original table, data and migration his
     const upgraded = openStore(directory, randomUUID(), migrations);
     try { assert.equal(upgraded.listRecords()[0]?.value, 'preserve'); } finally { upgraded.close(true); }
   } finally { if (directory.startsWith(cache + sep)) rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('workbench projects, settings and run history are transactional and survive reopen', async () => {
+  const { openStore: open } = await import('../../apps/server/dist/persistence/store.js');
+  const cache = resolve('.cache'); mkdirSync(cache, { recursive: true });
+  const directory = mkdtempSync(resolve(cache, 'workbench-'));
+  try {
+    const store = open(directory, randomUUID());
+    try {
+    assert.equal(store.databaseVersion, 3);
+    const project = store.addProject({ name: 'ledger', path: 'C:/work/ledger' });
+    assert.throws(() => store.addProject({ name: 'dup', path: 'c:/WORK/ledger' }), (error: Error & { code?: string }) => String(error.code).startsWith('SQLITE_CONSTRAINT'));
+    assert.throws(() => store.addProject({ name: 'relative', path: 'work/ledger' }));
+    assert.throws(() => store.saveSettings({ ...store.getSettings(), activeProjectId: randomUUID() }), /NOT_FOUND/);
+    store.saveSettings({ ...store.getSettings(), activeProjectId: project.id, density: 'compact' });
+    for (let index = 1; index < 50; index++) store.addProject({ name: `p${index}`, path: `D:/p/${index}` });
+    assert.throws(() => store.addProject({ name: 'over', path: 'D:/over' }), /LIMIT_EXCEEDED/);
+    assert.equal(store.removeProject(project.id), true); assert.equal(store.getSettings().activeProjectId, null);
+    assert.equal(store.removeProject(project.id), false);
+    } finally { store.close(true); }
+    const reopened = open(directory, randomUUID());
+    assert.equal(reopened.getSettings().density, 'compact'); assert.equal(reopened.listProjects().length, 49);
+    assert.deepEqual(reopened.listRuns().map(run => run.outcome), ['RUNNING', 'CLEAN']);
+    reopened.close(true);
+  } finally {
+    if (directory.startsWith(cache + sep)) rmSync(directory, { recursive: true, force: true });
+  }
 });

@@ -6,9 +6,11 @@ export const CONTROL_POLICY = Object.freeze({ handshakeMs: 10_000, requestMs: 2_
   missedHeartbeats: 3, shutdownMs: 5_000, killWaitMs: 2_000, restartWindowMs: 60_000, maxRestarts: 3,
   // 100 records × 256 UTF-16 code units may expand to six JSON bytes per unit, plus record metadata.
   maxBodyBytes: 16_384, maxResponseBytes: 196_608, maxRequestsPerWindow: 240, maxHeartbeatsPerWindow: 60, authWindowMs: 30_000 });
-export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '/v1/heartbeat', records: '/v1/smoke-records', taskStart: '/v1/tasks/start' });
+export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '/v1/heartbeat', records: '/v1/smoke-records', taskStart: '/v1/tasks/start',
+  overview: '/v1/overview', settings: '/v1/settings', projects: '/v1/projects', projectRemove: '/v1/projects/remove', runs: '/v1/runs' });
 export const ControlErrorSchema = z.enum(['VALIDATION_ERROR', 'AUTHENTICATION_FAILED', 'IDENTITY_MISMATCH',
-  'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'RECORD_CONFLICT', 'RATE_LIMITED', 'WORKER_ISOLATION_UNAVAILABLE', 'NOT_FOUND']);
+  'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'RECORD_CONFLICT', 'RATE_LIMITED', 'WORKER_ISOLATION_UNAVAILABLE', 'NOT_FOUND', 'LIMIT_EXCEEDED']);
+export type ControlError = z.infer<typeof ControlErrorSchema>;
 export const ControlFailureSchema = z.strictObject({ error: ControlErrorSchema });
 export const SmokeRecordInputSchema = z.strictObject({ id: z.uuid(), value: z.string().min(1).max(256) });
 export const SmokeBatchSchema = z.strictObject({ records: z.array(SmokeRecordInputSchema).min(1).max(10) });
@@ -19,7 +21,7 @@ export type SmokeRecord = z.infer<typeof SmokeRecordSchema>;
 export type SmokeRecords = z.infer<typeof SmokeRecordsSchema>;
 export const ControlHealthSchema = z.strictObject({ protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.literal(false),
-  databaseVersion: z.literal(2), recoveredRuns: z.number().int().nonnegative() });
+  databaseVersion: z.literal(3), recoveredRuns: z.number().int().nonnegative() });
 export type ControlHealth = z.infer<typeof ControlHealthSchema>;
 export const BootstrapSchema = z.strictObject({ kind: z.literal('bootstrap'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, token: z.string().regex(/^[a-f0-9]{64}$/),

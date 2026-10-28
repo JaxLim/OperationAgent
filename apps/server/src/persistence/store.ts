@@ -3,16 +3,28 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, lstatSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SmokeBatchSchema, SmokeRecordsSchema } from '@operation-agent/contracts';
-import type { SmokeBatch, SmokeRecord } from '@operation-agent/contracts';
+import { randomUUID } from 'node:crypto';
+import { ControlRunListSchema, DEFAULT_WORKBENCH_SETTINGS, ProjectInputSchema, ProjectListSchema, ProjectSchema, SmokeBatchSchema,
+  SmokeRecordsSchema, WORKBENCH_LIMITS, WorkbenchSettingsSchema } from '@operation-agent/contracts';
+import type { ControlRun, Project, SmokeBatch, SmokeRecord, WorkbenchSettings } from '@operation-agent/contracts';
 
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
-const migrationNames = ['001-control-plane.sql', '002-string-length.sql'];
+const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql'];
 export interface Store {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;
+  readonly sqliteVersion: string;
   insertRecords(records: SmokeBatch['records']): SmokeRecord[];
   listRecords(): SmokeRecord[];
+  getSettings(): WorkbenchSettings;
+  saveSettings(settings: WorkbenchSettings): WorkbenchSettings;
+  listProjects(): Project[];
+  /** Throws LIMIT_EXCEEDED or a SQLITE_CONSTRAINT error for an already registered path. */
+  addProject(input: { name: string; path: string }): Project;
+  /** Removing the active project also clears it from settings in the same transaction. */
+  removeProject(id: string): boolean;
+  listRuns(): ControlRun[];
+  counts(): { projects: number; runs: number; records: number };
   close(clean: boolean): void;
 }
 
@@ -55,9 +67,53 @@ export function openStore(directory: string, runId: string, migrationDirectory =
       return interrupted;
     }).immediate();
     const select = db.prepare('SELECT id, value, created_at AS createdAt FROM smoke_records ORDER BY created_at, id LIMIT 100');
+    const readSettings = db.prepare<[], { value: string }>("SELECT value FROM settings WHERE key = 'workbench'");
+    const writeSettings = db.prepare("INSERT INTO settings(key, value, updated_at) VALUES ('workbench', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at");
+    const selectProjects = db.prepare('SELECT id, name, path, created_at AS createdAt FROM projects ORDER BY created_at, id LIMIT ?');
+    const count = (table: 'projects' | 'control_plane_runs' | 'smoke_records'): number =>
+      (db.prepare(`SELECT count(*) AS total FROM ${table}`).get() as { total: number }).total;
+    const settings = (): WorkbenchSettings => {
+      const row = readSettings.get();
+      if (!row) return { ...DEFAULT_WORKBENCH_SETTINGS };
+      // Unknown or older shapes fall back to defaults instead of trusting stored JSON.
+      const parsed = WorkbenchSettingsSchema.safeParse(JSON.parse(row.value));
+      return parsed.success ? parsed.data : { ...DEFAULT_WORKBENCH_SETTINGS };
+    };
+    const sqliteVersion = (db.prepare('SELECT sqlite_version() AS version').get() as { version: string }).version;
     return {
       databaseVersion: migrationNames.length,
       recoveredRuns,
+      sqliteVersion,
+      getSettings: settings,
+      saveSettings(input) {
+        const next = WorkbenchSettingsSchema.parse(input);
+        return db.transaction(() => {
+          if (next.activeProjectId && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(next.activeProjectId)) throw new Error('NOT_FOUND');
+          writeSettings.run(JSON.stringify(next), new Date().toISOString());
+          return settings();
+        }).immediate();
+      },
+      listProjects: () => ProjectListSchema.parse({ projects: selectProjects.all(WORKBENCH_LIMITS.maxProjects) }).projects,
+      addProject(input) {
+        const value = ProjectInputSchema.parse(input);
+        return db.transaction(() => {
+          if (count('projects') >= WORKBENCH_LIMITS.maxProjects) throw new Error('LIMIT_EXCEEDED');
+          const project = ProjectSchema.parse({ id: randomUUID(), ...value, createdAt: new Date().toISOString() });
+          db.prepare('INSERT INTO projects(id, name, path, created_at) VALUES (?, ?, ?, ?)').run(project.id, project.name, project.path, project.createdAt);
+          return project;
+        }).immediate();
+      },
+      removeProject(id) {
+        return db.transaction(() => {
+          const removed = db.prepare('DELETE FROM projects WHERE id = ?').run(id).changes === 1;
+          const current = settings();
+          if (removed && current.activeProjectId === id) writeSettings.run(JSON.stringify({ ...current, activeProjectId: null }), new Date().toISOString());
+          return removed;
+        }).immediate();
+      },
+      listRuns: () => ControlRunListSchema.parse({ runs: db.prepare(`SELECT id, started_at AS startedAt, ended_at AS endedAt, outcome
+        FROM control_plane_runs ORDER BY started_at DESC, id LIMIT ?`).all(WORKBENCH_LIMITS.maxRuns) }).runs,
+      counts: () => ({ projects: count('projects'), runs: count('control_plane_runs'), records: count('smoke_records') }),
       listRecords: () => SmokeRecordsSchema.parse({ records: select.all() }).records,
       insertRecords(records) {
         const batch = SmokeBatchSchema.parse({ records });

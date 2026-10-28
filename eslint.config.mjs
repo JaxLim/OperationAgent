@@ -7,7 +7,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['apps/**/*.ts', 'packages/**/*.ts'],
+    files: ['apps/**/*.ts', 'apps/**/*.tsx', 'packages/**/*.ts'],
     plugins: { architecture: { rules: { boundaries } } },
     rules: { 'architecture/boundaries': 'error' },
   },
@@ -22,7 +22,7 @@ export default [
     languageOptions: { globals: { Buffer: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' } },
   },
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',

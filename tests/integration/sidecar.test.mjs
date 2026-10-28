@@ -30,7 +30,9 @@ test('real staged Node/Express authenticates, rejects illegal access and rolls b
   const requestId = randomUUID();
   assert.equal((await sidecar.call('GET', CONTROL_ROUTES.health, undefined, { auth: { requestId } })).status, 200);
   assert.equal((await sidecar.call('GET', CONTROL_ROUTES.health, undefined, { auth: { requestId } })).status, 401);
-  assert.equal((await sidecar.call('POST', CONTROL_ROUTES.taskStart, {})).body.error, 'WORKER_ISOLATION_UNAVAILABLE');
+  assert.equal((await sidecar.call('POST', CONTROL_ROUTES.taskStart, {})).body.error, 'VALIDATION_ERROR');
+  const refused = await sidecar.call('POST', CONTROL_ROUTES.taskStart, { projectId: randomUUID(), prompt: 'do work' });
+  assert.equal(refused.status, 503); assert.equal(refused.body.error, 'WORKER_ISOLATION_UNAVAILABLE');
   assert.equal((await sidecar.call('POST', CONTROL_ROUTES.records, { records: [], extra: true })).status, 400);
   assert.equal((await sidecar.call('POST', CONTROL_ROUTES.records, 'x'.repeat(17000))).status, 400);
   const id = randomUUID();

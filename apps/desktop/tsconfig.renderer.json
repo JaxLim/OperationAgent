@@ -9,6 +9,7 @@
       "DOM"
     ],
     "types": [],
+    "jsx": "react-jsx",
     "rootDir": "src/renderer",
     "outDir": "dist/types/renderer",
     "declaration": true,
@@ -16,7 +17,8 @@
     "tsBuildInfoFile": "dist/renderer.tsbuildinfo"
   },
   "include": [
-    "src/renderer/**/*.ts"
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx"
   ],
   "references": [
     {

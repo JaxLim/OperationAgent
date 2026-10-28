@@ -17,7 +17,7 @@ process.env.NODE_PATH = resolve(root, '.cache/untrusted-modules');
 process.env.PATH = resolve(root, '.cache/untrusted-executables');
 void app.whenReady().then(async () => {
   try {
-    host = await startDesktop({ stageDirectory, dataDirectory: resolve(initial.dataDirectory, 'database'), show: false });
+    host = await startDesktop({ stageDirectory, dataDirectory: resolve(initial.dataDirectory, 'database'), show: false, requireControlPlane: true });
     process.send({ kind: 'ready', pid: process.pid });
   } catch (error) { process.send({ kind: 'failed', error: error.message }, () => app.exit(1)); }
 });
@@ -32,7 +32,7 @@ process.on('message', async message => {
           renderer: await host.window.webContents.executeJavaScript(`(async () => ({
             health: await window.operationAgent.getControlPlaneHealth(),
             node: typeof process, require: typeof require,
-            keys: Object.keys(window.operationAgent), text: document.querySelector('#status').textContent
+            keys: Object.keys(window.operationAgent), mounted: document.querySelector('#root').childElementCount > 0
           }))()`) };
         break;
       case 'state': value = host.supervisor.snapshot(); break;
@@ -43,6 +43,19 @@ process.on('message', async message => {
             try { await window.operationAgent.getControlPlaneHealth(); accepted++; } catch { rejected++; }
           }
           return { accepted, rejected };
+        })()`);
+        break;
+      case 'workbench':
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const api = window.operationAgent; const settings = await api.getSettings();
+          const saved = await api.saveSettings({ ...settings, theme: 'dark', stopGraceMs: 10000 });
+          const tooLong = await api.saveSettings({ ...settings, stopGraceMs: 31000 }).then(() => 'allowed', () => 'rejected');
+          const missing = await api.saveSettings({ ...settings, activeProjectId: crypto.randomUUID() }).then(() => 'allowed', error => error.message);
+          const task = await api.startTask({ projectId: crypto.randomUUID(), prompt: 'run anything' });
+          const emptyTask = await api.startTask({ projectId: crypto.randomUUID(), prompt: '   ' }).then(() => 'allowed', () => 'rejected');
+          const forged = await api.removeProject({ id: 'not-a-uuid' }).then(() => 'allowed', () => 'rejected');
+          return { saved, tooLong, missing, task, emptyTask, forged, overview: await api.getOverview(), runs: await api.listRuns(),
+            projects: await api.listProjects(), after: await api.getSettings() };
         })()`);
         break;
       case 'write': value = await host.window.webContents.executeJavaScript(`window.operationAgent.writeSmokeRecords(${JSON.stringify(message.input)})`); break;

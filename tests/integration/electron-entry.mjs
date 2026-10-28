@@ -10,7 +10,12 @@ app.on('browser-window-created', (_event, window) => {
   window.hide();
   window.webContents.once('did-finish-load', () => {
     void (async () => {
-      const health = await window.webContents.executeJavaScript('window.operationAgent.getControlPlaneHealth()');
+      // The window renders before the control plane is ready; wait for the real authenticated health reply.
+      let health;
+      for (let attempt = 0; !health && attempt < 100; attempt++) {
+        health = await window.webContents.executeJavaScript('window.operationAgent.getControlPlaneHealth().catch(() => null)');
+        if (!health) await new Promise(resolve => setTimeout(resolve, 100));
+      }
       const id = randomUUID();
       await window.webContents.executeJavaScript(`window.operationAgent.writeSmokeRecords(${JSON.stringify({ records: [{ id, value: 'production entry' }] })})`);
       process.send({ health, id }, () => window.close());

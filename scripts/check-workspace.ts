@@ -13,7 +13,8 @@ export const packageDependencies: Record<string, Record<string, string>> = {
   server: { '@operation-agent/contracts': 'workspace:*', '@operation-agent/worker-transport': 'workspace:*',
     '@operation-agent/platform-worker': 'workspace:*', '@operation-agent/platform-supervision': 'workspace:*', express: '5.3.0', 'better-sqlite3': '13.0.3' },
   'agent-worker': { '@operation-agent/contracts': 'workspace:*', '@operation-agent/worker-transport': 'workspace:*' },
-  desktop: { '@operation-agent/contracts': 'workspace:*', '@operation-agent/platform-supervision': 'workspace:*' },
+  // React is bundled into the Renderer only; Main and Preload stay React-free (import boundary lint).
+  desktop: { '@operation-agent/contracts': 'workspace:*', '@operation-agent/platform-supervision': 'workspace:*', react: '19.3.1', 'react-dom': '19.3.1' },
 };
 export const packagePaths = Object.keys(packageDependencies).map(name => `${['desktop', 'server', 'agent-worker'].includes(name) ? 'apps' : 'packages'}/${name}`);
 const normalized = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => {
@@ -26,7 +27,7 @@ export function validateManifest(name: string, manifest: JsonObject): string[] {
   const need = (ok: boolean, reason: string): void => { if (!ok) errors.push(`${name}: ${reason}`); };
   need(manifest.name === `@operation-agent/${name}` && manifest.private === true && manifest.type === 'module', 'package identity');
   need(normalized(manifest.dependencies) === normalized(packageDependencies[name]), 'dependency direction or pin');
-  const dev = name === 'desktop' ? { electron: '45.0.0' } : name === 'server' ? { '@types/express': '5.0.6', '@types/better-sqlite3': '9.6.0' } : {};
+  const dev = name === 'desktop' ? { electron: '45.0.0', '@types/react': '19.3.0', '@types/react-dom': '19.3.0' } : name === 'server' ? { '@types/express': '5.0.6', '@types/better-sqlite3': '9.6.0' } : {};
   need(normalized(manifest.devDependencies ?? {}) === normalized(dev), 'development dependency boundary');
   for (const field of ['optionalDependencies', 'peerDependencies', 'imports']) need(manifest[field] === undefined, `unreviewed ${field}`);
   if (name === 'desktop') need(manifest.main === 'dist/main/index.js' && manifest.exports === undefined, 'desktop entry');
@@ -38,12 +39,13 @@ export function validateManifest(name: string, manifest: JsonObject): string[] {
   return errors;
 }
 
-export function validateProject(config: JsonObject, nodeTypes: boolean): string[] {
+export function validateProject(config: JsonObject, nodeTypes: boolean, jsx = false): string[] {
   const errors: string[] = [];
   const compiler = object(config.compilerOptions);
   const allowedOptions = ['composite', 'module', 'moduleResolution', 'lib', 'types', 'rootDir', 'outDir',
-    'declaration', 'declarationMap', 'emitDeclarationOnly', 'tsBuildInfoFile'];
+    'declaration', 'declarationMap', 'emitDeclarationOnly', 'tsBuildInfoFile', ...(jsx ? ['jsx'] : [])];
   for (const key of Object.keys(compiler)) if (!allowedOptions.includes(key)) errors.push(`unreviewed compiler override: ${key}`);
+  if (jsx && compiler.jsx !== 'react-jsx') errors.push('renderer JSX transform must be react-jsx');
   if (config.extends !== '../../tsconfig.base.json') errors.push('unreviewed tsconfig base');
   if (compiler.composite !== true || compiler.declaration !== true) errors.push('project references required');
   if (normalized(compiler.types) !== normalized(nodeTypes ? ['node'] : [])) errors.push('ambient Node type leak');
@@ -75,7 +77,7 @@ export async function checkWorkspaceGraph(root: string): Promise<void> {
     const configs = name === 'desktop' ? ['tsconfig.main.json', 'tsconfig.preload.json', 'tsconfig.renderer.json'] : ['tsconfig.json'];
     for (const configName of configs) {
       const config = readJson(resolve(root, path, configName));
-      errors.push(...validateProject(config, name === 'server' || configName === 'tsconfig.main.json'));
+      errors.push(...validateProject(config, name === 'server' || configName === 'tsconfig.main.json', configName === 'tsconfig.renderer.json'));
       const role = configName.split('.')[1]; const compiler = object(config.compilerOptions);
       const isDesktop = name === 'desktop';
       if (normalized(compiler.lib) !== normalized(isDesktop ? ['ES2023', 'DOM'] : ['ES2023'])) errors.push(`${path}/${configName}: ambient library leak`);
@@ -84,7 +86,8 @@ export async function checkWorkspaceGraph(root: string): Promise<void> {
       const src = isDesktop ? `src/${role}` : 'src';
       const outDir = isDesktop ? (role === 'main' ? 'dist/main' : `dist/types/${role}`) : 'dist';
       if (compiler.outDir !== outDir) errors.push(`${path}/${configName}: output path escape`);
-      if (compiler.rootDir !== src || normalized(config.include) !== normalized([`${src}/**/*.ts`]) || config.exclude !== undefined || config.files !== undefined) errors.push(`${path}/${configName}: incomplete source coverage`);
+      const include = role === 'renderer' ? [`${src}/**/*.ts`, `${src}/**/*.tsx`] : [`${src}/**/*.ts`];
+      if (compiler.rootDir !== src || normalized(config.include) !== normalized(include) || config.exclude !== undefined || config.files !== undefined) errors.push(`${path}/${configName}: incomplete source coverage`);
       const refs = (config.references as { path: string }[]).map(ref => ref.path).sort();
       let expectedRefs = Object.keys(packageDependencies[name]!).filter(dep => dep.startsWith('@operation-agent/')).map(dep => '../../packages/' + dep.split('/')[1]);
       if (path.startsWith('packages/')) expectedRefs = expectedRefs.map(ref => ref.replace('../../packages/', '../'));
@@ -93,14 +96,15 @@ export async function checkWorkspaceGraph(root: string): Promise<void> {
       expectedProjects.push(isDesktop ? path + '/' + configName : path);
     }
     for (const file of sourceFiles(resolve(root, path, 'src'))) {
-      if (!file.endsWith('.ts')) errors.push(`unreviewed source kind: ${file}`);
+      const rendererStyle = name === 'desktop' && /[\\/]src[\\/]renderer[\\/]/.test(file) && /\.(tsx|css)$/.test(file);
+      if (!file.endsWith('.ts') && !rendererStyle) errors.push(`unreviewed source kind: ${file}`);
       if (/\/\/\/\s*<reference/.test(readFileSync(file, 'utf8'))) errors.push(`ambient reference bypass: ${file}`);
     }
   }
   const rootConfig = readJson(resolve(root, 'tsconfig.json'));
   const roots = (rootConfig.references as { path: string }[]).map(ref => ref.path).sort();
   if (normalized(roots) !== normalized([...expectedProjects, 'tsconfig.tools.json'].sort())) errors.push('incomplete root reference graph');
-  const results = await new ESLint({ cwd: root }).lintFiles(['apps/**/*.ts', 'packages/**/*.ts']);
+  const results = await new ESLint({ cwd: root }).lintFiles(['apps/**/*.ts', 'apps/**/*.tsx', 'packages/**/*.ts']);
   for (const result of results) for (const message of result.messages) if (message.severity === 2) errors.push(`${result.filePath}:${message.line}: ${message.message}`);
   if (errors.length) throw new Error(errors.join('\n'));
   console.log(JSON.stringify({ check: 'PROCESS_DEPENDENCIES', passed: true, packages: packagePaths.length, osIsolationVerified: false }));

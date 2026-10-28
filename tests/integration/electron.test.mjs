@@ -60,7 +60,9 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
   assert.equal(first.electron, '45.0.0'); assert.equal(first.mainPid, host.child.pid); assert.notEqual(first.pid, first.mainPid);
   assert.equal(first.renderer.health.controlPlaneReady, true); assert.equal(first.renderer.health.agentReady, false);
   assert.equal(first.renderer.node, 'undefined'); assert.equal(first.renderer.require, 'undefined');
-  assert.deepEqual(first.renderer.keys.sort(), ['getFoundationInfo', 'getControlPlaneHealth', 'listSmokeRecords', 'writeSmokeRecords'].sort());
+  assert.deepEqual(first.renderer.keys.sort(), ['getFoundationInfo', 'getControlPlaneHealth', 'listSmokeRecords', 'writeSmokeRecords', 'getDesktopStatus',
+    'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask'].sort());
+  assert.equal(first.renderer.mounted, true);
   assert.equal(await host.command('csp'), 'blocked'); assert.equal(await host.command('invalid-input'), 'rejected');
   assert.match(await host.command('foreign-window'), /IPC_SENDER_REJECTED/);
   assert.equal(await host.command('navigation'), true);
@@ -127,7 +129,7 @@ test('repeated real Sidecar crashes exhaust the bounded restart budget', { timeo
     }, 25_000);
   }
   const exhausted = await host.command('state'); assert.equal(exhausted.pid, null); assert.equal(exhausted.restarts, 3);
-  await assert.rejects(host.command('snapshot'), /CONTROL_PLANE_REQUEST_FAILED/);
+  await assert.rejects(host.command('snapshot'), /SERVICE_UNAVAILABLE/);
 });
 
 test('the production Main entry flushes SQLite and exits through the real window-close lifecycle', { timeout: 45_000 }, async t => {
@@ -154,4 +156,22 @@ test('the production Main entry flushes SQLite and exits through the real window
   const reopened = await launchSidecar(database);
   assert.equal((await reopened.call('GET', CONTROL_ROUTES.health)).body.recoveredRuns, 0);
   assert.equal((await reopened.call('GET', CONTROL_ROUTES.records)).body.records[0].id, result.id);
+});
+
+test('workbench settings persist, invalid input and Worker-less task starts are refused through the real bridge', { timeout: 60_000 }, async t => {
+  const create = await fixture(t); const host = await create();
+  const result = await host.command('workbench');
+  assert.equal(result.saved.theme, 'dark'); assert.equal(result.saved.stopGraceMs, 10000);
+  assert.equal(result.tooLong, 'rejected'); assert.match(result.missing, /NOT_FOUND/);
+  assert.deepEqual(result.task, { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' });
+  assert.equal(result.emptyTask, 'rejected'); assert.equal(result.forged, 'rejected');
+  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 3);
+  assert.equal(result.overview.worker.error, 'WORKER_ISOLATION_UNAVAILABLE');
+  assert.ok(Object.values(result.overview.capabilities).every(value => value !== 'verified'));
+  assert.equal(result.runs.runs[0].outcome, 'RUNNING'); assert.deepEqual(result.projects.projects, []);
+  await host.close();
+  const reopened = await create();
+  const again = await reopened.command('workbench');
+  assert.equal(again.after.theme, 'dark'); assert.equal(again.after.stopGraceMs, 10000);
+  assert.deepEqual(again.runs.runs.slice(0, 2).map(run => run.outcome), ['RUNNING', 'CLEAN']);
 });

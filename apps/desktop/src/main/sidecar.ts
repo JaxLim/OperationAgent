@@ -4,7 +4,7 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { request } from 'node:http';
 import { BootstrapSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlFailureSchema, ControlHealthSchema, PROTOCOL_VERSION,
   SidecarReadySchema, SmokeBatchSchema, SmokeRecordsSchema, requestProof, responseProof } from '@operation-agent/contracts';
-import type { Bootstrap, SidecarReady, SmokeBatch, ControlHealth, SmokeRecords } from '@operation-agent/contracts';
+import type { Bootstrap, SidecarReady, SmokeBatch, ControlHealth, SmokeRecords, DesktopStatus } from '@operation-agent/contracts';
 import { verifyStagedRuntime } from './staged-runtime.js';
 
 interface Instance { child: ChildProcess; bootstrap: Bootstrap; exited: Promise<void>; ready?: SidecarReady; accepted: boolean }
@@ -16,10 +16,10 @@ export class SidecarSupervisor {
   private restartTimer: ReturnType<typeof setTimeout> | undefined;
   private attempts: number[] = [];
   private pending = 0;
-  private state: 'stopped' | 'starting' | 'ready' | 'unavailable' | 'stopping' | 'budget-exhausted' = 'stopped';
+  private state: DesktopStatus['service']['state'] = 'stopped';
   private launchPromise: Promise<void> | undefined;
   constructor(private readonly stageDirectory: string, private readonly dataDirectory: string) {}
-  snapshot(): { state: string; pid: number | null; port: number | null; expressRunId: string | null; restarts: number } {
+  snapshot(): { state: DesktopStatus['service']['state']; pid: number | null; port: number | null; expressRunId: string | null; restarts: number } {
     return { state: this.state, pid: this.active?.child.pid ?? null, port: this.active?.ready?.port ?? null,
       expressRunId: this.active?.bootstrap.expressRunId ?? null, restarts: this.attempts.length };
   }
@@ -136,7 +136,17 @@ export class SidecarSupervisor {
   async writeRecords(input: SmokeBatch): Promise<SmokeRecords> {
     return SmokeRecordsSchema.parse(await this.http(this.instance(), 'POST', CONTROL_ROUTES.records, SmokeBatchSchema.parse(input)));
   }
-  private async http(instance: Instance, method: 'GET' | 'POST', path: string, input?: SmokeBatch): Promise<unknown> {
+  /** Authenticated call to one fixed control route; the caller validates input and the reply schema. */
+  async call<T>(method: 'GET' | 'POST' | 'PUT', path: (typeof CONTROL_ROUTES)[keyof typeof CONTROL_ROUTES], schema: { parse(value: unknown): T }, input?: unknown): Promise<T> {
+    return schema.parse(await this.http(this.instance(), method, path, input));
+  }
+  /** A user-initiated retry: stop whatever is left of the tree, forget the exhausted budget and start fresh. */
+  async restart(): Promise<void> {
+    if (this.state === 'ready' || this.state === 'starting' || this.state === 'stopping') return;
+    await this.stop(); this.attempts = [];
+    await this.start();
+  }
+  private async http(instance: Instance, method: 'GET' | 'POST' | 'PUT', path: string, input?: unknown): Promise<unknown> {
     const pendingLimit = path === CONTROL_ROUTES.heartbeat ? 16 : 15;
     if (!instance.ready || this.pending >= pendingLimit || !this.wanted) throw new Error('SERVICE_UNAVAILABLE');
     const body = input ? JSON.stringify(input) : '';

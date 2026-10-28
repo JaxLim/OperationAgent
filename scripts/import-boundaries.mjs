@@ -1,7 +1,7 @@
 import { resolve, relative } from 'node:path';
 
 export const zones = [
-  ['apps/desktop/src/renderer', ['@operation-agent/contracts']],
+  ['apps/desktop/src/renderer', ['@operation-agent/contracts', 'react', 'react-dom/client']],
   ['apps/desktop/src/preload', ['@operation-agent/contracts', 'electron']],
   ['apps/desktop/src/main', ['@operation-agent/contracts', '@operation-agent/platform-supervision', 'electron', 'node:path', 'node:url']],
   ['apps/server/src', ['@operation-agent/contracts', '@operation-agent/worker-transport', '@operation-agent/platform-worker/parent',
@@ -13,6 +13,10 @@ export const zones = [
   ['packages/platform-worker/src', ['@operation-agent/contracts']],
   ['packages/platform-supervision/src', ['@operation-agent/contracts']],
 ];
+
+// Each listed name maps to one fixed, schema-validated operation in packages/contracts IPC_CHANNELS.
+const ipcOperations = ['health', 'listRecords', 'writeRecords', 'desktopStatus', 'retryControlPlane', 'overview', 'getSettings',
+  'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask'];
 
 export function zoneFor(filename, cwd) {
   const name = relative(cwd, filename).replaceAll('\\', '/');
@@ -61,7 +65,7 @@ export default {
           const call = node.parent;
           const channel = call.type === 'CallExpression' ? call.arguments[0] : undefined;
           if (node.computed || node.property.name !== 'invoke' || !channel || channel.type !== 'MemberExpression' ||
-            channel.computed || channel.object.name !== 'IPC_CHANNELS' || !['health', 'listRecords', 'writeRecords'].includes(channel.property.name)) report(node, 'unlisted IPC channel');
+            channel.computed || channel.object.name !== 'IPC_CHANNELS' || !ipcOperations.includes(channel.property.name)) report(node, 'unlisted IPC channel');
         }
         if (noAmbientIO && node.computed && node.object.type === 'Identifier' && ['globalThis', 'window', 'self'].includes(node.object.name)) {
           report(node, 'computed global capability');
