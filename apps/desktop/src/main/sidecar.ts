@@ -76,7 +76,7 @@ export class SidecarSupervisor {
       this.heartbeat = setInterval(() => {
         if (probing || this.active !== instance || !this.wanted) return;
         probing = true;
-        void this.getHealth().then(() => { missed = 0; }).catch(() => {
+        void this.readHealth(instance, CONTROL_ROUTES.heartbeat).then(() => { missed = 0; }).catch(() => {
           if (++missed >= CONTROL_POLICY.missedHeartbeats) {
             this.state = 'unavailable'; clearInterval(this.heartbeat);
             void this.retire(instance).catch(() => { this.wanted = false; this.state = 'unavailable'; });
@@ -125,7 +125,10 @@ export class SidecarSupervisor {
     return this.active;
   }
   async getHealth(): Promise<ControlHealth> {
-    const instance = this.instance(); const result = ControlHealthSchema.parse(await this.http(instance, 'GET', CONTROL_ROUTES.health));
+    return this.readHealth(this.instance(), CONTROL_ROUTES.health);
+  }
+  private async readHealth(instance: Instance, path: string): Promise<ControlHealth> {
+    const result = ControlHealthSchema.parse(await this.http(instance, 'GET', path));
     if (result.mainRunId !== instance.bootstrap.mainRunId || result.expressRunId !== instance.bootstrap.expressRunId) throw new Error('IDENTITY_MISMATCH');
     return result;
   }
@@ -134,7 +137,8 @@ export class SidecarSupervisor {
     return SmokeRecordsSchema.parse(await this.http(this.instance(), 'POST', CONTROL_ROUTES.records, SmokeBatchSchema.parse(input)));
   }
   private async http(instance: Instance, method: 'GET' | 'POST', path: string, input?: SmokeBatch): Promise<unknown> {
-    if (!instance.ready || this.pending >= 16 || !this.wanted) throw new Error('SERVICE_UNAVAILABLE');
+    const pendingLimit = path === CONTROL_ROUTES.heartbeat ? 16 : 15;
+    if (!instance.ready || this.pending >= pendingLimit || !this.wanted) throw new Error('SERVICE_UNAVAILABLE');
     const body = input ? JSON.stringify(input) : '';
     const auth = { mainRunId: instance.bootstrap.mainRunId, expressRunId: instance.bootstrap.expressRunId,
       requestId: randomUUID(), timestamp: String(Date.now()) };

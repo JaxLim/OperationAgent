@@ -3,11 +3,12 @@ import { test } from 'node:test';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
-import { root, until, environment, launchSidecar, closeDirectory } from './sidecar-helper.mjs';
-import { CONTROL_ROUTES } from '../../packages/contracts/dist/index.js';
+import { root, until, environment, launchSidecar, closeDirectory, httpCall } from './sidecar-helper.mjs';
+import { CONTROL_ROUTES, CONTROL_POLICY } from '../../packages/contracts/dist/index.js';
 
 const require = createRequire(import.meta.url);
 const electron = require('../../apps/desktop/node_modules/electron');
@@ -80,7 +81,7 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
 
 test('a full result of maximally escaped UTF-8 records round-trips through the real Preload bridge', { timeout: 45_000 }, async t => {
   const create = await fixture(t); const host = await create();
-  const records = Array.from({ length: 100 }, () => ({ id: randomUUID(), value: '持久化' + '\u0000'.repeat(253) }));
+  const records = Array.from({ length: 100 }, () => ({ id: randomUUID(), value: '\u0000'.repeat(253) + '持久化' }));
   for (let offset = 0; offset < records.length; offset += 10) await host.command('write', { records: records.slice(offset, offset + 10) });
   const result = await host.command('list');
   assert.ok(Buffer.byteLength(JSON.stringify(result)) > 65_536);
@@ -90,6 +91,21 @@ test('a full result of maximally escaped UTF-8 records round-trips through the r
   await host.close();
   const reopened = await create();
   assert.deepEqual((await reopened.command('list')).records, result.records);
+});
+
+test('unauthenticated traffic and a real Renderer burst preserve Main heartbeats and the Sidecar lease', { timeout: 45_000 }, async t => {
+  const host = await (await fixture(t))();
+  const first = await host.command('state');
+  const stranger = { mainRunId: randomUUID(), expressRunId: randomUUID(), token: '0'.repeat(64) };
+  for (let index = 0; index <= CONTROL_POLICY.maxRequestsPerWindow; index++) {
+    assert.ok([401, 429].includes((await httpCall(first.port, stranger)).status));
+  }
+  const burst = await host.command('health-burst', CONTROL_POLICY.maxRequestsPerWindow + 1);
+  assert.ok(burst.accepted > 0); assert.ok(burst.rejected > 0);
+  await delay(CONTROL_POLICY.shutdownMs + 2 * CONTROL_POLICY.heartbeatMs);
+  const after = await host.command('state');
+  assert.equal(after.state, 'ready'); assert.equal(after.pid, first.pid);
+  assert.equal(after.expressRunId, first.expressRunId); assert.equal(after.restarts, 0);
 });
 
 test('real Main crash closes the inherited channel and the responsive Sidecar exits', { timeout: 60_000 }, async t => {

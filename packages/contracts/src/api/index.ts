@@ -5,8 +5,8 @@ import { ServiceTreeIdentitySchema } from '../ipc/identity.js';
 export const CONTROL_POLICY = Object.freeze({ handshakeMs: 10_000, requestMs: 2_000, heartbeatMs: 1_000,
   missedHeartbeats: 3, shutdownMs: 5_000, killWaitMs: 2_000, restartWindowMs: 60_000, maxRestarts: 3,
   // 100 records × 256 UTF-16 code units may expand to six JSON bytes per unit, plus record metadata.
-  maxBodyBytes: 16_384, maxResponseBytes: 196_608, maxRequestsPerWindow: 240, authWindowMs: 30_000 });
-export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', records: '/v1/smoke-records', taskStart: '/v1/tasks/start' });
+  maxBodyBytes: 16_384, maxResponseBytes: 196_608, maxRequestsPerWindow: 240, maxHeartbeatsPerWindow: 60, authWindowMs: 30_000 });
+export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '/v1/heartbeat', records: '/v1/smoke-records', taskStart: '/v1/tasks/start' });
 export const ControlErrorSchema = z.enum(['VALIDATION_ERROR', 'AUTHENTICATION_FAILED', 'IDENTITY_MISMATCH',
   'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'RECORD_CONFLICT', 'RATE_LIMITED', 'WORKER_ISOLATION_UNAVAILABLE', 'NOT_FOUND']);
 export const ControlFailureSchema = z.strictObject({ error: ControlErrorSchema });
@@ -19,7 +19,7 @@ export type SmokeRecord = z.infer<typeof SmokeRecordSchema>;
 export type SmokeRecords = z.infer<typeof SmokeRecordsSchema>;
 export const ControlHealthSchema = z.strictObject({ protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.literal(false),
-  databaseVersion: z.literal(1), recoveredRuns: z.number().int().nonnegative() });
+  databaseVersion: z.literal(2), recoveredRuns: z.number().int().nonnegative() });
 export type ControlHealth = z.infer<typeof ControlHealthSchema>;
 export const BootstrapSchema = z.strictObject({ kind: z.literal('bootstrap'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, token: z.string().regex(/^[a-f0-9]{64}$/),

@@ -36,6 +36,15 @@ process.on('message', async message => {
           }))()`) };
         break;
       case 'state': value = host.supervisor.snapshot(); break;
+      case 'health-burst':
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          let accepted = 0, rejected = 0;
+          for (let i = 0; i < ${JSON.stringify(message.input)}; i++) {
+            try { await window.operationAgent.getControlPlaneHealth(); accepted++; } catch { rejected++; }
+          }
+          return { accepted, rejected };
+        })()`);
+        break;
       case 'write': value = await host.window.webContents.executeJavaScript(`window.operationAgent.writeSmokeRecords(${JSON.stringify(message.input)})`); break;
       case 'list': value = await host.window.webContents.executeJavaScript('window.operationAgent.listSmokeRecords()'); break;
       case 'csp':

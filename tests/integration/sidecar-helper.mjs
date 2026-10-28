@@ -59,7 +59,7 @@ export async function launchSidecar(dataDirectory, options = {}) {
   try { ready = await readyPromise; }
   catch (error) { child.kill('SIGKILL'); await exited.catch(() => {}); throw error; }
   const call = (method, path, body, overrides) => httpCall(ready.port, bootstrap, method, path, body, overrides);
-  const heartbeat = options.heartbeat === false ? undefined : setInterval(() => { void call('GET', CONTROL_ROUTES.health).catch(() => {}); }, 1000);
+  const heartbeat = options.heartbeat === false ? undefined : setInterval(() => { void call('GET', CONTROL_ROUTES.heartbeat).catch(() => {}); }, 1000);
   child.once('exit', () => clearInterval(heartbeat));
   const handle = { child, bootstrap, ready, call, exited, logs: () => logs,
     async close() {

@@ -75,7 +75,39 @@ test('the live HTTP listener enforces its bounded request window', { timeout: 30
     assert.equal((await live.call('GET', CONTROL_ROUTES.health)).status, 200);
   }
   assert.equal((await live.call('POST', CONTROL_ROUTES.records, { records: [{ id: randomUUID(), value: 'must be denied' }] })).status, 429);
+  const heartbeat = await live.call('GET', CONTROL_ROUTES.heartbeat);
+  assert.equal(heartbeat.status, 200);
+  assert.equal(heartbeat.authenticated, true);
   await live.close(); assert.equal(live.child.exitCode, 0);
+});
+
+test('unauthenticated and replayed bursts cannot consume authenticated request or heartbeat capacity', { timeout: 30_000 }, async t => {
+  const live = await launchSidecar(await directory(t), { heartbeat: false });
+  const requestId = randomUUID();
+  assert.equal((await live.call('GET', CONTROL_ROUTES.health, undefined, { auth: { requestId } })).status, 200);
+  for (let index = 0; index <= CONTROL_POLICY.maxRequestsPerWindow; index++) {
+    const reply = index % 2 === 0
+      ? await live.call('GET', CONTROL_ROUTES.health, undefined, { headers: { 'x-oa-signature': 'a'.repeat(64) } })
+      : await live.call('GET', CONTROL_ROUTES.health, undefined, { auth: { requestId } });
+    assert.ok([401, 429].includes(reply.status));
+    assert.equal(reply.authenticated, false);
+  }
+  assert.equal((await live.call('GET', CONTROL_ROUTES.health)).status, 200);
+  const heartbeat = await live.call('GET', CONTROL_ROUTES.heartbeat);
+  assert.equal(heartbeat.status, 200); assert.equal(heartbeat.authenticated, true);
+});
+
+test('the reserved heartbeat lane is bounded and still rejects replay across lanes', { timeout: 30_000 }, async t => {
+  const live = await launchSidecar(await directory(t), { heartbeat: false });
+  const requestId = randomUUID();
+  for (let index = 0; index < CONTROL_POLICY.maxHeartbeatsPerWindow; index++) {
+    const auth = index === 0 ? { requestId } : {};
+    assert.equal((await live.call('GET', CONTROL_ROUTES.heartbeat, undefined, { auth })).status, 200);
+  }
+  const limited = await live.call('GET', CONTROL_ROUTES.heartbeat);
+  assert.equal(limited.status, 429); assert.equal(limited.authenticated, true);
+  assert.equal((await live.call('GET', CONTROL_ROUTES.health, undefined, { auth: { requestId } })).status, 401);
+  assert.equal((await live.call('GET', CONTROL_ROUTES.health)).status, 200);
 });
 
 test('a responsive Sidecar expires its lease when its parent stops authenticated traffic', { timeout: 20_000 }, async t => {

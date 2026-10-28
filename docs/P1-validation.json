@@ -1,4 +1,26 @@
 {
+  "pr2ReviewFix": {
+    "recordedDate": "2026-10-28",
+    "baselineCommit": "5fa460c4abd1ee25356f1a58e3a1fcd7f159c5eb",
+    "sourceDirty": true,
+    "finishedAt": "2026-10-27T12:04:20.258Z",
+    "command": "pnpm check:p1",
+    "exitCode": 0,
+    "engineeringTests": { "passed": 47, "failed": 0, "skipped": 0 },
+    "windowsProcessTests": { "passed": 13, "failed": 0, "skipped": 0 },
+    "logDirectory": "artifacts/p1/win32-x64",
+    "sha256": {
+      "check-test.log": "9017812864bccd9ca8eede632642cc5f65f32d83ca2ebccdcccc0aebe23351b1",
+      "4.log": "07f66b1c9f565527ec5ab25c6c6be1335a4d6931fe5e2a95b687e6c0006d6f28",
+      "checks.json": "32f825c3b89c52c5fa44fe36bce856072dc8d60e2a8ecd71e9e84e44af266c3a",
+      "integration.json": "701e5ff0853355d89a2acad4892f58fa1696496f2805708c03b92b294a240b10"
+    },
+    "regressions": ["unauthenticated/replayed and ordinary request bursts preserve the Main heartbeat and Sidecar lease", "reserved heartbeat budget and cross-lane replay rejection", "leading/all NUL and UTF-16 boundary persistence through real Preload", "001 checksum/data/run-history preservation and failed 002 upgrade rollback"],
+    "githubCi": "PENDING_PUSH",
+    "workerFixture": "NOT_RUN",
+    "installedSmoke": "NOT_RUN",
+    "agentReady": false
+  },
   "continuation": {
     "recordedDate": "2026-10-27",
     "phase": "P1.2-P1.3",

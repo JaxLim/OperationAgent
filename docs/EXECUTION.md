@@ -270,3 +270,13 @@ git diff --check
 上传命令：`git commit -m "feat(p1): run authenticated Electron sidecar with durable SQLite"`、`git -c http.version=HTTP/1.1 push -u origin codex/p1-control-plane`，退出码均为 0。分支未合并；审查 PR 仅在本轮验收和 CI 通过后创建。
 
 仍为 NOT_RUN：macOS/Linux 进程链路、原生 WorkerLauncher、OWIP/1、AppContainer、原生服务树监管、安装器与安装后 SEC-18、完整 SEC-03/17/SEC-W01、P1 总退出。当前无后代执行器；父通道/租约清理不等同卡死或恶意后代的 OS 强制清理。产物 hash 不等同代码签名，也不抵抗同用户本地恶意修改整个应用；回环监听器可能被本地进程造成拒绝服务，所有异常保持 fail closed。`agentReady=false`，不启用 Worker/Agent Loop/Shell/文件写工具/真实模型。
+
+## PR #2 审查修复（2026-10-27 实测；28 日继续提交）
+
+修复共享 HTTP 计数器导致合法 Main 心跳被拒绝的问题：未认证、普通认证请求和 Main 专用 `/v1/heartbeat` 分别限流；Renderer 健康查询保持普通预算。心跳有独立有界重放记录和 Main 并发保留位，仍验证完整 HMAC、身份、时间与跨通道 requestId 重放。
+
+SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zod 的 UTF-16 长度语义一致。`001-control-plane.sql` 原始字节及已部署 checksum 保持不变；历史连续版本及全部已应用 checksum 先校验，再在同一事务升级。健康契约报告 databaseVersion=2。实测原数据、时间和运行记录保留；002 中途失败可完整回滚并重试。
+
+回归先在旧代码实际失败：前导 NUL 触发 `SQLITE_CONSTRAINT_CHECK`；共享预算耗尽后合法请求返回 `429`。修复后 `pnpm check:p1` 全部门禁通过：**47/47 工程/数据库测试、13/13 Windows 真实 Node/Electron 进程测试，0 fail、0 skipped**。覆盖前导/全 NUL、中文/代理对长度边界、真实 Preload 最坏转义关闭重开、未认证及重放洪泛、普通认证突发、独立心跳限额；跨越租约期限后原 Sidecar PID/实例保持、重启计数为 0。P0 冻结重放、类型、lint、导入边界、构建均通过。
+
+本地证据位于 `artifacts/p1/win32-x64/`，完成时间 `2026-10-27T12:04:20.258Z`，基线 `5fa460c` 且 `sourceDirty=true`；不将工作树结果冒充该基线 CI。新提交的 GitHub CI/审查状态另以 PR #2 的真实记录为准。用户本次已授权 P1.4–P1.7 连续开发；本修复提交仍只包含 P1.2/P1.3 修复，不提前宣称后续阶段通过。
