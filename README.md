@@ -1,6 +1,6 @@
 # OperationAgent
 
-当前阶段：**已授权实施 P1.2 / P1.3；止于 Electron Main → 独立 Node Express Sidecar → SQLite，不授予生产 Worker 资格**。
+当前阶段：**已授权连续实施 P1.4–P1.7；正在实施 P1.4，逐阶段真实验收，不授予生产 Worker 资格**。
 
 规范来源：[ARCHITECTURE.md](ARCHITECTURE.md)、[AGENTS.md](AGENTS.md)，现为 `0.4.0-p0`。已按用户正式批准的 [ADR-WIN-001 r1](docs/adr/ADR-WIN-001.md) 更新，批准记录绑定决策包与规范补丁哈希。
 
@@ -28,7 +28,7 @@ pnpm check:p0-exit
 
 `check` / `check:p1` 包括当前工程检查和真实进程集成；`check:engineering` 只运行工程检查，明确不代表进程验收。`check:p0-exit` 在固定历史提交上重放原 P0 检查并核对当前冻结证据。`package` / `test:smoke` 仍显式失败，安装器验收为 NOT_RUN。
 
-本轮止于 P1.3，P1.4～P1.7 仍按原计划另行实施。Windows 公开创建路径和 OWIP/1 管道仍须实际验收，完整 SEC-W01 最迟相应平台进入 P3 执行链验证前通过。任何失败或未知均不得授予生产 Worker 权限。
+P1.4～P1.7 按原阶段定义连续推进，前置退出门禁未满足时不得宣布进入下一阶段。Windows 公开创建路径和 OWIP/1 管道仍须实际验收，完整 SEC-W01 最迟相应平台进入 P3 执行链验证前通过。任何失败或未知均不得授予生产 Worker 权限。
 
 Windows x64 真实链路验收及开发启动：
 
