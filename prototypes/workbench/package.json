@@ -1,0 +1,26 @@
+{
+  "name": "operation-agent-workbench-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone UI prototype of the OperationAgent workbench. Deterministic offline simulation only; never executes tools or touches real workspaces.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5317 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5318 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.ts",
+    "desktop": "node scripts/desktop.mjs"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.5"
+  }
+}
