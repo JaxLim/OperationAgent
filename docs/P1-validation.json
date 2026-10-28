@@ -1,0 +1,193 @@
+{
+  "recordedDate": "2026-10-25",
+  "phase": "P1.0-P1.1",
+  "baselineCommit": "04d07bea89b70265a6b1fb1d79272b710623775b",
+  "environment": {
+    "node": "v24.22.1",
+    "abi": "137",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "executions": [
+    {
+      "name": "P1.1 Red contracts and imports",
+      "args": [
+        "--test",
+        "tests/p1/contracts.test.ts",
+        "tests/p1/boundaries.test.ts"
+      ],
+      "exitCode": 1,
+      "stdout": "✔ pure contracts imports are accepted in every process (763.7678ms)\n✖ real ESLint invocation rejects static, relative, aliased, require and dynamic import bypasses (2.7616ms)\nnode:internal/modules/esm/resolve:272\n    throw new ERR_MODULE_NOT_FOUND(\n          ^\n\nError [ERR_MODULE_NOT_FOUND]: Cannot find module 'D:\\Operation_Agent\\packages\\contracts\\src\\index.ts' imported from D:\\Operation_Agent\\tests\\p1\\contracts.test.ts\n    at finalizeResolution (node:internal/modules/esm/resolve:272:11)\n    at moduleResolve (node:internal/modules/esm/resolve:879:10)\n    at defaultResolve (node:internal/modules/esm/resolve:1006:11)\n    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)\n    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)\n    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)\n    at #resolve (node:internal/modules/esm/loader:687:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33)\n    at ModuleJob.link (node:internal/modules/esm/module_job:381:17) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file:///D:/Operation_Agent/packages/contracts/src/index.ts'\n}\n\nNode.js v24.22.1\n✖ tests\\p1\\contracts.test.ts (96.7372ms)\nℹ tests 3\nℹ suites 0\nℹ pass 1\nℹ fail 2\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1056.7703\n\n✖ failing tests:\n\ntest at tests\\p1\\boundaries.test.ts:17:1\n✖ real ESLint invocation rejects static, relative, aliased, require and dynamic import bypasses (2.7616ms)\n  AssertionError [ERR_ASSERTION]: apps/desktop/src/renderer/index.ts: import 'node:fs';\n      at TestContext.<anonymous> (file:///D:/Operation_Agent/tests/p1/boundaries.test.ts:37:13)\n      at async Test.run (node:internal/test_runner/test:1409:7)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: false,\n    expected: true,\n    operator: '==',\n    diff: 'simple'\n  }\n\ntest at tests\\p1\\contracts.test.ts:1:1\n✖ tests\\p1\\contracts.test.ts (96.7372ms)\n  'test failed'\n",
+      "stderr": ""
+    },
+    {
+      "name": "Install P1.1 locked dependencies without lifecycle scripts",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "install",
+        "--ignore-scripts"
+      ],
+      "exitCode": 0,
+      "stdout": "Scope: all 8 workspace projects\nProgress: resolved 1, reused 0, downloaded 0, added 0\nProgress: resolved 180, reused 135, downloaded 3, added 0\nPackages: +93\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 216, reused 169, downloaded 17, added 87\nProgress: resolved 216, reused 171, downloaded 20, added 93, done\n\ndevDependencies:\n+ vite 8.3.5\n\nDone in 3.3s using pnpm v10.34.7\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 first typecheck",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "typecheck"
+      ],
+      "exitCode": 2,
+      "stdout": "\n> operation-agent@0.0.0 typecheck D:\\Operation_Agent\n> node scripts/workspace.mjs typecheck\n\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(194,117): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(196,107): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(199,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(200,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(194,117): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(196,107): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(199,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(200,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(194,117): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(196,107): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(199,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(200,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(194,117): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(196,107): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(199,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/schemas.d.cts(200,44): error TS2304: Cannot find name 'URL'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(9728,59): error TS2749: 'MessagePort' refers to a value, but is being used as a type here. Did you mean 'typeof MessagePort'?\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(9802,12): error TS2749: 'MessagePort' refers to a value, but is being used as a type here. Did you mean 'typeof MessagePort'?\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(14555,26): error TS2304: Cannot find name 'VideoFrame'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(14589,26): error TS2304: Cannot find name 'VideoFrame'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(20780,32): error TS2304: Cannot find name 'HTMLElement'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21011,38): error TS2304: Cannot find name 'HTMLElementEventMap'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21011,85): error TS2304: Cannot find name 'HTMLElement'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21011,102): error TS2304: Cannot find name 'HTMLElementEventMap'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21012,46): error TS2304: Cannot find name 'EventListenerOrEventListenerObject'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21013,41): error TS2304: Cannot find name 'HTMLElementEventMap'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21013,88): error TS2304: Cannot find name 'HTMLElement'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21013,105): error TS2304: Cannot find name 'HTMLElementEventMap'.\r\nnode_modules/.pnpm/electron@45.0.0/node_modules/electron/electron.d.ts(21014,49): error TS2304: Cannot find name 'EventListenerOrEventListenerObject'.\r\n ELIFECYCLE  Command failed with exit code 2.\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 typecheck after ambient type repair",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 typecheck D:\\Operation_Agent\n> node scripts/workspace.mjs typecheck\n\nScope: 7 of 8 workspace projects\n\n> @operation-agent/contracts@0.0.0 typecheck D:\\Operation_Agent\\packages\\contracts\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/platform-supervision@0.0.0 typecheck D:\\Operation_Agent\\packages\\platform-supervision\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/platform-worker@0.0.0 typecheck D:\\Operation_Agent\\packages\\platform-worker\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/worker-transport@0.0.0 typecheck D:\\Operation_Agent\\packages\\worker-transport\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/agent-worker@0.0.0 typecheck D:\\Operation_Agent\\apps\\agent-worker\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/desktop@0.0.0 typecheck D:\\Operation_Agent\\apps\\desktop\n> tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit\n\n\n> @operation-agent/server@0.0.0 typecheck D:\\Operation_Agent\\apps\\server\n> tsc -p tsconfig.json --noEmit\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 lint",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "lint"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 lint D:\\Operation_Agent\n> eslint scripts tests/p0 tests/p1 apps packages eslint.config.mjs --max-warnings 0\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 boundaries",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "check:boundaries"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 check:boundaries D:\\Operation_Agent\n> node scripts/check-workspace.ts\n\n{\"check\":\"PROCESS_DEPENDENCIES\",\"passed\":true,\"packages\":7,\"osIsolationVerified\":false}\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 unit tests",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "test"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 test D:\\Operation_Agent\n> node --test tests/p0/*.test.ts tests/p1/*.test.ts\n\n✔ P0 metadata quality may pass while architecture freeze is blocked (3.3003ms)\n✔ application dependencies cannot silently enter P0 (0.9973ms)\n✔ floating dependency versions and mismatched runtimes fail the gate (0.6692ms)\n✔ strict mode and Renderer type separation cannot silently weaken (0.6267ms)\n✔ Electron native rebuild cannot replace sidecar Node artifacts (0.6943ms)\n✔ untested platform capabilities cannot be advertised (0.545ms)\n✔ unresolved decisions cannot be hidden behind a frozen label (0.562ms)\n✔ editing only the status and blocker list cannot authorize P1 (0.4833ms)\n✔ removing the platform capability matrix cannot evade P0 checks (0.7485ms)\n✔ missing platform checksums fail closed (0.9442ms)\n✔ P1 command guard exits nonzero instead of producing a green fake test (78.3301ms)\n✔ non-object JSON configuration is rejected (0.2404ms)\n✔ the actual review package retains valid raw feasibility evidence (12.6395ms)\n✔ prepared evidence with a frozen status still requires explicit approval (9.1279ms)\n✔ approved decision with unapplied specifications cannot exit P0 (5.4333ms)\n✔ specifications cannot be applied before approval (5.2637ms)\n✔ matching approval, specifications and evidence permit architecture exit only (4.9689ms)\n✔ a previous approval does not authorize changed decision package bytes (4.9777ms)\n✔ missing or changed decision documents invalidate approval evidence (23.321ms)\n✔ missing, empty and tampered raw evidence cannot be replaced by a green summary (106.2569ms)\n✔ rehashed evidence must still prove real parentage and pre-instruction isolation (19.3214ms)\n✔ OS-denied file access must coexist with the legitimate RPC channel (4.6797ms)\n✔ surviving processes invalidate cleanup evidence even with matching hashes (15.7127ms)\n✔ known public-creation and Node-spawn failures must not be relabelled PASS (8.8885ms)\n✔ changed prototype sources and unsafe evidence source paths fail closed (7.6928ms)\n✔ deleting source provenance or successful file controls cannot manufacture feasibility (7.2585ms)\n✔ mixed or unreviewed specification versions cannot exit P0 (5.1758ms)\n✔ partial, rejected or unsourced approval receipts are invalid (20.747ms)\n✔ unsafe fallback and postponed production isolation cannot hide in metadata (10.7981ms)\n✔ pure contracts imports are accepted in every process (774.3347ms)\n✔ real ESLint invocation rejects static, relative, aliased, require and dynamic import bypasses (32.1119ms)\n✔ strict v1 handshake validates the complete identity and correlation envelope (4.767ms)\n✔ unknown versions, identities, roles, methods and fields are rejected (2.0734ms)\n✔ health and shutdown contracts do not grant readiness or business capabilities (3.5646ms)\n✔ P1.0 and P1.1 authorization permits a skeleton without granting production capabilities (2.0604ms)\n✔ stage advancement, missing authorization and fabricated qualification fail closed (1.0252ms)\n✔ freeze verification detects changed, removed and missing historical evidence (0.234ms)\nℹ tests 37\nℹ suites 0\nℹ pass 37\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2847.7598\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 build",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "build"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 build D:\\Operation_Agent\n> node scripts/workspace.mjs build\n\n\u001b[36mvite v8.3.5 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n✓ 105 modules transformed.\nrendering chunks...\ncomputing gzip size...\napps/desktop/dist/renderer/index.html                 0.58 kB │ gzip:  0.37 kB\napps/desktop/dist/renderer/assets/index-Dg1RNPTM.js  75.25 kB │ gzip: 22.61 kB\n\n\u001b[32m✓ built in 91ms\u001b[39m\n\u001b[36mvite v8.3.5 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n✓ 103 modules transformed.\nrendering chunks...\ncomputing gzip size...\napps/desktop/dist/preload/index.cjs  146.71 kB │ gzip: 34.01 kB\n\n\u001b[32m✓ built in 46ms\u001b[39m\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 additional negative configuration tests",
+      "args": [
+        "--test",
+        "tests/p1/workspace.test.ts"
+      ],
+      "exitCode": 1,
+      "stdout": "✔ manifest dependencies, exports and optional dependency backdoors are checked (2.0528ms)\n✔ tsconfig cannot inject Node globals, aliases or weaker inherited checks (0.6598ms)\n✖ actual TypeScript projects reject Node in Renderer and DOM/network globals in Worker (3763.5311ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 4430.2396\n\n✖ failing tests:\n\ntest at tests\\p1\\workspace.test.ts:29:1\n✖ actual TypeScript projects reject Node in Renderer and DOM/network globals in Worker (3763.5311ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  false !== true\n  \n      at TestContext.<anonymous> (file:///D:/Operation_Agent/tests/p1/workspace.test.ts:43:14)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n      at Test.postRun (node:internal/test_runner/test:1542:19)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: false,\n    expected: true,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 negative type tests after Windows path normalization",
+      "args": [
+        "--test",
+        "tests/p1/workspace.test.ts"
+      ],
+      "exitCode": 0,
+      "stdout": "✔ manifest dependencies, exports and optional dependency backdoors are checked (1.9587ms)\n✔ tsconfig cannot inject Node globals, aliases or weaker inherited checks (0.5781ms)\n✔ actual TypeScript projects reject Node in Renderer and DOM/network globals in Worker (6231.9104ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 6964.0045\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 full gate",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "check:p1"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 check:p1 D:\\Operation_Agent\n> node scripts/run-checks.mjs\n\n\n> operation-agent@0.0.0 typecheck D:\\Operation_Agent\n> node scripts/workspace.mjs typecheck\n\nScope: 7 of 8 workspace projects\n\n> @operation-agent/contracts@0.0.0 typecheck D:\\Operation_Agent\\packages\\contracts\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/platform-supervision@0.0.0 typecheck D:\\Operation_Agent\\packages\\platform-supervision\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/platform-worker@0.0.0 typecheck D:\\Operation_Agent\\packages\\platform-worker\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/worker-transport@0.0.0 typecheck D:\\Operation_Agent\\packages\\worker-transport\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/agent-worker@0.0.0 typecheck D:\\Operation_Agent\\apps\\agent-worker\n> tsc -p tsconfig.json --noEmit\n\n\n> @operation-agent/desktop@0.0.0 typecheck D:\\Operation_Agent\\apps\\desktop\n> tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit\n\n\n> @operation-agent/server@0.0.0 typecheck D:\\Operation_Agent\\apps\\server\n> tsc -p tsconfig.json --noEmit\n\n\n> operation-agent@0.0.0 lint D:\\Operation_Agent\n> eslint scripts tests/p0 tests/p1 apps packages eslint.config.mjs --max-warnings 0\n\n\n> operation-agent@0.0.0 check:boundaries D:\\Operation_Agent\n> node scripts/check-workspace.ts\n\n{\"check\":\"PROCESS_DEPENDENCIES\",\"passed\":true,\"packages\":7,\"osIsolationVerified\":false}\n\n> operation-agent@0.0.0 test D:\\Operation_Agent\n> node --test tests/p0/*.test.ts tests/p1/*.test.ts\n\n✔ P0 metadata quality may pass while architecture freeze is blocked (3.6072ms)\n✔ application dependencies cannot silently enter P0 (1.2982ms)\n✔ floating dependency versions and mismatched runtimes fail the gate (0.9921ms)\n✔ strict mode and Renderer type separation cannot silently weaken (0.8748ms)\n✔ Electron native rebuild cannot replace sidecar Node artifacts (1.0193ms)\n✔ untested platform capabilities cannot be advertised (0.9877ms)\n✔ unresolved decisions cannot be hidden behind a frozen label (1.0145ms)\n✔ editing only the status and blocker list cannot authorize P1 (0.8149ms)\n✔ removing the platform capability matrix cannot evade P0 checks (0.8892ms)\n✔ missing platform checksums fail closed (1.0249ms)\n✔ P1 command guard exits nonzero instead of producing a green fake test (93.2729ms)\n✔ non-object JSON configuration is rejected (0.2398ms)\n✔ the actual review package retains valid raw feasibility evidence (10.6219ms)\n✔ prepared evidence with a frozen status still requires explicit approval (8.066ms)\n✔ approved decision with unapplied specifications cannot exit P0 (6.0973ms)\n✔ specifications cannot be applied before approval (5.698ms)\n✔ matching approval, specifications and evidence permit architecture exit only (5.5167ms)\n✔ a previous approval does not authorize changed decision package bytes (6.8575ms)\n✔ missing or changed decision documents invalidate approval evidence (22.8793ms)\n✔ missing, empty and tampered raw evidence cannot be replaced by a green summary (108.0978ms)\n✔ rehashed evidence must still prove real parentage and pre-instruction isolation (18.6894ms)\n✔ OS-denied file access must coexist with the legitimate RPC channel (5.0216ms)\n✔ surviving processes invalidate cleanup evidence even with matching hashes (16.7559ms)\n✔ known public-creation and Node-spawn failures must not be relabelled PASS (7.4995ms)\n✔ changed prototype sources and unsafe evidence source paths fail closed (7.4707ms)\n✔ deleting source provenance or successful file controls cannot manufacture feasibility (8.1566ms)\n✔ mixed or unreviewed specification versions cannot exit P0 (5.5046ms)\n✔ partial, rejected or unsourced approval receipts are invalid (24.2015ms)\n✔ unsafe fallback and postponed production isolation cannot hide in metadata (12.2547ms)\n✔ pure contracts imports are accepted in every process (815.387ms)\n✔ real ESLint invocation rejects static, relative, aliased, require and dynamic import bypasses (34.4946ms)\n✔ strict v1 handshake validates the complete identity and correlation envelope (4.7241ms)\n✔ unknown versions, identities, roles, methods and fields are rejected (2.0087ms)\n✔ health and shutdown contracts do not grant readiness or business capabilities (4.3472ms)\n✔ built entry points explicitly reject execution; this is not an OS isolation test (1.1132ms)\n✔ P1.0 and P1.1 authorization permits a skeleton without granting production capabilities (1.7167ms)\n✔ stage advancement, missing authorization and fabricated qualification fail closed (0.9734ms)\n✔ freeze verification detects changed, removed and missing historical evidence (0.2606ms)\n✔ unchanged P0 checker still rejects the actual P1 application directories (149.606ms)\n✔ manifest dependencies, exports and optional dependency backdoors are checked (2.2776ms)\n✔ tsconfig cannot inject Node globals, aliases or weaker inherited checks (0.5564ms)\n✔ actual TypeScript projects reject Node in Renderer and DOM/network globals in Worker (6325.8716ms)\nℹ tests 42\nℹ suites 0\nℹ pass 42\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 7076.6606\n\n> operation-agent@0.0.0 build D:\\Operation_Agent\n> node scripts/workspace.mjs build\n\n\u001b[36mvite v8.3.5 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n✓ 105 modules transformed.\nrendering chunks...\ncomputing gzip size...\napps/desktop/dist/renderer/index.html                 0.58 kB │ gzip:  0.37 kB\napps/desktop/dist/renderer/assets/index-C1wHVpCh.js  75.29 kB │ gzip: 22.63 kB\n\n\u001b[32m✓ built in 83ms\u001b[39m\n\u001b[36mvite v8.3.5 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n✓ 103 modules transformed.\nrendering chunks...\ncomputing gzip size...\napps/desktop/dist/preload/index.cjs  146.77 kB │ gzip: 34.02 kB\n\n\u001b[32m✓ built in 45ms\u001b[39m\n\n> operation-agent@0.0.0 verify:p0 D:\\Operation_Agent\n> node scripts/p0-history.ts\n\n{\"check\":\"P0_METADATA\",\"passed\":true,\"phaseStatus\":\"frozen\",\"blockers\":[],\"decisionApproval\":\"approved\",\"specificationRevision\":\"updated\",\"feasibilityEvidenceVerified\":true,\"decisionPackageSha256\":\"01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58\",\"applicationTestsRun\":false,\"productionWorkerQualified\":false}\n{\"check\":\"P0_HISTORICAL_EXIT\",\"commit\":\"04d07bea89b70265a6b1fb1d79272b710623775b\",\"passed\":true,\"productionWorkerQualified\":false}\n\n> operation-agent@0.0.0 verify:p1 D:\\Operation_Agent\n> node scripts/p1-check.ts\n\n{\"check\":\"P1_SCOPE_AND_HISTORY\",\"passed\":true,\"stopAfter\":\"P1.1\",\"integrationTests\":\"NOT_RUN\",\"productionWorkerQualified\":false}\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 final build and artifact structure",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "build"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 build D:\\Operation_Agent\n> node scripts/workspace.mjs build\n\n\u001b[36mvite v8.3.5 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n✓ 104 modules transformed.\nrendering chunks...\ncomputing gzip size...\napps/desktop/dist/renderer/index.html                 0.58 kB │ gzip:  0.37 kB\napps/desktop/dist/renderer/assets/index-DKE4_Fgr.js  74.62 kB │ gzip: 22.33 kB\n\n\u001b[32m✓ built in 90ms\u001b[39m\n\u001b[36mvite v8.3.5 \u001b[32mbuilding client environment for production...\u001b[36m\u001b[39m\ntransforming...\n✓ 103 modules transformed.\nrendering chunks...\ncomputing gzip size...\napps/desktop/dist/preload/index.cjs  146.77 kB │ gzip: 34.02 kB\n\n\u001b[32m✓ built in 42ms\u001b[39m\n{\"check\":\"BUILT_ARTIFACT_STRUCTURE\",\"passed\":true,\"electronLaunched\":false,\"installedSmokeTests\":\"NOT_RUN\"}\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 final lint",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "lint"
+      ],
+      "exitCode": 0,
+      "stdout": "\n> operation-agent@0.0.0 lint D:\\Operation_Agent\n> eslint scripts tests/p0 tests/p1 apps packages eslint.config.mjs --max-warnings 0\n\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 frozen dependency install",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "install",
+        "--frozen-lockfile",
+        "--ignore-scripts",
+        "--offline"
+      ],
+      "exitCode": 0,
+      "stdout": "Scope: all 8 workspace projects\nLockfile is up to date, resolution step is skipped\nAlready up to date\n\nDone in 515ms using pnpm v10.34.7\n",
+      "stderr": ""
+    },
+    {
+      "name": "P1.1 test:integration expected NOT_IMPLEMENTED",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "test:integration"
+      ],
+      "exitCode": 1,
+      "stdout": "\n> operation-agent@0.0.0 test:integration D:\\Operation_Agent\n> node scripts/phase-required.mjs P1 integration\n\n ELIFECYCLE  Command failed with exit code 1.\n",
+      "stderr": "NOT_IMPLEMENTED: P1 integration requires explicit phase authorization and real application tests.\n"
+    },
+    {
+      "name": "P1.1 package expected NOT_IMPLEMENTED",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "package"
+      ],
+      "exitCode": 1,
+      "stdout": "\n> operation-agent@0.0.0 package D:\\Operation_Agent\n> node scripts/phase-required.mjs P1 packaging\n\n ELIFECYCLE  Command failed with exit code 1.\n",
+      "stderr": "NOT_IMPLEMENTED: P1 packaging requires explicit phase authorization and real application tests.\n"
+    },
+    {
+      "name": "P1.1 test:smoke expected NOT_IMPLEMENTED",
+      "args": [
+        ".tools/pnpm/bin/pnpm.cjs",
+        "test:smoke"
+      ],
+      "exitCode": 1,
+      "stdout": "\n> operation-agent@0.0.0 test:smoke D:\\Operation_Agent\n> node scripts/phase-required.mjs P1 installed-application-smoke\n\n ELIFECYCLE  Command failed with exit code 1.\n",
+      "stderr": "NOT_IMPLEMENTED: P1 installed-application-smoke requires explicit phase authorization and real application tests.\n"
+    }
+  ],
+  "limitations": [
+    "P1.2-P1.7 not implemented or authorized.",
+    "These are tooling, schema, import-boundary and build artifact tests; no product integration, Electron launch, OS isolation or installed smoke test has run.",
+    "No AppContainer profile, database, model, shell tool, MCP or native Worker launcher created."
+  ]
+}

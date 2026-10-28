@@ -1,4 +1,4 @@
-name: P0 engineering checks
+name: P0 frozen engineering replay
 
 on:
   push:
@@ -28,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: 04d07bea89b70265a6b1fb1d79272b710623775b
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -38,6 +39,7 @@ jobs:
         run: node scripts/bootstrap-windows.mjs --pnpm-only
       - run: node .tools/pnpm/bin/pnpm.cjs install --frozen-lockfile --ignore-scripts
       - run: node .tools/pnpm/bin/pnpm.cjs check
+      - run: node .tools/pnpm/bin/pnpm.cjs check:p0-exit
       - name: Compiled P0 checker
         run: node dist/tooling/scripts/p0-check.js
       - name: Scope reminder

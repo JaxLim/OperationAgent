@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
+    "types": [],
+    "rootDir": "src/preload",
+    "outDir": "dist/types/preload",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "tsBuildInfoFile": "dist/preload.tsbuildinfo"
+  },
+  "include": [
+    "src/preload/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/contracts"
+    }
+  ]
+}

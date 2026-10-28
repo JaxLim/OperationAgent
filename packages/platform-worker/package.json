@@ -1,0 +1,26 @@
+{
+  "name": "@operation-agent/platform-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./parent": {
+      "types": "./dist/parent.d.ts",
+      "import": "./dist/parent.js"
+    },
+    "./child": {
+      "types": "./dist/child.d.ts",
+      "import": "./dist/child.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@operation-agent/contracts": "workspace:*"
+  }
+}

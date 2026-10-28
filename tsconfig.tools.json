@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "composite": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2023"],
@@ -9,5 +10,6 @@
     "outDir": "dist/tooling",
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["scripts/**/*.ts", "tests/p0/**/*.ts"]
+  "include": ["scripts/**/*.ts", "tests/p0/**/*.ts", "tests/p1/**/*.ts"],
+  "references": [{ "path": "packages/contracts" }, { "path": "packages/worker-transport" }]
 }

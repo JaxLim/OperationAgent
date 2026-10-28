@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "rootDir": "src/main",
+    "outDir": "dist/main",
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "tsBuildInfoFile": "dist/main.tsbuildinfo"
+  },
+  "include": [
+    "src/main/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/platform-supervision"
+    }
+  ]
+}

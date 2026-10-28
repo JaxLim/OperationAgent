@@ -1,0 +1,41 @@
+name: P1 foundation checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    name: P1.0-P1.1 (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    env:
+      npm_config_cache: ${{ github.workspace }}/.cache/npm
+      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+      XDG_DATA_HOME: ${{ github.workspace }}/.cache/data
+      XDG_STATE_HOME: ${{ github.workspace }}/.cache/state
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - run: node scripts/bootstrap-windows.mjs --pnpm-only
+      - run: node .tools/pnpm/bin/pnpm.cjs install --frozen-lockfile --ignore-scripts
+      - run: node .tools/pnpm/bin/pnpm.cjs check:p1
+      - name: Scope reminder
+        run: node -e "console.log('P1.0-P1.1 only. Integration, OS isolation, database, installer smoke and P1 total exit are NOT RUN.')"

@@ -1,4 +1,4 @@
-# P0 实际执行与验证记录
+# 实际执行与验证记录
 
 初始记录：2026-10-23（Asia/Shanghai）。以下初始阶段记录保留原貌；2026-10-24/25 的 ADR 批准与冻结验证见末节。生产功能和平台安全能力仍全部未验证。
 
@@ -167,3 +167,37 @@ GitHub 插件用于确认账户和新仓库权限/可见性；插件没有创建
 建议在下一次取得实施授权后，按 P1.1～P1.7 开始：最小 contracts 与导入边界 → Express/SQLite/Node ABI → Main bootstrap → 公开 Windows 创建/OWIP/1 受限 fixture → 服务树故障回收 → 真实安装包 DB 烟测。控制面可独立测试，未经隔离门禁的 Worker 不能执行生产任务。
 
 公开 profile/创建路径和新协议尚未实现或验证；旧原型使用未公开导出和私有 framing，不作为生产回退。网络全矩阵/回环、Node spawnSync、危险句柄、竞态、实际 Electron/安装包及其他 OS 隔离仍未完成，按 P1 与 SEC-W01 分阶段验收。所有平台能力保持 unverified，P0 冻结不改变该状态。
+
+## P1.0 阶段迁移（2026-10-25）
+
+基于已核对的 main `04d07bea89b70265a6b1fb1d79272b710623775b` 创建 `codex/p1-foundation`。对应 P0 CI [40155608430](https://github.com/JaxLim/OperationAgent/actions/runs/40155608430) 三个平台均 success。Git HTTPS fetch 超时，使用已连接 GitHub API 核实远端 SHA；没有改写 main。
+
+变更：保留原 P0 检查器/批准/规范/实验字节，新增 `p0-history.ts`、`p1-check.ts`、P1 状态与三平台 workflow、迁移正负例、P1 验收文档；根 scripts 切换至阶段感知入口。无应用进程或持久化业务数据；只在工作区 `.cache` 写入并清理历史重放快照。
+
+实际命令与结果：
+
+- 修改前 `pnpm check`：退出 0，29/29 tests；`check:p0-exit`：退出 0。
+- Red：`node --test tests/p1/stage.test.ts` 退出 1，`ERR_MODULE_NOT_FOUND`，新检查器尚未实现。
+- Green：`pnpm check:p1` 退出 0；strict TypeScript、ESLint 零警告、32/32 tests（0 skipped）、build、P0 历史退出重放、P1 范围/冻结校验全部通过。
+- `git diff --check` 退出 0。
+
+P1.0 工程迁移已实现；P1.1 在此批尚未实施。后续可以新增有归属的应用包，但不能改写 P0 证据或提升能力。产品集成、Worker 隔离、数据库和安装包：NOT RUN，未创建 AppContainer profile。
+
+## P1.1 工程骨架（2026-10-25）
+
+实际新增文件分组：三个 `apps/*` 包及其分进程源文件/tsconfig；contracts 的 version/errors/rpc/ipc/URL 实例类型；worker-transport 和两个平台接口包；根 tsconfig 引用图；构建、产物、依赖边界检查脚本；ESLint 边界规则；contracts/boundaries/workspace/disabled-worker 测试。更新 root scripts、workspace 配置、锁文件和 P1 状态。完整机器可读命令/退出码/stdout/stderr 保存在 [P1-validation.json](P1-validation.json)。
+
+| 验证批次 | 实际结果 |
+|---|---|
+| 测试先行 | 退出 1：契约文件不存在、Renderer 的 node:fs 未被拦截；实现规则与 Schema 后修复 |
+| 首次全工程 typecheck | 退出 2：Zod 缺 URL 实例类型、Electron 共享声明缺 Web 类型；修复独立类型配置，未关闭 strict/skipLibCheck |
+| 补充配置负例 | 包/tsconfig 拒绝测试通过；类型负例测试首次因 Windows 路径分隔符匹配错误失败，规范化诊断路径后 3/3 通过 |
+| 根级与各包 typecheck | 全部通过，包含 Desktop 三个独立进程配置 |
+| `pnpm check:p1` | 退出 0：42/42 tests，0 skipped；ESLint 零警告、依赖方向、build、P0 重放、P1 状态检查通过 |
+| 构建产物复核 | 发现 Vite 默认 module-preload 注入 fetch；关闭后 `pnpm build` 退出 0，Preload 仅 require electron、Renderer 无 fetch/require、所有关键编译入口存在 |
+| `pnpm install --frozen-lockfile --ignore-scripts --offline` | 退出 0，锁文件可重验，无 lifecycle scripts |
+| `test:integration` / `package` / `test:smoke` | 均实际退出 1 / NOT_IMPLEMENTED，产品测试本身 NOT RUN |
+
+已完成：P1.0/P1.1 工程与静态约束。未完成：P1.2～P1.7、真实 Electron 启动、受控 HTTP/IPC、数据库、原生 Worker/OWIP、隔离和安装验收；所有平台能力仍 unverified。冻结架构、ADR 批准记录、P0 原始检查器和原始实验均保持字节不变，未将实验代码引入生产包。
+
+本轮用户确认缺失 ps-utf8-io 时按 UTF-8 规范继续；每个 PowerShell 入口均设置 UTF-8。所有代码、依赖缓存和测试快照位于仓库内。未合并 main，未创建 AppContainer profile。

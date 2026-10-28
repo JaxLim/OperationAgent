@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2023",
+      "DOM"
+    ],
+    "types": [],
+    "rootDir": "src/renderer",
+    "outDir": "dist/types/renderer",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "tsBuildInfoFile": "dist/renderer.tsbuildinfo"
+  },
+  "include": [
+    "src/renderer/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/contracts"
+    }
+  ]
+}
