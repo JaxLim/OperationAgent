@@ -54,6 +54,9 @@ importers:
       '@operation-agent/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@operation-agent/platform-supervision':
+        specifier: workspace:*
+        version: link:../../packages/platform-supervision
       '@operation-agent/platform-worker':
         specifier: workspace:*
         version: link:../../packages/platform-worker

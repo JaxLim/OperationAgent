@@ -11,7 +11,7 @@ export const packageDependencies: Record<string, Record<string, string>> = {
   'platform-worker': { '@operation-agent/contracts': 'workspace:*' },
   'platform-supervision': { '@operation-agent/contracts': 'workspace:*' },
   server: { '@operation-agent/contracts': 'workspace:*', '@operation-agent/worker-transport': 'workspace:*',
-    '@operation-agent/platform-worker': 'workspace:*', express: '5.3.0', 'better-sqlite3': '13.0.3' },
+    '@operation-agent/platform-worker': 'workspace:*', '@operation-agent/platform-supervision': 'workspace:*', express: '5.3.0', 'better-sqlite3': '13.0.3' },
   'agent-worker': { '@operation-agent/contracts': 'workspace:*', '@operation-agent/worker-transport': 'workspace:*' },
   desktop: { '@operation-agent/contracts': 'workspace:*', '@operation-agent/platform-supervision': 'workspace:*' },
 };

@@ -105,9 +105,9 @@ test('session performs a channel-only challenge handshake and authenticates ever
 });
 
 test('worker can receive health immediately after the peer receives its hello acknowledgement', async () => {
-  const clock = new Clock(); let worker: RpcSession; const requests: RpcRequest[] = [];
+  const clock = new Clock(); const requests: RpcRequest[] = [];
   const parent = new RpcSession({ identity, role: 'express', clock, transport: { async write(frame) { worker.receive(frame); }, close() {} } });
-  worker = new RpcSession({ identity, role: 'worker', clock, transport: { async write(frame) { parent.receive(frame); }, close() {} },
+  const worker: RpcSession = new RpcSession({ identity, role: 'worker', clock, transport: { async write(frame) { parent.receive(frame); }, close() {} },
     onRequest(request) { requests.push(request); void worker.respond(response(request)).catch(() => {}); } });
   await parent.startHandshake(challenge, randomUUID());
   await parent.request(health());

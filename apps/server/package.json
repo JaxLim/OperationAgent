@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@operation-agent/contracts": "workspace:*",
+    "@operation-agent/platform-supervision": "workspace:*",
     "@operation-agent/platform-worker": "workspace:*",
     "@operation-agent/worker-transport": "workspace:*",
     "better-sqlite3": "13.0.3",

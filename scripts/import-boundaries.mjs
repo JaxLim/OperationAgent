@@ -4,7 +4,8 @@ export const zones = [
   ['apps/desktop/src/renderer', ['@operation-agent/contracts']],
   ['apps/desktop/src/preload', ['@operation-agent/contracts', 'electron']],
   ['apps/desktop/src/main', ['@operation-agent/contracts', '@operation-agent/platform-supervision', 'electron', 'node:path', 'node:url']],
-  ['apps/server/src', ['@operation-agent/contracts', '@operation-agent/worker-transport', '@operation-agent/platform-worker/parent', 'express',
+  ['apps/server/src', ['@operation-agent/contracts', '@operation-agent/worker-transport', '@operation-agent/platform-worker/parent',
+    '@operation-agent/platform-supervision', 'express',
     'better-sqlite3', 'node:crypto', 'node:fs', 'node:path', 'node:url', 'node:http']],
   ['apps/agent-worker/src', ['@operation-agent/contracts', '@operation-agent/worker-transport']],
   ['packages/contracts/src', ['zod']],
@@ -28,6 +29,8 @@ export default {
     const mainCapabilities = {
       'apps/desktop/src/main/sidecar.ts': ['node:child_process', 'node:crypto', 'node:http'],
       'apps/desktop/src/main/staged-runtime.ts': ['node:crypto', 'node:fs/promises'],
+      // ADR-WIN-001 narrow native boundary: only the fixed package-relative parent artifact.
+      'packages/platform-worker/src/parent.ts': ['node:module'],
     };
     const allowed = [...baseAllowed, ...(mainCapabilities[source] ?? [])];
     const report = (node, reason) => context.report({ node, messageId: 'forbidden', data: { reason } });

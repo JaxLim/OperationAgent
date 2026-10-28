@@ -12,9 +12,14 @@ export default [
     rules: { 'architecture/boundaries': 'error' },
   },
   {
-    files: ['scripts/**/*.mjs', 'tests/integration/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'tests/integration/**/*.mjs', 'tests/worker-fixture/**/*.mjs', 'tests/installer/**/*.mjs'],
     languageOptions: { globals: { console: 'readonly', process: 'readonly', Buffer: 'readonly', URL: 'readonly', AbortSignal: 'readonly', fetch: 'readonly',
-      setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly' } },
+      setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly', TextDecoder: 'readonly' } },
+  },
+  {
+    // The trusted fixture bootstrap is the only Worker-side code with Node globals (ADR-WIN-001 narrow exception).
+    files: ['apps/agent-worker/bootstrap/fixture-bootstrap.mjs'],
+    languageOptions: { globals: { Buffer: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' } },
   },
   {
     files: ['**/*.ts'],
