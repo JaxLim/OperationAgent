@@ -14,9 +14,12 @@ const envelope = {
 const correlated = (value: { id: string; requestId: string }): boolean => value.id === value.requestId;
 export const HealthSchema = z.strictObject({ controlPlaneReady: z.literal(false), agentReady: z.literal(false) });
 const hello = z.strictObject({ minimumProtocolVersion: z.literal(PROTOCOL_VERSION),
-  capabilities: z.tuple([z.literal('health'), z.literal('shutdown')]) });
+  capabilities: z.tuple([z.literal('health'), z.literal('shutdown')]), challenge: z.string().regex(/^[a-f0-9]{64}$/) });
+// The trusted bootstrap reads this first frame from the inherited channel; never from argv or env.
+export const WorkerBootstrapSchema = z.strictObject({ ...envelope, role: z.literal('express'),
+  method: z.literal('hello'), params: hello }).refine(correlated, 'CORRELATION_MISMATCH');
 export const RpcRequestSchema = z.discriminatedUnion('method', [
-  z.strictObject({ ...envelope, role: z.literal('worker'), method: z.literal('hello'), params: hello }),
+  z.strictObject({ ...envelope, role: PeerRoleSchema, method: z.literal('hello'), params: hello }),
   z.strictObject({ ...envelope, role: z.literal('express'), method: z.literal('health'), params: z.strictObject({}) }),
   z.strictObject({ ...envelope, role: z.literal('express'), method: z.literal('shutdown'), params: z.strictObject({ reason: z.literal('normal') }) }),
 ]).refine(correlated, 'CORRELATION_MISMATCH');
