@@ -4,15 +4,15 @@ import { spawnSync } from 'node:child_process';
 import { readJson } from '../../scripts/p0-check.ts';
 import { validateStage, validateFrozenFiles } from '../../scripts/p1-check.ts';
 
-test('P1.0 and P1.1 authorization permits a skeleton without granting production capabilities', () => {
+test('P1.2 and P1.3 authorization permits a control plane without granting production capabilities', () => {
   assert.deepEqual(validateStage(readJson('build/p1-status.json')), []);
 });
 
 test('stage advancement, missing authorization and fabricated qualification fail closed', () => {
   for (const change of [
-    { stopAfter: 'P1.7' }, { authorizedStages: ['P1.0', 'P1.1', 'P1.2'] },
+    { stopAfter: 'P1.4' }, { authorizedStages: ['P1.0', 'P1.1', 'P1.2', 'P1.3', 'P1.4'] },
     { authorization: null }, { productionWorkerQualified: true }, { agentReady: true },
-    { integrationTests: 'PASS' }, { platformCapabilities: {} },
+    { integrationTests: 'PASS' }, { p1TotalExit: 'PASS' }, { installedSmokeTests: 'PASS' }, { platformCapabilities: {} },
   ]) assert.notEqual(validateStage({ ...readJson('build/p1-status.json'), ...change }).length, 0);
 });
 

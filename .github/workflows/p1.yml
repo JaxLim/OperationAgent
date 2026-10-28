@@ -1,4 +1,4 @@
-name: P1 foundation checks
+name: P1 control plane checks
 
 on:
   push:
@@ -10,13 +10,13 @@ permissions:
 
 jobs:
   foundation:
-    name: P1.0-P1.1 (${{ matrix.os }})
+    name: P1 engineering and scoped process gate (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [windows-2025, ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     defaults:
       run:
         shell: bash
@@ -34,8 +34,23 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
-      - run: node scripts/bootstrap-windows.mjs --pnpm-only
+      - if: runner.os == 'Windows'
+        run: node scripts/bootstrap-windows.mjs
+      - if: runner.os != 'Windows'
+        run: node scripts/bootstrap-windows.mjs --pnpm-only
       - run: node .tools/pnpm/bin/pnpm.cjs install --frozen-lockfile --ignore-scripts
-      - run: node .tools/pnpm/bin/pnpm.cjs check:p1
+      - name: Windows x64 real Electron and Node process acceptance
+        if: runner.os == 'Windows'
+        run: node .tools/pnpm/bin/pnpm.cjs check:p1
+      - name: Other platforms engineering checks (process integration NOT_RUN)
+        if: runner.os != 'Windows'
+        run: node .tools/pnpm/bin/pnpm.cjs check:engineering
+      - name: Preserve command output and runtime evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: p1-evidence-${{ matrix.os }}
+          path: artifacts/p1/
+          retention-days: 14
       - name: Scope reminder
-        run: node -e "console.log('P1.0-P1.1 only. Integration, OS isolation, database, installer smoke and P1 total exit are NOT RUN.')"
+        run: node -e "console.log('P1.2/P1.3 process acceptance targets Windows x64 only. Other OS process integration, Worker/OWIP, native service-tree isolation, installer smoke and P1 total exit remain NOT_RUN.')"

@@ -201,3 +201,82 @@ P1.0 工程迁移已实现；P1.1 在此批尚未实施。后续可以新增有�
 已完成：P1.0/P1.1 工程与静态约束。未完成：P1.2～P1.7、真实 Electron 启动、受控 HTTP/IPC、数据库、原生 Worker/OWIP、隔离和安装验收；所有平台能力仍 unverified。冻结架构、ADR 批准记录、P0 原始检查器和原始实验均保持字节不变，未将实验代码引入生产包。
 
 本轮用户确认缺失 ps-utf8-io 时按 UTF-8 规范继续；每个 PowerShell 入口均设置 UTF-8。所有代码、依赖缓存和测试快照位于仓库内。未合并 main，未创建 AppContainer profile。
+
+## P1.2 / P1.3 控制面与真实进程链路（2026-10-26；27 日续作上传）
+
+用户正式授权实施 P1.2/P1.3，并要求继续未完成部分。已复核 ARCHITECTURE、AGENTS、P0-REVIEW、P1-ACCEPTANCE、ADR-WIN-001 及现有源码。PR [#1](https://github.com/JaxLim/OperationAgent/pull/1) 仍 open、merged=false、无 review；已验证 head `2b7da672d94c542f3e1a73272f22a915a6217058`，原三平台 P1 CI [40180920348](https://github.com/JaxLim/OperationAgent/actions/runs/40180920348) 与 P0 重放 [40180920354](https://github.com/JaxLim/OperationAgent/actions/runs/40180920354) 成功。新工作在独立分支 `codex/p1-control-plane`，以该 P1.1 提交为父，不合并 PR #1/main，不进入 P1.4。
+
+### P1.2 实际修改与验证
+
+Express 独占 SQLite，运行于实际独立的 Node 24.22.1 / ABI 137 进程。新增版本化 SQL 迁移、迁移 SHA-256 校验、批量事务、排他所有权、CLEAN/INTERRUPTED 运行对账；数据只写控制面烟测表与服务运行表，无任务自动恢复或外部副作用。
+
+- 实现文件：`apps/server/src/index.ts`、`src/entry.ts`、`src/persistence/store.ts`、`migrations/001-control-plane.sql`、`apps/server/package.json`；`packages/contracts/src/api/index.ts`、`src/ipc/identity.ts` 和 contracts 导出。
+- 工程文件：`scripts/stage-sidecar.mjs`、`scripts/check-workspace.ts`、`pnpm-lock.yaml`。`better-sqlite3 13.0.3` 使用其 Node-API prebuild；实际 SQLite 版本 3.53.4，未使用 Electron ABI 重编译。
+- 测试文件：`tests/p1/persistence.test.ts`、`tests/integration/sidecar-helper.mjs`、`tests/integration/sidecar.test.mjs`。覆盖初始化/幂等迁移、失败 SQL 回滚、迁移修改拒绝、批量写入回滚、并发 DB 所有者拒绝、强杀持久化/恢复、旧实例拒绝、父通道断开、租约到期与请求窗口上限。
+
+### P1.3 实际修改与验证
+
+Main 启动并监管已校验的独立 Node Sidecar。令牌仅走继承 IPC，回环 HTTP 请求和响应以 HMAC 绑定服务身份；Preload 只有固定方法，Main 验证调用 frame/URL/Schema。Renderer 没有 Node/FS/DB/直接 HTTP 能力。重启仅恢复控制面，最多 60s 内 3 次，旧进程确认退出后才启动新实例。
+
+- 实现文件：`apps/desktop/src/main/index.ts`、`host.ts`、`sidecar.ts`、`staged-runtime.ts`；`src/preload/index.ts`、`src/renderer/index.ts`；`packages/contracts/src/ipc/index.ts`。
+- 测试文件：`tests/integration/electron.test.mjs`、`electron-harness.mjs`、`electron-entry.mjs`。真实 Electron/Preload/Renderer 调用，验证认证、CSP、外部窗口 IPC 拒绝、导航拒绝、中文/转义内容持久化、Sidecar 崩溃恢复、Main 崩溃后响应正常的 Sidecar 退出、重启预算、实际生产入口窗口关闭及 SQLite clean close。测试没有关闭 Electron sandbox。
+- 构建及门禁文件：`scripts/prepare-electron.mjs`、`test-integration.mjs`、`run-checks.mjs`、`import-boundaries.mjs`、`p1-check.ts`；`eslint.config.mjs`、`package.json`、`pnpm-workspace.yaml`、`tests/p1/boundaries.test.ts`、`tests/p1/stage.test.ts`；`.github/workflows/p1.yml`、`build/p1-status.json`。记录更新于 README、本文件、P1-ACCEPTANCE 和 P1-validation；P0 冻结文件及 Worker/平台原生包未修改。
+
+### 实际命令与结果
+
+所有系统命令经真实 Git Bash 运行，PowerShell 入口先设置 UTF-8，临时 PATH 首位为 `.tools/node`。下面的 `pnpm` 实际调用方式为 `node .tools/pnpm/bin/pnpm.cjs`。
+
+```sh
+git switch -c codex/p1-control-plane
+pnpm install --ignore-scripts
+node --test tests/p1/persistence.test.ts
+pnpm build
+pnpm stage:sidecar
+pnpm prepare:electron
+pnpm test:integration
+pnpm check:p1
+pnpm install --frozen-lockfile --ignore-scripts --offline
+pnpm lint
+git diff --check
+```
+
+初次完整检查通过 44/44 工程与真实 SQLite 单元测试、9/9 真实进程测试，0 skipped。最终审查补充最长 JSON 转义回归：`node --test --test-name-pattern="maximally escaped" tests/integration/electron.test.mjs` 在修复前实际失败，返回 `CONTROL_PLANE_REQUEST_FAILED`。修复后再次完整 `check:p1` 退出 0：44/44 工程与数据库测试、10/10 真实进程测试，0 fail、0 skipped。最终运行结果和时间见 `P1-validation.json` 的 `continuation.localEvidence`；该记录包含命令退出码、运行时信息及进程测试原始输出。本地记录的 source 指向 P1.1 父提交且 sourceDirty=true，明确表示尚未提交的本轮工作树，不将其冒充父提交 CI。
+
+### 失败与修复记录
+
+| 实际失败 | 修复与验证 |
+|---|---|
+| 新数据库测试报 `ERR_MODULE_NOT_FOUND` | 实现 Express 所有的 store 与 SQL migration 后真实 SQLite 测试通过 |
+| pnpm deployment 自引用越界，`STAGED_SYMLINK_ESCAPE` | 精确移除已验证的源码 self-link；生产依赖先做路径检查再物化 |
+| isolated pnpm 布局物化后丢失 `zod` 解析 | 改用 hoisted 的独立生产部署闭包；真实 staged Node 加载 DB 与 Express 成功 |
+| Electron 官方安装 fetch 失败、未完整归档 hash 错误 | 从同一官方 URL 使用 curl 临时下载，按 npm 包固定的 checksum 验证后才使用 |
+| 测试清理先删除目录而 DB 进程尚未退出 | 追踪并先关闭各临时目录的 Sidecar，再删除仓库内测试目录 |
+| strict 平台索引类型及 lint 未使用表达式 | 明确 Partial 平台映射和条件分支，未放松 strict/lint |
+| Electron harness 顶层 `await app.whenReady()` 死锁 | 改用 ready 回调；真实 harness 和生产 Main 入口都能启动、退出 |
+| 100 条最长合法转义记录超过 64 KiB 响应上限 | 有界上限调整为 192 KiB，覆盖 Schema 允许值的 JSON 最坏膨胀；新增真实 Preload/SQLite 关闭重开回归 |
+
+### GitHub CI 与剩余范围
+
+2026-10-27 已提交并通过常规 Git push 上传代码提交 `a1d3ef2833ea913dd2c1b2ab9fbfe7cc5b541214`。该提交的 [P1 CI 40463899742](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742) 与 [P0 重放 40463899772](https://github.com/JaxLim/OperationAgent/actions/runs/40463899772) 均为 success；逐个读取 P1 job 原始日志，结果如下。本节及 JSON 的 CI 索引是后续纯证据提交，不将被引用提交伪装为自指 SHA。
+
+| Job | 实际结果 | 证据 |
+|---|---|---|
+| Windows 2025 / x64 | 44/44 工程/DB + 10/10 真实进程，0 fail、0 skipped；Electron 45.0.0 官方归档 SHA-256 校验、Node 24.22.1 / ABI 137 / NAPI 10、SQLite 3.53.4 | [122054626694](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626694) |
+| macOS 15 / arm64 | 44/44 工程/DB，0 fail、0 skipped；进程集成 NOT_RUN | [122054626341](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626341) |
+| Ubuntu 24.04 / x64 | 44/44 工程/DB，0 fail、0 skipped；进程集成 NOT_RUN | [122054626637](https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626637) |
+
+三个 P0 job 均成功，重放固定历史提交 `04d07be`。本轮 Windows x64 job 运行完整 `check:p1` 和真实 Electron/独立 Node/SQLite；macOS/Linux 只运行 `check:engineering`。三份 `p1-evidence-*` artifact 均上传成功，保存完整命令日志与 runtime/checks/integration JSON，保留 14 天；artifact ID/digest/到期日见 `P1-validation.json`。本轮没有 CI 失败；upload-artifact v4 的上游 Node 20 runtime 收到弃用提示，runner 实际以 Node 24 执行且上传成功。
+
+上传命令：`git commit -m "feat(p1): run authenticated Electron sidecar with durable SQLite"`、`git -c http.version=HTTP/1.1 push -u origin codex/p1-control-plane`，退出码均为 0。分支未合并；审查 PR 仅在本轮验收和 CI 通过后创建。
+
+仍为 NOT_RUN：macOS/Linux 进程链路、原生 WorkerLauncher、OWIP/1、AppContainer、原生服务树监管、安装器与安装后 SEC-18、完整 SEC-03/17/SEC-W01、P1 总退出。当前无后代执行器；父通道/租约清理不等同卡死或恶意后代的 OS 强制清理。产物 hash 不等同代码签名，也不抵抗同用户本地恶意修改整个应用；回环监听器可能被本地进程造成拒绝服务，所有异常保持 fail closed。`agentReady=false`，不启用 Worker/Agent Loop/Shell/文件写工具/真实模型。
+
+## PR #2 审查修复（2026-10-27 实测；28 日继续提交）
+
+修复共享 HTTP 计数器导致合法 Main 心跳被拒绝的问题：未认证、普通认证请求和 Main 专用 `/v1/heartbeat` 分别限流；Renderer 健康查询保持普通预算。心跳有独立有界重放记录和 Main 并发保留位，仍验证完整 HMAC、身份、时间与跨通道 requestId 重放。
+
+SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zod 的 UTF-16 长度语义一致。`001-control-plane.sql` 原始字节及已部署 checksum 保持不变；历史连续版本及全部已应用 checksum 先校验，再在同一事务升级。健康契约报告 databaseVersion=2。实测原数据、时间和运行记录保留；002 中途失败可完整回滚并重试。
+
+回归先在旧代码实际失败：前导 NUL 触发 `SQLITE_CONSTRAINT_CHECK`；共享预算耗尽后合法请求返回 `429`。修复后 `pnpm check:p1` 全部门禁通过：**47/47 工程/数据库测试、13/13 Windows 真实 Node/Electron 进程测试，0 fail、0 skipped**。覆盖前导/全 NUL、中文/代理对长度边界、真实 Preload 最坏转义关闭重开、未认证及重放洪泛、普通认证突发、独立心跳限额；跨越租约期限后原 Sidecar PID/实例保持、重启计数为 0。P0 冻结重放、类型、lint、导入边界、构建均通过。
+
+本地证据位于 `artifacts/p1/win32-x64/`，完成时间 `2026-10-27T12:04:20.258Z`，基线 `5fa460c` 且 `sourceDirty=true`；不将工作树结果冒充该基线 CI。新提交的 GitHub CI/审查状态另以 PR #2 的真实记录为准。用户本次已授权 P1.4–P1.7 连续开发；本修复提交仍只包含 P1.2/P1.3 修复，不提前宣称后续阶段通过。

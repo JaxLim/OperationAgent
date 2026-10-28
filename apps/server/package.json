@@ -10,7 +10,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "migrations"
   ],
   "scripts": {
     "build": "tsc -b",
@@ -18,11 +19,13 @@
   },
   "dependencies": {
     "@operation-agent/contracts": "workspace:*",
-    "@operation-agent/worker-transport": "workspace:*",
     "@operation-agent/platform-worker": "workspace:*",
+    "@operation-agent/worker-transport": "workspace:*",
+    "better-sqlite3": "13.0.3",
     "express": "5.3.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
     "@types/express": "5.0.6"
   }
 }

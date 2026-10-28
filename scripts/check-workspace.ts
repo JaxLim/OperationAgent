@@ -11,7 +11,7 @@ export const packageDependencies: Record<string, Record<string, string>> = {
   'platform-worker': { '@operation-agent/contracts': 'workspace:*' },
   'platform-supervision': { '@operation-agent/contracts': 'workspace:*' },
   server: { '@operation-agent/contracts': 'workspace:*', '@operation-agent/worker-transport': 'workspace:*',
-    '@operation-agent/platform-worker': 'workspace:*', express: '5.3.0' },
+    '@operation-agent/platform-worker': 'workspace:*', express: '5.3.0', 'better-sqlite3': '13.0.3' },
   'agent-worker': { '@operation-agent/contracts': 'workspace:*', '@operation-agent/worker-transport': 'workspace:*' },
   desktop: { '@operation-agent/contracts': 'workspace:*', '@operation-agent/platform-supervision': 'workspace:*' },
 };
@@ -26,7 +26,7 @@ export function validateManifest(name: string, manifest: JsonObject): string[] {
   const need = (ok: boolean, reason: string): void => { if (!ok) errors.push(`${name}: ${reason}`); };
   need(manifest.name === `@operation-agent/${name}` && manifest.private === true && manifest.type === 'module', 'package identity');
   need(normalized(manifest.dependencies) === normalized(packageDependencies[name]), 'dependency direction or pin');
-  const dev = name === 'desktop' ? { electron: '45.0.0' } : name === 'server' ? { '@types/express': '5.0.6' } : {};
+  const dev = name === 'desktop' ? { electron: '45.0.0' } : name === 'server' ? { '@types/express': '5.0.6', '@types/better-sqlite3': '9.6.0' } : {};
   need(normalized(manifest.devDependencies ?? {}) === normalized(dev), 'development dependency boundary');
   for (const field of ['optionalDependencies', 'peerDependencies', 'imports']) need(manifest[field] === undefined, `unreviewed ${field}`);
   if (name === 'desktop') need(manifest.main === 'dist/main/index.js' && manifest.exports === undefined, 'desktop entry');

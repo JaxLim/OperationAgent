@@ -2,17 +2,18 @@
   "schemaVersion": 1,
   "phase": "P1",
   "frozenCommit": "04d07bea89b70265a6b1fb1d79272b710623775b",
-  "authorizedStages": ["P1.0", "P1.1"],
-  "stopAfter": "P1.1",
+  "authorizedStages": ["P1.0", "P1.1", "P1.2", "P1.3"],
+  "stopAfter": "P1.3",
   "authorization": {
     "kind": "user-message",
     "date": "2026-10-25",
-    "quote": "本次正式授权启动 P1 工程实施，但当前执行范围仅为 P1.0 和 P1.1，不授权跳过阶段完成后续业务功能。"
+    "quote": "正式授权继续 OperationAgent 项目开发，进入 P1.2 和 P1.3 阶段。"
   },
-  "implementation": { "P1.0": "implemented", "P1.1": "implemented" },
+  "implementation": { "P1.0": "implemented", "P1.1": "implemented", "P1.2": "implemented", "P1.3": "implemented" },
   "agentReady": false,
   "productionWorkerQualified": false,
-  "integrationTests": "NOT_RUN",
+  "integrationTests": "P1.2_P1.3_ONLY",
+  "p1TotalExit": "NOT_RUN",
   "installedSmokeTests": "NOT_RUN",
   "platformCapabilities": {
     "win32-x64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },

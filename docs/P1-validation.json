@@ -1,4 +1,284 @@
 {
+  "pr2ReviewFix": {
+    "recordedDate": "2026-10-28",
+    "baselineCommit": "5fa460c4abd1ee25356f1a58e3a1fcd7f159c5eb",
+    "sourceDirty": true,
+    "finishedAt": "2026-10-27T12:04:20.258Z",
+    "command": "pnpm check:p1",
+    "exitCode": 0,
+    "engineeringTests": { "passed": 47, "failed": 0, "skipped": 0 },
+    "windowsProcessTests": { "passed": 13, "failed": 0, "skipped": 0 },
+    "logDirectory": "artifacts/p1/win32-x64",
+    "sha256": {
+      "check-test.log": "9017812864bccd9ca8eede632642cc5f65f32d83ca2ebccdcccc0aebe23351b1",
+      "4.log": "07f66b1c9f565527ec5ab25c6c6be1335a4d6931fe5e2a95b687e6c0006d6f28",
+      "checks.json": "32f825c3b89c52c5fa44fe36bce856072dc8d60e2a8ecd71e9e84e44af266c3a",
+      "integration.json": "701e5ff0853355d89a2acad4892f58fa1696496f2805708c03b92b294a240b10"
+    },
+    "regressions": ["unauthenticated/replayed and ordinary request bursts preserve the Main heartbeat and Sidecar lease", "reserved heartbeat budget and cross-lane replay rejection", "leading/all NUL and UTF-16 boundary persistence through real Preload", "001 checksum/data/run-history preservation and failed 002 upgrade rollback"],
+    "githubCi": "PENDING_PUSH",
+    "workerFixture": "NOT_RUN",
+    "installedSmoke": "NOT_RUN",
+    "agentReady": false
+  },
+  "continuation": {
+    "recordedDate": "2026-10-27",
+    "phase": "P1.2-P1.3",
+    "baselineCommit": "2b7da672d94c542f3e1a73272f22a915a6217058",
+    "branch": "codex/p1-control-plane",
+    "scope": "Windows x64 real process acceptance only; no P1.4 advancement",
+    "pr1": {
+      "state": "open",
+      "merged": false,
+      "head": "2b7da672d94c542f3e1a73272f22a915a6217058",
+      "ci": "https://github.com/JaxLim/OperationAgent/actions/runs/40180920348"
+    },
+    "localEvidence": {
+      "checks": {
+        "finishedAt": "2026-10-26T01:22:08.390Z",
+        "source": "2b7da672d94c542f3e1a73272f22a915a6217058",
+        "sourceDirty": true,
+        "target": "win32-x64",
+        "scope": "P1.2_P1.3",
+        "passed": true,
+        "processIntegration": "PASS",
+        "installedSmoke": "NOT_RUN",
+        "workerIsolation": "NOT_RUN",
+        "results": [
+          {
+            "command": "pnpm typecheck",
+            "exitCode": 0,
+            "logFile": "check-typecheck.log"
+          },
+          {
+            "command": "pnpm lint",
+            "exitCode": 0,
+            "logFile": "check-lint.log"
+          },
+          {
+            "command": "pnpm check:boundaries",
+            "exitCode": 0,
+            "logFile": "check-check-boundaries.log"
+          },
+          {
+            "command": "pnpm test",
+            "exitCode": 0,
+            "logFile": "check-test.log"
+          },
+          {
+            "command": "pnpm build",
+            "exitCode": 0,
+            "logFile": "check-build.log"
+          },
+          {
+            "command": "pnpm verify:p0",
+            "exitCode": 0,
+            "logFile": "check-verify-p0.log"
+          },
+          {
+            "command": "pnpm verify:p1",
+            "exitCode": 0,
+            "logFile": "check-verify-p1.log"
+          },
+          {
+            "command": "pnpm test:integration",
+            "exitCode": 0,
+            "logFile": "check-test-integration.log"
+          }
+        ]
+      },
+      "integration": {
+        "startedAt": "2026-10-26T01:20:54.896Z",
+        "finishedAt": "2026-10-26T01:22:08.352Z",
+        "source": "2b7da672d94c542f3e1a73272f22a915a6217058",
+        "target": "win32-x64",
+        "scope": [
+          "P1.2",
+          "P1.3"
+        ],
+        "passed": true,
+        "runtime": {
+          "node": "24.22.1",
+          "abi": "137",
+          "sqlite": "3.53.4",
+          "lockSha256": "eb8aea050eeb626ed18f314e814256bca9c1d148f35b6dec48ffe504136b2ed2"
+        },
+        "results": [
+          {
+            "command": "node scripts/workspace.mjs build",
+            "exitCode": 0,
+            "logFile": "1.log",
+            "error": null
+          },
+          {
+            "command": "node scripts/stage-sidecar.mjs",
+            "exitCode": 0,
+            "logFile": "2.log",
+            "error": null
+          },
+          {
+            "command": "node scripts/prepare-electron.mjs",
+            "exitCode": 0,
+            "logFile": "3.log",
+            "error": null
+          },
+          {
+            "command": "node --test --test-concurrency=1 --test-timeout=180000 tests/integration/sidecar.test.mjs tests/integration/electron.test.mjs",
+            "exitCode": 0,
+            "logFile": "4.log",
+            "error": null
+          }
+        ],
+        "workerFixture": "NOT_RUN",
+        "nativeServiceTree": "NOT_RUN",
+        "installedSmoke": "NOT_RUN",
+        "agentReady": false
+      },
+      "integrationOutput": "✔ real Electron Main → sandboxed Preload → authenticated Express → SQLite, restart and normal exit (6100.1619ms)\n✔ a full result of maximally escaped UTF-8 records round-trips through the real Preload bridge (4227.2587ms)\n✔ real Main crash closes the inherited channel and the responsive Sidecar exits (4373.918ms)\n✔ repeated real Sidecar crashes exhaust the bounded restart budget (8862.3732ms)\n✔ the production Main entry flushes SQLite and exits through the real window-close lifecycle (2760.1309ms)\n✔ real staged Node/Express authenticates, rejects illegal access and rolls back a failing transaction (550.8413ms)\n✔ real process kill preserves committed SQLite data, reconciles interrupted runs and rejects the old identity (1389.8643ms)\n✔ bootstrap failures, concurrent DB owners and inherited-channel disconnect fail closed (2993.3046ms)\n✔ the live HTTP listener enforces its bounded request window (868.3825ms)\n✔ a responsive Sidecar expires its lease when its parent stops authenticated traffic (6867.5596ms)\nℹ tests 10\nℹ suites 0\nℹ pass 10\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 39516.7234\n"
+    },
+    "failuresAndRepairs": [
+      {
+        "failure": "Initial persistence test: ERR_MODULE_NOT_FOUND",
+        "repair": "Implemented versioned SQL migration and Express-owned store; real SQLite tests pass."
+      },
+      {
+        "failure": "STAGED_SYMLINK_ESCAPE from pnpm deployment self-reference",
+        "repair": "Reject unexpected links; deploy a hoisted production closure and materialize files after containment checks."
+      },
+      {
+        "failure": "ERR_MODULE_NOT_FOUND: zod after dereferencing isolated pnpm layout",
+        "repair": "Hoisted production deployment retains resolvable transitive dependencies without source checkout links."
+      },
+      {
+        "failure": "Electron installer fetch failed; interrupted archive failed SHA-256",
+        "repair": "Download the same official archive via curl to a temporary path; promote only after package-pinned checksum validation."
+      },
+      {
+        "failure": "Recovery integration fixture cleanup removed a directory before closing its live DB owner",
+        "repair": "Close all tracked fixture Sidecars before deleting their workspace-local temporary directories."
+      },
+      {
+        "failure": "Strict TypeScript platform lookup and ESLint unused expressions",
+        "repair": "Use an explicit Partial<Record<NodeJS.Platform,string>> and explicit if branches; strict/lint requirements unchanged."
+      },
+      {
+        "failure": "Real Electron harness timed out during module-level await app.whenReady()",
+        "repair": "Use app.whenReady callback; real Electron pipeline and production entry lifecycle both pass."
+      },
+      {
+        "failure": "Real Preload list of 100 maximally escaped UTF-8 records failed with CONTROL_PLANE_REQUEST_FAILED at the 64 KiB response limit.",
+        "repair": "Bound response at 192 KiB to cover the existing Schema's maximum JSON expansion; full real-process regression passes including close and reopen."
+      }
+    ],
+    "githubCi": {
+      "status": "success",
+      "headSha": "a1d3ef2833ea913dd2c1b2ab9fbfe7cc5b541214",
+      "event": "push",
+      "p1": {
+        "runId": 40463899742,
+        "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "id": 122054626341,
+            "name": "P1 engineering and scoped process gate (macos-15)",
+            "conclusion": "success",
+            "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626341",
+            "engineeringTests": {
+              "passed": 44,
+              "failed": 0,
+              "skipped": 0
+            },
+            "processIntegration": "NOT_RUN"
+          },
+          {
+            "id": 122054626637,
+            "name": "P1 engineering and scoped process gate (ubuntu-24.04)",
+            "conclusion": "success",
+            "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626637",
+            "engineeringTests": {
+              "passed": 44,
+              "failed": 0,
+              "skipped": 0
+            },
+            "processIntegration": "NOT_RUN"
+          },
+          {
+            "id": 122054626694,
+            "name": "P1 engineering and scoped process gate (windows-2025)",
+            "conclusion": "success",
+            "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899742/job/122054626694",
+            "engineeringTests": {
+              "passed": 44,
+              "failed": 0,
+              "skipped": 0
+            },
+            "processIntegration": {
+              "passed": 10,
+              "failed": 0,
+              "skipped": 0
+            }
+          }
+        ]
+      },
+      "p0": {
+        "runId": 40463899772,
+        "url": "https://github.com/JaxLim/OperationAgent/actions/runs/40463899772",
+        "conclusion": "success",
+        "frozenCommit": "04d07bea89b70265a6b1fb1d79272b710623775b",
+        "jobs": [
+          {
+            "id": 122054626347,
+            "name": "P0 metadata (macos-15)",
+            "conclusion": "success"
+          },
+          {
+            "id": 122054626396,
+            "name": "P0 metadata (windows-2025)",
+            "conclusion": "success"
+          },
+          {
+            "id": 122054627063,
+            "name": "P0 metadata (ubuntu-24.04)",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "artifacts": [
+        {
+          "id": 12715875545,
+          "name": "p1-evidence-macos-15",
+          "digest": "sha256:4973deaf91f8e4d92ff5f26698358223ac49749628ff04e9d8f2a1f49d994a5a",
+          "expiresAt": "2026-11-10T06:55:11Z"
+        },
+        {
+          "id": 12715626861,
+          "name": "p1-evidence-windows-2025",
+          "digest": "sha256:c9557299372747c1b715af5c2429724fb17aa72c6ec4620c70b12b791e9b1ac7",
+          "expiresAt": "2026-11-10T06:56:33Z"
+        },
+        {
+          "id": 12715522341,
+          "name": "p1-evidence-ubuntu-24.04",
+          "digest": "sha256:bca925459019614557e0baf0ea1898e885a9675b62d3c8e3421e3ac723cb871e",
+          "expiresAt": "2026-11-10T06:55:16Z"
+        }
+      ],
+      "scope": "Windows x64 P1.2/P1.3 only; all other OS process gates, Worker isolation and installer gates remain NOT_RUN"
+    },
+    "notRun": [
+      "macOS/Linux process integration",
+      "WorkerLauncher",
+      "OWIP/1",
+      "AppContainer",
+      "native service-tree supervisor",
+      "installer and installed SEC-18",
+      "full SEC-03 including Worker",
+      "SEC-W01",
+      "P1 total exit"
+    ],
+    "agentReady": false
+  },
   "recordedDate": "2026-10-25",
   "phase": "P1.0-P1.1",
   "baselineCommit": "04d07bea89b70265a6b1fb1d79272b710623775b",
