@@ -16,7 +16,7 @@ jobs:
       matrix:
         os: [windows-2025, ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -42,6 +42,21 @@ jobs:
       - name: Windows x64 real Electron and Node process acceptance
         if: runner.os == 'Windows'
         run: node .tools/pnpm/bin/pnpm.cjs check:p1
+      - name: Windows x64 installer build (P1.6)
+        if: runner.os == 'Windows' && !cancelled()
+        run: node .tools/pnpm/bin/pnpm.cjs package
+      - name: Windows x64 installed-application smoke (SEC-18)
+        if: runner.os == 'Windows' && !cancelled()
+        run: node .tools/pnpm/bin/pnpm.cjs test:smoke
+      - name: Preserve the Windows installer
+        if: runner.os == 'Windows' && !cancelled()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: operationagent-installer-win-x64
+          path: |
+            dist/installers/*.exe
+            dist/installers/*.blockmap
+          retention-days: 14
       - name: Other platforms engineering checks (process integration NOT_RUN)
         if: runner.os != 'Windows'
         run: node .tools/pnpm/bin/pnpm.cjs check:engineering

@@ -7,7 +7,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { CONTROL_ROUTES, PROTOCOL_VERSION, SidecarReadySchema, requestProof, responseProof } from '../../packages/contracts/dist/index.js';
 
 export const root = resolve(import.meta.dirname, '../..');
-export const stage = resolve(root, 'build/stage', `${{ win32: 'win', darwin: 'mac', linux: 'linux' }[process.platform]}-${process.arch}`, 'sidecar');
+// OA_SIDECAR_STAGE lets the installer smoke test run this suite against an installed resources/sidecar.
+export const stage = process.env.OA_SIDECAR_STAGE ? resolve(process.env.OA_SIDECAR_STAGE) :
+  resolve(root, 'build/stage', `${{ win32: 'win', darwin: 'mac', linux: 'linux' }[process.platform]}-${process.arch}`, 'sidecar');
 export const stagedNode = resolve(stage, process.platform === 'win32' ? 'node/node.exe' : 'node/bin/node');
 const liveSidecars = new Map();
 export async function closeDirectory(directory) {

@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CONTROL_ROUTES, ControlErrorSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, EmptyInputSchema,
   IPC_CHANNELS, ProjectAddResultSchema, ProjectInputSchema, ProjectListSchema, ProjectRefSchema, ProjectSchema, SmokeBatchSchema,
   TaskStartInputSchema, TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
-import type { DesktopStatus, ProjectAddResult, TaskStartResult } from '@operation-agent/contracts';
+import type { DesktopStatus, ProjectAddResult, TaskStartResult, WorkbenchSettings } from '@operation-agent/contracts';
 import { SidecarSupervisor } from './sidecar.js';
 
 export async function startDesktop(options: { stageDirectory: string; dataDirectory: string; show?: boolean; requireControlPlane?: boolean }): Promise<{
@@ -15,12 +15,21 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   const renderer = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
   const expectedUrl = pathToFileURL(renderer).href;
   Menu.setApplicationMenu(null);
+  // The Renderer draws its own 44 px titlebar; Windows keeps native caption buttons as an overlay.
+  const chrome = (): { color: string; symbolColor: string; height: number } => nativeTheme.shouldUseDarkColors
+    ? { color: '#191918', symbolColor: '#ecebe7', height: 43 } : { color: '#f0eee9', symbolColor: '#1c1b19', height: 43 };
   const window = new BrowserWindow({ show: false, width: 1360, height: 860, minWidth: 960, minHeight: 600, title: 'OperationAgent',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#151514' : '#f7f6f3', autoHideMenuBar: true, webPreferences: {
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#151514' : '#f7f6f3', autoHideMenuBar: true,
+    ...(process.platform === 'win32' ? { titleBarStyle: 'hidden' as const, titleBarOverlay: chrome() } : {}), webPreferences: {
       contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, webviewTag: false, spellcheck: false,
       preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
     } });
   if (options.show ?? true) window.once('ready-to-show', () => { if (!window.isDestroyed()) window.show(); });
+  const repaintChrome = (): void => { if (process.platform === 'win32' && !window.isDestroyed()) window.setTitleBarOverlay(chrome()); };
+  nativeTheme.on('updated', repaintChrome);
+  window.once('closed', () => nativeTheme.removeListener('updated', repaintChrome));
+  // The saved theme (owned by Express) also drives native chrome and dialogs.
+  const applyTheme = (theme: WorkbenchSettings['theme']): void => { nativeTheme.themeSource = theme; };
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
@@ -58,8 +67,13 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   register(IPC_CHANNELS.desktopStatus, async input => { empty(input); return status(); });
   register(IPC_CHANNELS.retryControlPlane, async input => { empty(input); await supervisor.restart().catch(() => {}); return status(); });
   register(IPC_CHANNELS.overview, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.overview, ControlOverviewSchema); });
-  register(IPC_CHANNELS.getSettings, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.settings, WorkbenchSettingsSchema); });
-  register(IPC_CHANNELS.saveSettings, async input => supervisor.call('PUT', CONTROL_ROUTES.settings, WorkbenchSettingsSchema, WorkbenchSettingsSchema.parse(input)));
+  register(IPC_CHANNELS.getSettings, async input => {
+    empty(input); const settings = await supervisor.call('GET', CONTROL_ROUTES.settings, WorkbenchSettingsSchema); applyTheme(settings.theme); return settings;
+  });
+  register(IPC_CHANNELS.saveSettings, async input => {
+    const settings = await supervisor.call('PUT', CONTROL_ROUTES.settings, WorkbenchSettingsSchema, WorkbenchSettingsSchema.parse(input));
+    applyTheme(settings.theme); return settings;
+  });
   register(IPC_CHANNELS.listProjects, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.projects, ProjectListSchema); });
   register(IPC_CHANNELS.addProject, async (input): Promise<ProjectAddResult> => {
     empty(input);

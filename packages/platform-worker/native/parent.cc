@@ -119,9 +119,14 @@ void verifySuspended(Run& run) {
   auto* integrity = reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(label.data());
   run.integrity = *GetSidSubAuthority(integrity->Label.Sid, *GetSidSubAuthorityCount(integrity->Label.Sid) - 1);
   run.parent = parentPid(run.pid);
-  if (!*reinterpret_cast<const DWORD*>(app.data()) || reinterpret_cast<const TOKEN_ELEVATION*>(elevation.data())->TokenIsElevated ||
-    reinterpret_cast<const TOKEN_GROUPS*>(caps.data())->GroupCount != 0 || run.integrity > SECURITY_MANDATORY_LOW_RID ||
-    !EqualSid(reinterpret_cast<const TOKEN_APPCONTAINER_INFORMATION*>(appSid.data())->TokenAppContainer, run.sid.value) || run.parent != GetCurrentProcessId()) throw std::runtime_error("WORKER_TOKEN_BASELINE_REJECTED");
+  // Each failed property is named so a rejected baseline is diagnosable; any one of them is fatal.
+  const auto reject = [](const char* reason) { throw std::runtime_error(std::string("WORKER_TOKEN_BASELINE_REJECTED: ") + reason); };
+  if (!*reinterpret_cast<const DWORD*>(app.data())) reject("NOT_APPCONTAINER");
+  if (reinterpret_cast<const TOKEN_ELEVATION*>(elevation.data())->TokenIsElevated) reject("ELEVATED");
+  if (reinterpret_cast<const TOKEN_GROUPS*>(caps.data())->GroupCount != 0) reject("CAPABILITIES_PRESENT");
+  if (run.integrity > SECURITY_MANDATORY_LOW_RID) reject("INTEGRITY_ABOVE_LOW");
+  if (!EqualSid(reinterpret_cast<const TOKEN_APPCONTAINER_INFORMATION*>(appSid.data())->TokenAppContainer, run.sid.value)) reject("APPCONTAINER_SID_MISMATCH");
+  if (run.parent != GetCurrentProcessId()) reject("PARENT_MISMATCH");
   BOOL member = FALSE; if (!IsProcessInJob(run.process.value, run.job.value, &member) || !member) throw std::runtime_error("WORKER_JOB_REJECTED");
   PROCESS_MITIGATION_CHILD_PROCESS_POLICY child{};
   if (!GetProcessMitigationPolicy(run.process.value, ProcessChildProcessPolicy, &child, sizeof(child)) || !child.NoChildProcessCreation) throw std::runtime_error("WORKER_CHILD_POLICY_REJECTED");
@@ -145,7 +150,12 @@ void create(Run& run) {
   limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
   limits.BasicLimitInformation.ActiveProcessLimit = 1;
   if (!SetInformationJobObject(run.job.value, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) fail("SET_JOB_LIMITS");
-  Handle parentToken; if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &parentToken.value)) fail("OPEN_PARENT_TOKEN");
+  Handle parentToken;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY, &parentToken.value)) fail("OPEN_PARENT_TOKEN");
+  // Minimal primary token: a non-elevated (LUA) restricted copy of the caller's token with every privilege
+  // except SeChangeNotify removed. AppContainer restrictions are then applied on top at creation.
+  Handle primary;
+  if (!CreateRestrictedToken(parentToken.value, DISABLE_MAX_PRIVILEGE | LUA_TOKEN, 0, nullptr, 0, nullptr, 0, nullptr, &primary.value)) fail("CREATE_RESTRICTED_TOKEN");
   const auto user = tokenData(parentToken.value, TokenUser);
   const std::wstring dacl = L"D:P(A;;GA;;;SY)(A;;GA;;;" + sidText(reinterpret_cast<const TOKEN_USER*>(user.data())->User.Sid) + L")";
   PSECURITY_DESCRIPTOR security = nullptr;
@@ -188,7 +198,7 @@ void create(Run& run) {
   STARTUPINFOEXW startup{}; startup.StartupInfo.cb = sizeof(startup); startup.lpAttributeList = attributes.list;
   startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW; startup.StartupInfo.wShowWindow = SW_HIDE;
   PROCESS_INFORMATION process{};
-  if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, TRUE,
+  if (!CreateProcessAsUserW(primary.value, exe.c_str(), command.data(), nullptr, nullptr, TRUE,
     EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | DETACHED_PROCESS,
     environment.data(), run.runtime.c_str(), &startup.StartupInfo, &process)) fail("CREATE_RESTRICTED_WORKER");
   run.process.reset(process.hProcess); run.pid = process.dwProcessId; Handle thread(process.hThread); child.reset();

@@ -1,17 +1,40 @@
 {
   "appId": "com.jaxlim.operationagent",
   "productName": "OperationAgent",
+  "copyright": "Copyright © 2026 JaxLim",
   "electronVersion": "45.0.0",
-  "directories": { "app": "apps/desktop", "output": "dist/installers" },
+  "directories": { "app": "build/app", "output": "dist/installers", "buildResources": "build" },
   "asar": true,
   "npmRebuild": false,
   "nodeGypRebuild": false,
+  "buildDependenciesFromSource": false,
   "files": ["dist/**", "package.json"],
   "extraResources": [
     { "from": "build/stage/${os}-${arch}/sidecar", "to": "sidecar", "filter": ["**/*"] }
   ],
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
-  "win": { "target": ["nsis"] },
+  "electronFuses": {
+    "runAsNode": false,
+    "enableCookieEncryption": true,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true
+  },
+  "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.ico", "forceCodeSigning": false },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "OperationAgent",
+    "runAfterFinish": true,
+    "deleteAppDataOnUninstall": false,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico"
+  },
   "mac": { "target": ["dmg", "zip"], "hardenedRuntime": true },
   "linux": { "target": ["AppImage", "deb"], "category": "Development" },
   "publish": null

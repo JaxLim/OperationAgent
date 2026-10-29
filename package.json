@@ -3,15 +3,18 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "OperationAgent P1.2-P1.3 control plane; no production Worker qualification",
+  "description": "OperationAgent P1 desktop workbench and control plane; no production Worker qualification",
   "license": "UNLICENSED",
   "packageManager": "pnpm@10.34.7",
-  "engines": { "node": "24.22.1", "pnpm": "10.34.7" },
+  "engines": {
+    "node": "24.22.1",
+    "pnpm": "10.34.7"
+  },
   "scripts": {
     "build": "node scripts/workspace.mjs build",
     "stage:sidecar": "node scripts/stage-sidecar.mjs",
     "typecheck": "node scripts/workspace.mjs typecheck",
-    "lint": "eslint scripts tests/p0 tests/p1 tests/integration tests/worker-fixture apps packages eslint.config.mjs --max-warnings 0",
+    "lint": "eslint scripts tests/p0 tests/p1 tests/integration tests/worker-fixture tests/installer apps packages eslint.config.mjs --max-warnings 0",
     "check:boundaries": "node scripts/check-workspace.ts",
     "test": "tsc -b && node --test tests/p0/*.test.ts tests/p1/*.test.ts",
     "verify:p0": "node scripts/p0-history.ts",
@@ -23,12 +26,14 @@
     "test:integration": "node scripts/test-integration.mjs",
     "prepare:electron": "node scripts/prepare-electron.mjs",
     "desktop": "node apps/desktop/node_modules/electron/cli.js apps/desktop",
-    "package": "node scripts/phase-required.mjs P1 packaging",
-    "test:smoke": "node scripts/phase-required.mjs P1 installed-application-smoke"
+    "package": "node scripts/workspace.mjs build && node scripts/stage-sidecar.mjs && node scripts/prepare-electron.mjs && node scripts/package-windows.mjs",
+    "test:smoke": "node tests/installer/installed-smoke.mjs",
+    "icon": "node scripts/generate-icon.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "24.19.2",
+    "electron-builder": "26.15.3",
     "eslint": "10.13.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.0",

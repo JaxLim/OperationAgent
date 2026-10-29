@@ -744,3 +744,5 @@ kbd {
 .runs-table td .badge { margin-left: 6px; }
 button:disabled { cursor: not-allowed; }
 @media (max-width: 1100px) { .capabilities { grid-template-columns: 1fr; } }
+/* Native caption buttons are drawn over the right of the titlebar (Window Controls Overlay). */
+.titlebar { padding-right: max(8px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))); }
