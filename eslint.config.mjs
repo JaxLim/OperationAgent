@@ -19,7 +19,7 @@ export default [
   {
     // The trusted fixture bootstrap is the only Worker-side code with Node globals (ADR-WIN-001 narrow exception).
     files: ['apps/agent-worker/bootstrap/fixture-bootstrap.mjs'],
-    languageOptions: { globals: { Buffer: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly' } },
+    languageOptions: { globals: { Buffer: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', process: 'readonly', URL: 'readonly' } },
   },
   {
     files: ['**/*.ts', '**/*.tsx'],

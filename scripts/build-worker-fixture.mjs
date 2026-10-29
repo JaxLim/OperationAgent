@@ -22,7 +22,9 @@ await build({ configFile: false, logLevel: 'warn', build: {
   rolldownOptions: { input: resolve(root, 'apps/agent-worker/bootstrap/fixture-bootstrap.mjs'), external: [/^node:/],
     output: { format: 'es', entryFileNames: 'bootstrap.mjs', codeSplitting: false } },
 } });
+// Package-scope lookups stop here instead of walking into ancestors the AppContainer cannot read.
+await writeFile(resolve(output, 'package.json'), JSON.stringify({ name: 'operation-agent-worker-fixture', private: true, type: 'module' }, null, 2) + '\n');
 const files = {};
-for (const name of ['node.exe', 'bootstrap.mjs', 'channel.node']) files[name] = hash(await readFile(resolve(output, name)));
+for (const name of ['node.exe', 'bootstrap.mjs', 'channel.node', 'package.json']) files[name] = hash(await readFile(resolve(output, name)));
 await writeFile(resolve(cache, 'worker-fixture/runtime.json'), JSON.stringify({ node: lock.node, files }, null, 2) + '\n');
 console.log(JSON.stringify({ check: 'P1_WORKER_FIXTURE_RUNTIME', passed: true, output, files }));
