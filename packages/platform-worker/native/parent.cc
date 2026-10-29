@@ -103,10 +103,18 @@ void grantRuntime(Run& run) {
   DWORD status = GetNamedSecurityInfoW(run.runtime.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, &run.originalDacl, nullptr, &descriptor);
   run.originalSecurity.value = descriptor;
   if (status != ERROR_SUCCESS || !run.originalDacl) fail("READ_RUNTIME_ACL", status);
-  EXPLICIT_ACCESSW entry{}; entry.grfAccessPermissions = GENERIC_READ | GENERIC_EXECUTE;
-  entry.grfAccessMode = GRANT_ACCESS; entry.grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
-  entry.Trustee.TrusteeForm = TRUSTEE_IS_SID; entry.Trustee.ptstrName = static_cast<LPWSTR>(run.sid.value);
-  PACL next = nullptr; status = SetEntriesInAclW(1, &entry, run.originalDacl, &next); Local allocation; allocation.value = next;
+  // An AppContainer access check needs both the container SID and the restricted user token to be granted.
+  // The LUA token turns Administrators into deny-only, so the user SID gets its own read/execute entry.
+  Handle self; if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &self.value)) fail("OPEN_PARENT_TOKEN");
+  const auto user = tokenData(self.value, TokenUser);
+  EXPLICIT_ACCESSW entries[2]{};
+  for (auto& entry : entries) {
+    entry.grfAccessPermissions = GENERIC_READ | GENERIC_EXECUTE; entry.grfAccessMode = GRANT_ACCESS;
+    entry.grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT; entry.Trustee.TrusteeForm = TRUSTEE_IS_SID;
+  }
+  entries[0].Trustee.ptstrName = static_cast<LPWSTR>(run.sid.value);
+  entries[1].Trustee.ptstrName = static_cast<LPWSTR>(reinterpret_cast<const TOKEN_USER*>(user.data())->User.Sid);
+  PACL next = nullptr; status = SetEntriesInAclW(2, entries, run.originalDacl, &next); Local allocation; allocation.value = next;
   if (status == ERROR_SUCCESS) status = SetNamedSecurityInfoW(run.runtime.data(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, nullptr, nullptr, next, nullptr);
   if (status != ERROR_SUCCESS) fail("GRANT_RUNTIME_RX", status);
   run.aclChanged = true;

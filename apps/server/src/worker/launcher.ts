@@ -65,8 +65,9 @@ export class FixtureWorker {
       return this;
     } catch (error) {
       this.fail(error instanceof Error ? error.message : 'RPC_HANDSHAKE_FAILED');
-      await this.closed;
-      throw new Error('WORKER_ISOLATION_UNAVAILABLE: ' + (this.failure ?? 'handshake failed'), { cause: error });
+      const exit = await this.closed;
+      const code = exit.exitCode === null ? 'unknown' : '0x' + (exit.exitCode >>> 0).toString(16);
+      throw new Error(`WORKER_ISOLATION_UNAVAILABLE: ${this.failure ?? 'handshake failed'} (worker exit ${code}, cleanup ${exit.cleanup})`, { cause: error });
     }
   }
   private async readLoop(session: RpcSession): Promise<void> {
