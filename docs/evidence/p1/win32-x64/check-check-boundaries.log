@@ -1,0 +1,5 @@
+
+> operation-agent@0.0.0 check:boundaries D:\a\OperationAgent\OperationAgent
+> node scripts/check-workspace.ts
+
+{"check":"PROCESS_DEPENDENCIES","passed":true,"packages":7,"osIsolationVerified":false}

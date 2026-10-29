@@ -1,0 +1,27 @@
+{
+  "copyright": "Copyright © 2026 JaxLim",
+  "directories": { "app": "build/app", "output": "dist/installers", "buildResources": "build" },
+  "buildDependenciesFromSource": false,
+  "electronFuses": {
+    "runAsNode": false,
+    "enableCookieEncryption": true,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true
+  },
+  "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.ico", "forceCodeSigning": false },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "OperationAgent",
+    "runAfterFinish": true,
+    "deleteAppDataOnUninstall": false,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico"
+  }
+}

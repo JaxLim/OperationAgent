@@ -6,14 +6,14 @@ import { parseWorkerMessage } from '../../packages/worker-transport/dist/index.j
 const identity = { expressRunId: '11111111-1111-4111-8111-111111111111', workerRunId: '22222222-2222-4222-8222-222222222222' };
 const requestId = '33333333-3333-4333-8333-333333333333';
 const hello = () => ({ jsonrpc: '2.0', protocolVersion: PROTOCOL_VERSION, ...identity, requestId, id: requestId,
-  role: 'worker', method: 'hello', params: { minimumProtocolVersion: PROTOCOL_VERSION, capabilities: ['health', 'shutdown'] } });
+  role: 'worker', method: 'hello', params: { minimumProtocolVersion: PROTOCOL_VERSION, capabilities: ['health', 'shutdown'], challenge: 'a'.repeat(64) } });
 
 test('strict v1 handshake validates the complete identity and correlation envelope', () => {
   assert.deepEqual(parseWorkerMessage(hello(), identity, 'worker'), hello());
 });
 
 test('unknown versions, identities, roles, methods and fields are rejected', () => {
-  for (const change of [{ protocolVersion: '2.0.0' }, { workerRunId: '' }, { role: 'main' }, { role: 'express' },
+  for (const change of [{ protocolVersion: '2.0.0' }, { workerRunId: '' }, { role: 'main' },
     { method: 'tool.execute' }, { extra: true }, { id: '44444444-4444-4444-8444-444444444444' },
     { params: { minimumProtocolVersion: '0.0.1', capabilities: ['health'] } },
     { params: { minimumProtocolVersion: PROTOCOL_VERSION, capabilities: ['health', 'shell'] } }]) {

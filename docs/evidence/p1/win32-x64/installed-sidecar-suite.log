@@ -1,0 +1,15 @@
+✔ real staged Node/Express authenticates, rejects illegal access and rolls back a failing transaction (322.825ms)
+✔ real process kill preserves committed SQLite data, reconciles interrupted runs and rejects the old identity (870.6095ms)
+✔ bootstrap failures, concurrent DB owners and inherited-channel disconnect fail closed (2507.553ms)
+✔ the live HTTP listener enforces its bounded request window (485.7963ms)
+✔ unauthenticated and replayed bursts cannot consume authenticated request or heartbeat capacity (467.9343ms)
+✔ the reserved heartbeat lane is bounded and still rejects replay across lanes (338.1233ms)
+✔ a responsive Sidecar expires its lease when its parent stops authenticated traffic (6554.7107ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11717.2327

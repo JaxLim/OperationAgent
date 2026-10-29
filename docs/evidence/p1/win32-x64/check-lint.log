@@ -1,0 +1,4 @@
+
+> operation-agent@0.0.0 lint D:\a\OperationAgent\OperationAgent
+> eslint scripts tests/p0 tests/p1 tests/integration tests/worker-fixture tests/installer apps packages eslint.config.mjs --max-warnings 0
+

@@ -2,18 +2,21 @@
   "schemaVersion": 1,
   "phase": "P1",
   "frozenCommit": "04d07bea89b70265a6b1fb1d79272b710623775b",
-  "authorizedStages": ["P1.0", "P1.1"],
-  "stopAfter": "P1.1",
+  "authorizedStages": ["P1.0", "P1.1", "P1.2", "P1.3", "P1.4", "P1.5", "P1.6", "P1.7"],
+  "stopAfter": "P1.7",
   "authorization": {
     "kind": "user-message",
-    "date": "2026-10-25",
-    "quote": "本次正式授权启动 P1 工程实施，但当前执行范围仅为 P1.0 和 P1.1，不授权跳过阶段完成后续业务功能。"
+    "date": "2026-10-27",
+    "quote": "正式授权连续实施 P1.4、P1.5、P1.6、P1.7，前提是各阶段的前置依赖与退出门禁已经满足。"
   },
-  "implementation": { "P1.0": "implemented", "P1.1": "implemented" },
+  "implementation": { "P1.0": "implemented", "P1.1": "implemented", "P1.2": "implemented", "P1.3": "implemented", "P1.4": "implemented", "P1.5": "implemented", "P1.6": "implemented", "P1.7": "implemented" },
   "agentReady": false,
   "productionWorkerQualified": false,
-  "integrationTests": "NOT_RUN",
-  "installedSmokeTests": "NOT_RUN",
+  "integrationTests": "P1_WIN32_X64",
+  "workerFixture": "PASS_WIN32_X64_RUNNER",
+  "p1TotalExit": "PASS_WIN32_X64",
+  "installedSmokeTests": "PASS_WIN32_X64",
+  "evidence": { "ciRun": "https://github.com/JaxLim/OperationAgent/actions/runs/40796366405", "sourceCommit": "d503ee82b42ca275dff76f6b19b336dd74702adc", "files": "docs/evidence/p1/win32-x64/" },
   "platformCapabilities": {
     "win32-x64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },
     "darwin-arm64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },

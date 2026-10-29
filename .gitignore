@@ -20,3 +20,4 @@ artifacts/
 *.pfx
 .DS_Store
 Thumbs.db
+build/app/

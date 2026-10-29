@@ -1,0 +1,18 @@
+✔ BLOCKED unless running on a disposable Windows x64 runner (0.9327ms)
+✔ public CreateProcessW launches a pre-restricted fixture that completes OWIP/1 and stops in two phases (4094.348ms)
+✔ real fixture fault exit is rejected, the session fails closed and the Job is reclaimed (229.5185ms)
+✔ real fixture fault hang is rejected, the session fails closed and the Job is reclaimed (5233.3852ms)
+✔ real fixture fault invalid-frame is rejected, the session fails closed and the Job is reclaimed (237.6202ms)
+✔ real fixture fault foreign-identity is rejected, the session fails closed and the Job is reclaimed (264.7943ms)
+✔ real fixture fault duplicate-response is rejected, the session fails closed and the Job is reclaimed (233.2505ms)
+✔ the in-flight quota is enforced against the real Worker and cleanup is confirmed (237.1774ms)
+✔ SEC-17: a killed Express takes its Worker with it and a new Express only gets a new Worker (556.1053ms)
+✔ a hung Worker is terminated and repeated crashes exhaust the restart budget without leftovers (7300.644ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18463.594

@@ -12,5 +12,6 @@ managePackageManagerVersions: false
 updateNotifier: false
 storeDir: .pnpm-store
 cacheDir: .cache/pnpm
-# P1.1 installs build-time packages only; no lifecycle/native/Electron download scripts.
+# Lifecycle scripts remain disabled. P1.2 uses package-pinned Node-API prebuilds;
+# prepare:electron explicitly verifies and extracts the official Electron archive.
 allowBuilds: {}

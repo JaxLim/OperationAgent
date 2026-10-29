@@ -1,0 +1,23 @@
+
+> operation-agent@0.0.0 build D:\a\OperationAgent\OperationAgent
+> node scripts/workspace.mjs build
+
+[36mvite v8.3.5 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 127 modules transformed.
+rendering chunks...
+computing gzip size...
+apps/desktop/dist/renderer/index.html                   0.62 kB │ gzip:   0.36 kB
+apps/desktop/dist/renderer/assets/index-BTz3y1QA.css   46.81 kB │ gzip:   9.93 kB
+apps/desktop/dist/renderer/assets/index-D-KZp1Yj.js   354.41 kB │ gzip: 106.68 kB
+
+[32m✓ built in 198ms[39m
+[36mvite v8.3.5 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 106 modules transformed.
+rendering chunks...
+computing gzip size...
+apps/desktop/dist/preload/index.cjs  190.68 kB │ gzip: 42.74 kB
+
+[32m✓ built in 52ms[39m
+{"check":"BUILT_ARTIFACT_STRUCTURE","passed":true,"electronLaunched":false,"installedSmokeTests":"NOT_RUN"}

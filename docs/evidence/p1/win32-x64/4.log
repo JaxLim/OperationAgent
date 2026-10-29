@@ -1,0 +1,22 @@
+✔ real Electron Main → sandboxed Preload → authenticated Express → SQLite, restart and normal exit (6132.2407ms)
+✔ a full result of maximally escaped UTF-8 records round-trips through the real Preload bridge (3434.815ms)
+✔ unauthenticated traffic and a real Renderer burst preserve Main heartbeats and the Sidecar lease (9172.5279ms)
+✔ real Main crash closes the inherited channel and the responsive Sidecar exits (2990.2362ms)
+✔ repeated real Sidecar crashes exhaust the bounded restart budget (6825.1057ms)
+✔ the production Main entry flushes SQLite and exits through the real window-close lifecycle (1829.0816ms)
+✔ workbench settings persist, invalid input and Worker-less task starts are refused through the real bridge (3091.9033ms)
+✔ real staged Node/Express authenticates, rejects illegal access and rolls back a failing transaction (322.2317ms)
+✔ real process kill preserves committed SQLite data, reconciles interrupted runs and rejects the old identity (820.3171ms)
+✔ bootstrap failures, concurrent DB owners and inherited-channel disconnect fail closed (2414.0932ms)
+✔ the live HTTP listener enforces its bounded request window (473.7416ms)
+✔ unauthenticated and replayed bursts cannot consume authenticated request or heartbeat capacity (459.1203ms)
+✔ the reserved heartbeat lane is bounded and still rejects replay across lanes (338.3053ms)
+✔ a responsive Sidecar expires its lease when its parent stops authenticated traffic (6581.0624ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45217.0535

@@ -1,0 +1,6 @@
+
+> operation-agent@0.0.0 verify:p0 D:\a\OperationAgent\OperationAgent
+> node scripts/p0-history.ts
+
+{"check":"P0_METADATA","passed":true,"phaseStatus":"frozen","blockers":[],"decisionApproval":"approved","specificationRevision":"updated","feasibilityEvidenceVerified":true,"decisionPackageSha256":"01c286cb6a3060a9d09a007f4d151f64ec914b6d6dcc905f025f7d5ad9baef58","applicationTestsRun":false,"productionWorkerQualified":false}
+{"check":"P0_HISTORICAL_EXIT","commit":"04d07bea89b70265a6b1fb1d79272b710623775b","passed":true,"productionWorkerQualified":false}

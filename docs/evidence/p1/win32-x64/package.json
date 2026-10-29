@@ -1,0 +1,31 @@
+{
+  "check": "P1_WINDOWS_PACKAGE",
+  "passed": true,
+  "builtAt": "2026-10-29T00:52:17.722Z",
+  "source": "d503ee82b42ca275dff76f6b19b336dd74702adc",
+  "version": "0.1.0",
+  "installer": {
+    "file": "OperationAgent-0.1.0-win-x64.exe",
+    "bytes": 146925519,
+    "sha256": "a71a7ddbe6c7efd9b4fd61a8d43c4dd2c5aee5e8c946c2b536e4c822fd02b34b"
+  },
+  "electron": "45.0.0",
+  "sidecar": {
+    "node": "24.22.1",
+    "abi": "137",
+    "sqlite": "3.53.4",
+    "files": 1581
+  },
+  "fuses": {
+    "runAsNode": false,
+    "enableCookieEncryption": true,
+    "enableNodeOptionsEnvironmentVariable": false,
+    "enableNodeCliInspectArguments": false,
+    "enableEmbeddedAsarIntegrityValidation": true,
+    "onlyLoadAppFromAsar": true
+  },
+  "codeSigned": false,
+  "signingNote": "unsigned: no certificate configured (set CSC_LINK/CSC_KEY_PASSWORD to sign)",
+  "unpackedFiles": 19,
+  "agentReady": false
+}

@@ -27,6 +27,9 @@
     },
     {
       "path": "../../packages/platform-worker"
+    },
+    {
+      "path": "../../packages/platform-supervision"
     }
   ]
 }

@@ -1,0 +1,1 @@
+{"check":"STAGED_NODE_SQLITE","passed":true,"target":"win32-x64","node":"24.22.1","abi":"137","napi":"10","platform":"win32","arch":"x64","sqlite":"3.53.4","nativeFiles":8,"installerTest":"NOT_RUN"}

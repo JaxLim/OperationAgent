@@ -1,0 +1,5 @@
+parent.cc
+   Creating library D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\parent.lib and object D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\parent.exp
+channel.cc
+   Creating library D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\channel.lib and object D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\channel.exp
+{"check":"P1_WORKER_NATIVE_BUILD","passed":true,"node":"24.22.1","nativeArtifacts":{"parent.node":"2015b997b15158f9a1ab3c69742af9788115be7178ec046d0756f63a197bdb16","channel.node":"13623f67332909d17d059e80206675ff7d364eecb735221f2c7a7383412b2867"},"isolatedFixture":"NOT_RUN"}

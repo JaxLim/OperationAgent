@@ -1,0 +1,5 @@
+# Standalone root: keeps this prototype out of the product workspace (apps/*, packages/*)
+# so its dependencies never enter the audited dependency graph.
+storeDir: ../../.pnpm-store
+saveExact: true
+allowBuilds: {}

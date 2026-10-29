@@ -1,0 +1,5 @@
+
+> operation-agent@0.0.0 verify:p1 D:\a\OperationAgent\OperationAgent
+> node scripts/p1-check.ts
+
+{"check":"P1_SCOPE_AND_HISTORY","passed":true,"stopAfter":"P1.7","activeStage":"P1.4","integrationScope":"P1.2_P1.3_ONLY","p1TotalExit":"NOT_RUN","productionWorkerQualified":false}
