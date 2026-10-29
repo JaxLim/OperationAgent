@@ -1,0 +1,89 @@
+
+> operation-agent@0.0.0 test:integration D:\a\OperationAgent\OperationAgent
+> node scripts/test-integration.mjs
+
+RUN node scripts/workspace.mjs build
+[36mvite v8.3.5 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 127 modules transformed.
+rendering chunks...
+computing gzip size...
+apps/desktop/dist/renderer/index.html                   0.62 kB │ gzip:   0.36 kB
+apps/desktop/dist/renderer/assets/index-BTz3y1QA.css   46.81 kB │ gzip:   9.93 kB
+apps/desktop/dist/renderer/assets/index-D-KZp1Yj.js   354.41 kB │ gzip: 106.68 kB
+
+[32m✓ built in 209ms[39m
+[36mvite v8.3.5 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 106 modules transformed.
+rendering chunks...
+computing gzip size...
+apps/desktop/dist/preload/index.cjs  190.68 kB │ gzip: 42.74 kB
+
+[32m✓ built in 52ms[39m
+{"check":"BUILT_ARTIFACT_STRUCTURE","passed":true,"electronLaunched":false,"installedSmokeTests":"NOT_RUN"}
+RUN node scripts/stage-sidecar.mjs
+{"check":"STAGED_NODE_SQLITE","passed":true,"target":"win32-x64","node":"24.22.1","abi":"137","napi":"10","platform":"win32","arch":"x64","sqlite":"3.53.4","nativeFiles":8,"installerTest":"NOT_RUN"}
+RUN node scripts/prepare-electron.mjs
+{"check":"ELECTRON_ARCHIVE_SHA256","version":"45.0.0","passed":true,"platform":"win32","arch":"x64"}
+RUN node --test --test-concurrency=1 --test-timeout=180000 tests/integration/sidecar.test.mjs tests/integration/electron.test.mjs
+✔ real Electron Main → sandboxed Preload → authenticated Express → SQLite, restart and normal exit (6132.2407ms)
+✔ a full result of maximally escaped UTF-8 records round-trips through the real Preload bridge (3434.815ms)
+✔ unauthenticated traffic and a real Renderer burst preserve Main heartbeats and the Sidecar lease (9172.5279ms)
+✔ real Main crash closes the inherited channel and the responsive Sidecar exits (2990.2362ms)
+✔ repeated real Sidecar crashes exhaust the bounded restart budget (6825.1057ms)
+✔ the production Main entry flushes SQLite and exits through the real window-close lifecycle (1829.0816ms)
+✔ workbench settings persist, invalid input and Worker-less task starts are refused through the real bridge (3091.9033ms)
+✔ real staged Node/Express authenticates, rejects illegal access and rolls back a failing transaction (322.2317ms)
+✔ real process kill preserves committed SQLite data, reconciles interrupted runs and rejects the old identity (820.3171ms)
+✔ bootstrap failures, concurrent DB owners and inherited-channel disconnect fail closed (2414.0932ms)
+✔ the live HTTP listener enforces its bounded request window (473.7416ms)
+✔ unauthenticated and replayed bursts cannot consume authenticated request or heartbeat capacity (459.1203ms)
+✔ the reserved heartbeat lane is bounded and still rejects replay across lanes (338.3053ms)
+✔ a responsive Sidecar expires its lease when its parent stops authenticated traffic (6581.0624ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45217.0535
+RUN node scripts/build-worker-native.mjs
+parent.cc
+   Creating library D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\parent.lib and object D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\parent.exp
+channel.cc
+   Creating library D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\channel.lib and object D:\a\OperationAgent\OperationAgent\packages\platform-worker\native-dist\win32-x64\channel.exp
+{"check":"P1_WORKER_NATIVE_BUILD","passed":true,"node":"24.22.1","nativeArtifacts":{"parent.node":"2015b997b15158f9a1ab3c69742af9788115be7178ec046d0756f63a197bdb16","channel.node":"13623f67332909d17d059e80206675ff7d364eecb735221f2c7a7383412b2867"},"isolatedFixture":"NOT_RUN"}
+RUN node scripts/build-worker-fixture.mjs
+{"check":"P1_WORKER_FIXTURE_RUNTIME","passed":true,"output":"D:\\a\\OperationAgent\\OperationAgent\\.cache\\worker-fixture\\runtime","files":{"node.exe":"d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5","bootstrap.mjs":"5980278d62160c6648009b093cf5ad25c4d50f9997fe14e0e3f5b2636ba739e8","channel.node":"13623f67332909d17d059e80206675ff7d364eecb735221f2c7a7383412b2867","package.json":"5d9dab1792de1d69b8aba1ca76e48fda51931e91a22f1d48aaa2eb63741c9bc7"}}
+RUN node --test tests/worker-fixture/native-surface.test.mjs
+✔ the parent addon exports only the fixed fixture launcher and refuses a non-runner host (6.9004ms)
+✔ the child addon fails closed without a parent-granted inherited pipe (1.6006ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 80.9963
+RUN node --test --test-concurrency=1 --test-timeout=240000 tests/worker-fixture/isolated-fixture.test.mjs
+✔ BLOCKED unless running on a disposable Windows x64 runner (0.9327ms)
+✔ public CreateProcessW launches a pre-restricted fixture that completes OWIP/1 and stops in two phases (4094.348ms)
+✔ real fixture fault exit is rejected, the session fails closed and the Job is reclaimed (229.5185ms)
+✔ real fixture fault hang is rejected, the session fails closed and the Job is reclaimed (5233.3852ms)
+✔ real fixture fault invalid-frame is rejected, the session fails closed and the Job is reclaimed (237.6202ms)
+✔ real fixture fault foreign-identity is rejected, the session fails closed and the Job is reclaimed (264.7943ms)
+✔ real fixture fault duplicate-response is rejected, the session fails closed and the Job is reclaimed (233.2505ms)
+✔ the in-flight quota is enforced against the real Worker and cleanup is confirmed (237.1774ms)
+✔ SEC-17: a killed Express takes its Worker with it and a new Express only gets a new Worker (556.1053ms)
+✔ a hung Worker is terminated and repeated crashes exhaust the restart budget without leftovers (7300.644ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18463.594

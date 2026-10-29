@@ -1,0 +1,47 @@
+
+> operation-agent@0.0.0 typecheck D:\a\OperationAgent\OperationAgent
+> node scripts/workspace.mjs typecheck
+
+Scope: 7 of 8 workspace projects
+::group::@operation-agent/contracts@0.0.0 : typecheck packages\contracts
+
+> @operation-agent/contracts@0.0.0 typecheck D:\a\OperationAgent\OperationAgent\packages\contracts
+> tsc -p tsconfig.json --noEmit
+
+::endgroup::
+::group::@operation-agent/platform-supervision@0.0.0 : typecheck packages\platform-supervision
+
+> @operation-agent/platform-supervision@0.0.0 typecheck D:\a\OperationAgent\OperationAgent\packages\platform-supervision
+> tsc -p tsconfig.json --noEmit
+
+::endgroup::
+::group::@operation-agent/platform-worker@0.0.0 : typecheck packages\platform-worker
+
+> @operation-agent/platform-worker@0.0.0 typecheck D:\a\OperationAgent\OperationAgent\packages\platform-worker
+> tsc -p tsconfig.json --noEmit
+
+::endgroup::
+::group::@operation-agent/worker-transport@0.0.0 : typecheck packages\worker-transport
+
+> @operation-agent/worker-transport@0.0.0 typecheck D:\a\OperationAgent\OperationAgent\packages\worker-transport
+> tsc -p tsconfig.json --noEmit
+
+::endgroup::
+::group::@operation-agent/agent-worker@0.0.0 : typecheck apps\agent-worker
+
+> @operation-agent/agent-worker@0.0.0 typecheck D:\a\OperationAgent\OperationAgent\apps\agent-worker
+> tsc -p tsconfig.json --noEmit
+
+::endgroup::
+::group::@operation-agent/desktop@0.1.0 : typecheck apps\desktop
+
+> @operation-agent/desktop@0.1.0 typecheck D:\a\OperationAgent\OperationAgent\apps\desktop
+> tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+
+::endgroup::
+::group::@operation-agent/server@0.0.0 : typecheck apps\server
+
+> @operation-agent/server@0.0.0 typecheck D:\a\OperationAgent\OperationAgent\apps\server
+> tsc -p tsconfig.json --noEmit
+
+::endgroup::
