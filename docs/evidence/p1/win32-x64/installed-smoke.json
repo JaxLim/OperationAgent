@@ -1,0 +1,161 @@
+{
+  "check": "P1_INSTALLED_SMOKE_SEC18",
+  "passed": true,
+  "target": "win32-x64",
+  "finishedAt": "2026-10-29T00:53:36.083Z",
+  "durationMs": 77600,
+  "source": "d503ee82b42ca275dff76f6b19b336dd74702adc",
+  "installer": {
+    "file": "D:\\a\\OperationAgent\\OperationAgent\\dist\\installers\\OperationAgent-0.1.0-win-x64.exe",
+    "bytes": 146925519,
+    "sha256": "a71a7ddbe6c7efd9b4fd61a8d43c4dd2c5aee5e8c946c2b536e4c822fd02b34b"
+  },
+  "steps": [
+    {
+      "name": "installer artifact present",
+      "passed": true,
+      "ms": 127,
+      "detail": {
+        "file": "D:\\a\\OperationAgent\\OperationAgent\\dist\\installers\\OperationAgent-0.1.0-win-x64.exe",
+        "bytes": 146925519,
+        "sha256": "a71a7ddbe6c7efd9b4fd61a8d43c4dd2c5aee5e8c946c2b536e4c822fd02b34b"
+      }
+    },
+    {
+      "name": "silent per-user install into an isolated directory",
+      "passed": true,
+      "ms": 43033,
+      "detail": {
+        "installDir": "D:\\a\\OperationAgent\\OperationAgent\\.cache\\installer-smoke\\OperationAgent",
+        "entries": 21
+      }
+    },
+    {
+      "name": "installed sidecar matches its integrity manifest and pinned runtime",
+      "passed": true,
+      "ms": 842,
+      "detail": {
+        "files": 1581,
+        "node": "24.22.1",
+        "abi": "137",
+        "sqlite": "3.53.4"
+      }
+    },
+    {
+      "name": "first launch: Main starts the installed sidecar and migrates a new database",
+      "passed": true,
+      "ms": 8508,
+      "detail": {
+        "screenshot": true,
+        "pid": 3456,
+        "sidecarPid": 1388,
+        "sidecarPath": "D:\\a\\OperationAgent\\OperationAgent\\.cache\\installer-smoke\\OperationAgent\\resources\\sidecar\\node\\node.exe",
+        "title": "OperationAgent"
+      }
+    },
+    {
+      "name": "graceful window close stops the sidecar and commits a clean run",
+      "passed": true,
+      "ms": 231,
+      "detail": {
+        "node": "24.22.1",
+        "abi": "137",
+        "sqlite": "3.53.4",
+        "migrations": [
+          1,
+          2,
+          3
+        ],
+        "runs": [
+          "CLEAN"
+        ],
+        "projects": [],
+        "settings": null,
+        "records": []
+      }
+    },
+    {
+      "name": "installed sidecar writes durable workbench data through the authenticated API",
+      "passed": true,
+      "ms": 285,
+      "detail": {
+        "projectId": "bdd60eb2-9778-4e96-8f7e-7926ea288a58"
+      }
+    },
+    {
+      "name": "relaunch reads the data back and closes cleanly again",
+      "passed": true,
+      "ms": 3789,
+      "detail": {
+        "node": "24.22.1",
+        "abi": "137",
+        "sqlite": "3.53.4",
+        "migrations": [
+          1,
+          2,
+          3
+        ],
+        "runs": [
+          "CLEAN",
+          "CLEAN",
+          "CLEAN"
+        ],
+        "projects": [
+          {
+            "name": "smoke-project",
+            "path": "C:/OperationAgentSmoke/project"
+          }
+        ],
+        "settings": "{\"theme\":\"dark\",\"density\":\"compact\",\"contextPanel\":true,\"stopGraceMs\":10000,\"activeProjectId\":\"bdd60eb2-9778-4e96-8f7e-7926ea288a58\"}",
+        "records": [
+          "installed 持久化"
+        ]
+      }
+    },
+    {
+      "name": "forced termination of the app tree is reconciled as INTERRUPTED on the next start",
+      "passed": true,
+      "ms": 6069,
+      "detail": {
+        "node": "24.22.1",
+        "abi": "137",
+        "sqlite": "3.53.4",
+        "migrations": [
+          1,
+          2,
+          3
+        ],
+        "runs": [
+          "CLEAN",
+          "CLEAN",
+          "CLEAN",
+          "INTERRUPTED",
+          "CLEAN"
+        ],
+        "projects": [
+          {
+            "name": "smoke-project",
+            "path": "C:/OperationAgentSmoke/project"
+          }
+        ],
+        "settings": "{\"theme\":\"dark\",\"density\":\"compact\",\"contextPanel\":true,\"stopGraceMs\":10000,\"activeProjectId\":\"bdd60eb2-9778-4e96-8f7e-7926ea288a58\"}",
+        "records": [
+          "installed 持久化"
+        ]
+      }
+    },
+    {
+      "name": "full sidecar integration suite passes against the installed resources",
+      "passed": true,
+      "ms": 11776,
+      "detail": {
+        "summary": "ℹ tests 7, ℹ pass 7, ℹ fail 0"
+      }
+    },
+    {
+      "name": "silent uninstall removes the application",
+      "passed": true,
+      "ms": 2937
+    }
+  ]
+}

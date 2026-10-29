@@ -20,9 +20,9 @@ for (const name of names) {
   const logFile = `check-${name.replaceAll(':', '-')}.log`; writeFileSync(resolve(output, logFile), log, 'utf8');
   results.push({ command: `pnpm ${name}`, exitCode: result.status, logFile });
   writeFileSync(resolve(output, 'checks.json'), JSON.stringify({ finishedAt: new Date().toISOString(), source, sourceDirty, target,
-    scope: engineeringOnly ? 'engineering-only' : 'P1.2_P1.3', passed: results.length === names.length && results.every(row => row.exitCode === 0),
+    scope: engineeringOnly ? 'engineering-only' : 'P1', passed: results.length === names.length && results.every(row => row.exitCode === 0),
     processIntegration: engineeringOnly ? 'NOT_RUN' : results.find(row => row.command === 'pnpm test:integration')?.exitCode === 0 ? 'PASS' : 'NOT_PASSED',
-    installedSmoke: 'NOT_RUN', workerIsolation: 'NOT_RUN', results }, null, 2) + '\n', 'utf8');
+    installedSmoke: 'SEPARATE_STEP (pnpm package && pnpm test:smoke)', workerFixture: 'SEE integration.json', results }, null, 2) + '\n', 'utf8');
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

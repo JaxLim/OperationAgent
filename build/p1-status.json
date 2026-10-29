@@ -9,12 +9,14 @@
     "date": "2026-10-27",
     "quote": "正式授权连续实施 P1.4、P1.5、P1.6、P1.7，前提是各阶段的前置依赖与退出门禁已经满足。"
   },
-  "implementation": { "P1.0": "implemented", "P1.1": "implemented", "P1.2": "implemented", "P1.3": "implemented", "P1.4": "in-progress", "P1.5": "not-started", "P1.6": "not-started", "P1.7": "not-started" },
+  "implementation": { "P1.0": "implemented", "P1.1": "implemented", "P1.2": "implemented", "P1.3": "implemented", "P1.4": "implemented", "P1.5": "implemented", "P1.6": "implemented", "P1.7": "implemented" },
   "agentReady": false,
   "productionWorkerQualified": false,
-  "integrationTests": "P1.2_P1.3_ONLY",
-  "p1TotalExit": "NOT_RUN",
-  "installedSmokeTests": "NOT_RUN",
+  "integrationTests": "P1_WIN32_X64",
+  "workerFixture": "PASS_WIN32_X64_RUNNER",
+  "p1TotalExit": "PASS_WIN32_X64",
+  "installedSmokeTests": "PASS_WIN32_X64",
+  "evidence": { "ciRun": "https://github.com/JaxLim/OperationAgent/actions/runs/40796366405", "sourceCommit": "d503ee82b42ca275dff76f6b19b336dd74702adc", "files": "docs/evidence/p1/win32-x64/" },
   "platformCapabilities": {
     "win32-x64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },
     "darwin-arm64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },

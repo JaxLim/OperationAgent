@@ -1,0 +1,53 @@
+{
+  "finishedAt": "2026-10-29T00:51:07.040Z",
+  "source": "d503ee82b42ca275dff76f6b19b336dd74702adc",
+  "sourceDirty": false,
+  "target": "win32-x64",
+  "scope": "P1.2_P1.3",
+  "passed": true,
+  "processIntegration": "PASS",
+  "installedSmoke": "NOT_RUN",
+  "workerIsolation": "NOT_RUN",
+  "results": [
+    {
+      "command": "pnpm typecheck",
+      "exitCode": 0,
+      "logFile": "check-typecheck.log"
+    },
+    {
+      "command": "pnpm lint",
+      "exitCode": 0,
+      "logFile": "check-lint.log"
+    },
+    {
+      "command": "pnpm check:boundaries",
+      "exitCode": 0,
+      "logFile": "check-check-boundaries.log"
+    },
+    {
+      "command": "pnpm test",
+      "exitCode": 0,
+      "logFile": "check-test.log"
+    },
+    {
+      "command": "pnpm build",
+      "exitCode": 0,
+      "logFile": "check-build.log"
+    },
+    {
+      "command": "pnpm verify:p0",
+      "exitCode": 0,
+      "logFile": "check-verify-p0.log"
+    },
+    {
+      "command": "pnpm verify:p1",
+      "exitCode": 0,
+      "logFile": "check-verify-p1.log"
+    },
+    {
+      "command": "pnpm test:integration",
+      "exitCode": 0,
+      "logFile": "check-test-integration.log"
+    }
+  ]
+}

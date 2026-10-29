@@ -1,5 +1,7 @@
 # P1 工程与控制面验收
 
+2026-10-29：P1.4–P1.7 在 Windows x64 完成并有真实证据，见 [P1 退出报告](P1-EXIT-REPORT.md) 与 `evidence/p1/win32-x64/`。下文旧段落为当时范围的历史记录。
+
 2026-10-27 用户正式授权连续实施 P1.4–P1.7，2026-10-28 继续执行；依赖与退出门禁仍按冻结的 `P0-REVIEW.md` 第 5 节、ARCHITECTURE 和 ADR-WIN-001 执行。当前 P1.4 为 in-progress，后续阶段尚未开始，所有未验证能力继续 unverified、agentReady=false。PR #1/#2 与受保护分支不自动合并；重大架构、安全边界或原验收标准变更仍需人工决策。下面历史记录保留其当时范围。
 
 2026-10-25 用户正式授权继续 P1.2/P1.3，2026-10-26 继续执行，停止于 P1.3。基线为 PR #1 的 `2b7da672d94c542f3e1a73272f22a915a6217058`；PR #1 仍 open/unmerged，原三平台 CI 成功，无审查记录。独立分支 `codex/p1-control-plane` 不合并 main。P0 原始验收文档及 ADR 继续保持冻结字节。`build/p0-status.json` 是历史状态，当前阶段读取 `build/p1-status.json`。状态文件是审计索引，不代替人类批准或实际测试。
@@ -22,7 +24,7 @@
 | `pnpm verify:p1` | 当前阶段授权和能力声明、运行时版本、冻结证据 |
 | `pnpm check:boundaries` | 实际 ESLint 源码检查、包清单/exports、TS references、环境类型与来源覆盖 |
 | `pnpm test:integration` | 构建、Node staging、Electron 官方归档核验、真实 Node/Electron 进程测试；写入 `artifacts/p1/<platform-arch>/` |
-| `pnpm package` / `pnpm test:smoke` | 仍退出 1 / NOT_IMPLEMENTED；安装器与安装后测试 NOT_RUN |
+| `pnpm package` / `pnpm test:smoke` | Windows x64：构建 NSIS 安装包；静默安装后执行 SEC-18 烟测并卸载（P1.6，见退出报告） |
 
 本轮真实进程目标仅 Windows x64。macOS/Linux 保留工程与数据库单元测试，进程集成为 NOT_RUN。P1.4～P1.7、公开原生创建、OWIP I/O、AppContainer、原生服务树和安装包均 NOT_RUN。不得把本轮 Main/Express 认证与数据库集成解释为完整 SEC-03（含 Worker）、SEC-17/18、SEC-W01 或 P1 总退出通过。
 
