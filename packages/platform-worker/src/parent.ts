@@ -7,7 +7,9 @@ export interface WorkerLaunchIdentity extends WorkerIdentity { readonly mode: 'i
 export interface FixtureBaseline {
   readonly pid: number; readonly parentPid: number; readonly integrityRid: number; readonly appContainer: true;
   readonly capabilityCount: 0; readonly jobAssignedAtCreation: true; readonly noChildProcessCreation: true;
-  readonly inheritedHandleCount: 1; readonly verifiedBeforeResume: true; readonly profile: string;
+  /** The RPC pipe plus NUL stdin/stdout handles; the pipe is the only channel. */
+  readonly inheritedHandleCount: 3; readonly inheritedHandles: 'rpc-pipe,nul-read,nul-write';
+  readonly verifiedBeforeResume: true; readonly profile: string;
 }
 
 /** The parent end of the one preconnected inherited pipe plus the owned process/Job. */

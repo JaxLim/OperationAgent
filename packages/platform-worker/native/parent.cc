@@ -181,7 +181,14 @@ void create(Run& run) {
   OVERLAPPED connect{}; connect.hEvent = connected.value;
   if (!ConnectNamedPipe(run.pipe.value, &connect) && GetLastError() != ERROR_PIPE_CONNECTED) fail("PIPE_CONNECT");
   Attributes attributes; attributes.initialize(4);
-  attributes.add(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &child.value, sizeof(HANDLE));
+  // Node aborts at startup without valid stdio. The NUL device fills stdin/stdout/stderr; it is the only
+  // other inherited object, so the RPC pipe stays the single channel between Express and the Worker.
+  Handle nulIn(CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, 0, nullptr));
+  if (nulIn.value == INVALID_HANDLE_VALUE) fail("OPEN_NUL_INPUT");
+  Handle nulOut(CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, 0, nullptr));
+  if (nulOut.value == INVALID_HANDLE_VALUE) fail("OPEN_NUL_OUTPUT");
+  HANDLE inherited[] = {child.value, nulIn.value, nulOut.value};
+  attributes.add(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherited, sizeof(inherited));
   attributes.add(PROC_THREAD_ATTRIBUTE_JOB_LIST, &run.job.value, sizeof(HANDLE));
   DWORD childPolicy = PROCESS_CREATION_CHILD_PROCESS_RESTRICTED;
   attributes.add(PROC_THREAD_ATTRIBUTE_CHILD_PROCESS_POLICY, &childPolicy, sizeof(childPolicy));
@@ -204,7 +211,8 @@ void create(Run& run) {
   const auto exe = run.runtime + L"/node.exe";
   std::wstring command = quote(exe) + L" " + quote(run.runtime + L"/bootstrap.mjs");
   STARTUPINFOEXW startup{}; startup.StartupInfo.cb = sizeof(startup); startup.lpAttributeList = attributes.list;
-  startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW; startup.StartupInfo.wShowWindow = SW_HIDE;
+  startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES; startup.StartupInfo.wShowWindow = SW_HIDE;
+  startup.StartupInfo.hStdInput = nulIn.value; startup.StartupInfo.hStdOutput = nulOut.value; startup.StartupInfo.hStdError = nulOut.value;
   PROCESS_INFORMATION process{};
   if (!CreateProcessAsUserW(primary.value, exe.c_str(), command.data(), nullptr, nullptr, TRUE,
     EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | DETACHED_PROCESS,
@@ -241,7 +249,8 @@ OA_ENTRY(LaunchFixture) {
     put(e, evidence, "pid", number(e, run->pid)); put(e, evidence, "parentPid", number(e, run->parent));
     put(e, evidence, "integrityRid", number(e, run->integrity)); put(e, evidence, "appContainer", oa::boolean(e, true));
     put(e, evidence, "capabilityCount", number(e, 0)); put(e, evidence, "jobAssignedAtCreation", oa::boolean(e, true));
-    put(e, evidence, "noChildProcessCreation", oa::boolean(e, true)); put(e, evidence, "inheritedHandleCount", number(e, 1));
+    put(e, evidence, "noChildProcessCreation", oa::boolean(e, true)); put(e, evidence, "inheritedHandleCount", number(e, 3));
+    put(e, evidence, "inheritedHandles", string(e, "rpc-pipe,nul-read,nul-write"));
     put(e, evidence, "verifiedBeforeResume", oa::boolean(e, true)); put(e, evidence, "profile", string(e, narrow(run->profile)));
     put(e, result, "baseline", evidence);
     const napi_property_descriptor method = {"wait", nullptr, Wait, nullptr, nullptr, nullptr, napi_default, nullptr};

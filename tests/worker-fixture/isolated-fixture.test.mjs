@@ -49,7 +49,7 @@ test('public CreateProcessW launches a pre-restricted fixture that completes OWI
   assert.equal(baseline.parentPid, started.hostPid, 'Express is the direct parent');
   assert.equal(baseline.appContainer, true); assert.equal(baseline.capabilityCount, 0);
   assert.ok(baseline.integrityRid <= 0x1000, 'low integrity or lower'); assert.equal(baseline.jobAssignedAtCreation, true);
-  assert.equal(baseline.noChildProcessCreation, true); assert.equal(baseline.inheritedHandleCount, 1); assert.equal(baseline.verifiedBeforeResume, true);
+  assert.equal(baseline.noChildProcessCreation, true); assert.equal(baseline.inheritedHandleCount, 3); assert.equal(baseline.inheritedHandles, 'rpc-pipe,nul-read,nul-write'); assert.equal(baseline.verifiedBeforeResume, true);
   const health = await express.call('health');
   assert.equal(health.result.kind, 'health'); assert.equal(health.result.agentReady, false); assert.equal(health.workerRunId, started.workerRunId);
   await delay(3_500);

@@ -70,7 +70,12 @@ async function poll(): Promise<void> {
     if (!ready) return;
     // A new Express instance means a restart happened: reload everything it owns.
     if (desktop.service.expressRunId !== lastRunId || !state.loaded) { await loadDomain(); lastRunId = desktop.service.expressRunId; }
-    else set({ overview: await api().getOverview() });
+    else {
+      const overview = await api().getOverview();
+      set({ overview });
+      // Express is the source of truth: re-read its data whenever the shown list has drifted from it.
+      if (overview.database.projects !== state.projects.length) await loadDomain();
+    }
   } catch { if (state.connection === 'ready') set({ connection: 'unavailable' }); }
   finally { polling = false; }
 }
