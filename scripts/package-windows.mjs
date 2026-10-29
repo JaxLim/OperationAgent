@@ -33,6 +33,9 @@ await writeFile(resolve(app, 'package.json'), JSON.stringify({ name: 'operation-
   description: 'OperationAgent desktop workbench (Phase 1: control plane, persistence, projects; agent execution gated)',
   author: 'JaxLim', license: 'UNLICENSED', type: 'module', main: 'dist/main/index.js' }, null, 2) + '\n');
 
+// When run via `pnpm package`, npm_* variables would make electron-builder shell out to pnpm for dependency
+// collection. The bundled app has none, so detection must stay on its own package.json.
+for (const key of Object.keys(process.env)) if (/^npm_/i.test(key) || key === 'INIT_CWD') delete process.env[key];
 const { build } = await import('electron-builder');
 // electron-builder detects the package manager from this field; npm finds no dependencies to collect.
 // The P0 base config stays byte-frozen; the P1 Windows overlay adds installer, icon and fuse settings.
