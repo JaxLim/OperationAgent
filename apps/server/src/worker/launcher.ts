@@ -54,7 +54,9 @@ export class FixtureWorker {
         const count = await this.native.write(Buffer.from(frame.buffer, frame.byteOffset, frame.byteLength), OWIP_POLICY.requestMs);
         if (count !== frame.length) throw new Error('OWIP_SHORT_WRITE');
       },
-      close: () => { void this.terminate(); },
+      // Session teardown must not kill the Worker: during a graceful stop it is already exiting by itself.
+      // Termination happens only through fail() or the forced phase of stop(), both of which call terminate().
+      close: () => {},
     }, onClose: error => { if (this.state !== 'stopping' && this.state !== 'stopped') this.fail(error.message); } });
     this.session = session;
     void this.readLoop(session);

@@ -59,7 +59,8 @@ test('the fixture completes the channel-only handshake, answers health and stops
   await delay(2_500);
   assert.equal(worker.snapshot().state, 'ready'); assert.equal(worker.snapshot().session?.missedHeartbeats, 0);
   assert.deepEqual(await worker.stop(), { phase: 'graceful', confirmed: true });
-  assert.equal((await worker.closed).cleanup, 'confirmed'); assert.equal(log.alive.size, 0);
+  const exit = await worker.closed;
+  assert.equal(exit.cleanup, 'confirmed'); assert.equal(exit.exitCode, 0, 'graceful stop must not terminate the Job'); assert.equal(log.alive.size, 0);
 });
 
 for (const [mode, reason] of [['exit', /RPC_DISCONNECTED|WORKER_EXITED/], ['invalid-frame', /OWIP_MAGIC_INVALID/],
