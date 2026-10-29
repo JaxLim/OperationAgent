@@ -35,7 +35,11 @@ await writeFile(resolve(app, 'package.json'), JSON.stringify({ name: 'operation-
 
 const { build } = await import('electron-builder');
 // electron-builder detects the package manager from this field; npm finds no dependencies to collect.
-const config = JSON.parse(await readFile(resolve(root, 'build/electron-builder.config.json'), 'utf8'));
+// The P0 base config stays byte-frozen; the P1 Windows overlay adds installer, icon and fuse settings.
+const base = JSON.parse(await readFile(resolve(root, 'build/electron-builder.config.json'), 'utf8'));
+const overlay = JSON.parse(await readFile(resolve(root, 'build/electron-builder.windows.json'), 'utf8'));
+const config = { ...base, ...overlay };
+if (config.npmRebuild !== false || config.nodeGypRebuild !== false || config.publish !== null || config.electronVersion !== lock.electron) throw new Error('BUILDER_BASELINE_VIOLATED');
 const output = resolve(root, config.directories.output);
 await rm(output, { recursive: true, force: true });
 const electronDist = resolve(root, 'apps/desktop/node_modules/electron/dist');
