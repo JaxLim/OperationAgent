@@ -40,10 +40,11 @@ function inProcessLauncher(log: { pids: number[]; alive: Set<number> }) {
     void runFixture(channel, clock).then(() => end(0), () => end(1));
     return {
       baseline: { pid, parentPid: process.pid, integrityRid: 0x1000, appContainer: true, capabilityCount: 0, jobAssignedAtCreation: true,
-        noChildProcessCreation: true, inheritedHandleCount: 3, inheritedHandles: 'rpc-pipe,nul-read,nul-write', verifiedBeforeResume: true, profile: 'in-process' },
+        noChildProcessCreation: true, inheritedHandleCount: 3, inheritedHandles: 'rpc-pipe,nul-read,stderr-pipe', verifiedBeforeResume: true, profile: 'in-process' },
       read: (max, deadline) => toParent.read(max, deadline),
       write: async frame => { toWorker.push(frame); return frame.length; },
       close: async () => { end(1); await exit; return true; },
+      diagnostics: () => '',
       wait: deadline => Promise.race([exit, delay(deadline).then(() => { throw new Error('WORKER_EXIT_UNCONFIRMED'); })]),
     };
   };

@@ -8,7 +8,7 @@ export interface FixtureBaseline {
   readonly pid: number; readonly parentPid: number; readonly integrityRid: number; readonly appContainer: true;
   readonly capabilityCount: 0; readonly jobAssignedAtCreation: true; readonly noChildProcessCreation: true;
   /** The RPC pipe plus NUL stdin/stdout handles; the pipe is the only channel. */
-  readonly inheritedHandleCount: 3; readonly inheritedHandles: 'rpc-pipe,nul-read,nul-write';
+  readonly inheritedHandleCount: 3; readonly inheritedHandles: 'rpc-pipe,nul-read,stderr-pipe';
   readonly verifiedBeforeResume: true; readonly profile: string;
 }
 
@@ -21,6 +21,8 @@ export interface LaunchedFixture {
   write(frame: Uint8Array, deadlineMs: number): Promise<number>;
   /** Terminates the Job if needed, confirms exit, restores the runtime ACL and deletes the profile. */
   close(): Promise<boolean>;
+  /** Non-blocking read of up to 16 KiB of the Worker's stdout/stderr (diagnostics only). */
+  diagnostics(): string;
   /** Resolves with the exit code once the owned process handle is signalled. */
   wait(deadlineMs: number): Promise<number>;
 }

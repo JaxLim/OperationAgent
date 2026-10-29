@@ -53,7 +53,7 @@ DWORD parentPid(DWORD pid) {
   throw std::runtime_error("PARENT_IDENTITY_UNAVAILABLE");
 }
 struct Run final : Channel {
-  Handle job, process;
+  Handle job, process, diagnostics;
   Sid sid;
   Local originalSecurity;
   PACL originalDacl = nullptr;
@@ -181,13 +181,15 @@ void create(Run& run) {
   OVERLAPPED connect{}; connect.hEvent = connected.value;
   if (!ConnectNamedPipe(run.pipe.value, &connect) && GetLastError() != ERROR_PIPE_CONNECTED) fail("PIPE_CONNECT");
   Attributes attributes; attributes.initialize(4);
-  // Node aborts at startup without valid stdio. The NUL device fills stdin/stdout/stderr; it is the only
-  // other inherited object, so the RPC pipe stays the single channel between Express and the Worker.
+  // Node aborts at startup without valid stdio. stdin is the NUL device; stdout/stderr go to a write-only
+  // anonymous pipe that the parent drains into a bounded diagnostic buffer. Neither carries RPC: the
+  // preconnected named pipe stays the single channel between Express and the Worker.
   Handle nulIn(CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, 0, nullptr));
   if (nulIn.value == INVALID_HANDLE_VALUE) fail("OPEN_NUL_INPUT");
-  Handle nulOut(CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &inherit, OPEN_EXISTING, 0, nullptr));
-  if (nulOut.value == INVALID_HANDLE_VALUE) fail("OPEN_NUL_OUTPUT");
-  HANDLE inherited[] = {child.value, nulIn.value, nulOut.value};
+  Handle diagnosticWrite;
+  if (!CreatePipe(&run.diagnostics.value, &diagnosticWrite.value, &inherit, 65536)) fail("CREATE_DIAGNOSTIC_PIPE");
+  if (!SetHandleInformation(run.diagnostics.value, HANDLE_FLAG_INHERIT, 0)) fail("DIAGNOSTIC_READ_INHERITANCE");
+  HANDLE inherited[] = {child.value, nulIn.value, diagnosticWrite.value};
   attributes.add(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherited, sizeof(inherited));
   attributes.add(PROC_THREAD_ATTRIBUTE_JOB_LIST, &run.job.value, sizeof(HANDLE));
   DWORD childPolicy = PROCESS_CREATION_CHILD_PROCESS_RESTRICTED;
@@ -209,10 +211,11 @@ void create(Run& run) {
   for (const auto& entry : entries) { environment.insert(environment.end(), entry.begin(), entry.end()); environment.push_back(0); }
   environment.push_back(0);
   const auto exe = run.runtime + L"/node.exe";
-  std::wstring command = quote(exe) + L" " + quote(run.runtime + L"/bootstrap.mjs");
+  // Resolving real paths would lstat every ancestor directory, which the AppContainer cannot read.
+  std::wstring command = quote(exe) + L" --preserve-symlinks --preserve-symlinks-main " + quote(run.runtime + L"/bootstrap.mjs");
   STARTUPINFOEXW startup{}; startup.StartupInfo.cb = sizeof(startup); startup.lpAttributeList = attributes.list;
   startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES; startup.StartupInfo.wShowWindow = SW_HIDE;
-  startup.StartupInfo.hStdInput = nulIn.value; startup.StartupInfo.hStdOutput = nulOut.value; startup.StartupInfo.hStdError = nulOut.value;
+  startup.StartupInfo.hStdInput = nulIn.value; startup.StartupInfo.hStdOutput = diagnosticWrite.value; startup.StartupInfo.hStdError = diagnosticWrite.value;
   PROCESS_INFORMATION process{};
   if (!CreateProcessAsUserW(primary.value, exe.c_str(), command.data(), nullptr, nullptr, TRUE,
     EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | DETACHED_PROCESS,
@@ -237,6 +240,21 @@ OA_ENTRY(Wait) {
     if (!GetExitCodeProcess(process->value, exitCode.get())) fail("WORKER_EXIT_CODE");
   }, [exitCode](napi_env e) { return number(e, *exitCode); });
 } OA_END
+// Non-blocking drain of the Worker's stdout/stderr, capped at 16 KiB per call. Text only, never parsed.
+OA_ENTRY(Diagnostics) {
+  auto run = std::dynamic_pointer_cast<Run>(receiver(env, info, 0, nullptr));
+  if (!run) throw std::runtime_error("PARENT_CHANNEL_REQUIRED");
+  std::string text;
+  std::lock_guard<std::mutex> lock(run->cleanupMutex);
+  DWORD available = 0;
+  while (run->diagnostics.value && text.size() < 16384 &&
+    PeekNamedPipe(run->diagnostics.value, nullptr, 0, nullptr, &available, nullptr) && available) {
+    std::vector<char> chunk(std::min<DWORD>(available, static_cast<DWORD>(16384 - text.size()))); DWORD read = 0;
+    if (!ReadFile(run->diagnostics.value, chunk.data(), static_cast<DWORD>(chunk.size()), &read, nullptr) || !read) break;
+    text.append(chunk.data(), read);
+  }
+  return string(env, text);
+} OA_END
 OA_ENTRY(LaunchFixture) {
   napi_value arg; size_t count = 1; check(napi_get_cb_info(env, info, &count, &arg, nullptr, nullptr));
   if (count != 1) throw std::runtime_error("ARGUMENT_COUNT");
@@ -250,11 +268,14 @@ OA_ENTRY(LaunchFixture) {
     put(e, evidence, "integrityRid", number(e, run->integrity)); put(e, evidence, "appContainer", oa::boolean(e, true));
     put(e, evidence, "capabilityCount", number(e, 0)); put(e, evidence, "jobAssignedAtCreation", oa::boolean(e, true));
     put(e, evidence, "noChildProcessCreation", oa::boolean(e, true)); put(e, evidence, "inheritedHandleCount", number(e, 3));
-    put(e, evidence, "inheritedHandles", string(e, "rpc-pipe,nul-read,nul-write"));
+    put(e, evidence, "inheritedHandles", string(e, "rpc-pipe,nul-read,stderr-pipe"));
     put(e, evidence, "verifiedBeforeResume", oa::boolean(e, true)); put(e, evidence, "profile", string(e, narrow(run->profile)));
     put(e, result, "baseline", evidence);
-    const napi_property_descriptor method = {"wait", nullptr, Wait, nullptr, nullptr, nullptr, napi_default, nullptr};
-    check(napi_define_properties(e, result, 1, &method)); return result;
+    const napi_property_descriptor methods[] = {
+      {"wait", nullptr, Wait, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"diagnostics", nullptr, Diagnostics, nullptr, nullptr, nullptr, napi_default, nullptr},
+    };
+    check(napi_define_properties(e, result, 2, methods)); return result;
   });
 } OA_END
 napi_value Init(napi_env env, napi_value exports) {

@@ -20,7 +20,9 @@ export interface FixtureLaunchOptions {
   launcher?: typeof launchIsolatedFixture;
 }
 export type FixtureState = 'starting' | 'ready' | 'stopping' | 'stopped' | 'failed';
-export interface FixtureExit { readonly reason: string; readonly exitCode: number | null; readonly cleanup: 'confirmed' | 'unconfirmed' }
+export interface FixtureExit { readonly reason: string; readonly exitCode: number | null; readonly cleanup: 'confirmed' | 'unconfirmed';
+  /** Bounded tail of the Worker's stderr for diagnosis; never persisted raw or trusted. */
+  readonly stderr: string }
 
 export class FixtureWorker {
   readonly identity: WorkerIdentity;
@@ -67,7 +69,8 @@ export class FixtureWorker {
       this.fail(error instanceof Error ? error.message : 'RPC_HANDSHAKE_FAILED');
       const exit = await this.closed;
       const code = exit.exitCode === null ? 'unknown' : '0x' + (exit.exitCode >>> 0).toString(16);
-      throw new Error(`WORKER_ISOLATION_UNAVAILABLE: ${this.failure ?? 'handshake failed'} (worker exit ${code}, cleanup ${exit.cleanup})`, { cause: error });
+      const stderr = exit.stderr.replace(/\s+/g, ' ').trim().slice(0, 800);
+      throw new Error(`WORKER_ISOLATION_UNAVAILABLE: ${this.failure ?? 'handshake failed'} (worker exit ${code}, cleanup ${exit.cleanup})${stderr ? ' stderr: ' + stderr : ''}`, { cause: error });
     }
   }
   private async readLoop(session: RpcSession): Promise<void> {
@@ -98,7 +101,12 @@ export class FixtureWorker {
       this.exitWaiters.push(() => { clearTimeout(timer); resolve(); });
     });
   }
+  private stderr = '';
+  private drainDiagnostics(): void {
+    try { this.stderr = (this.stderr + this.native.diagnostics()).slice(-4096); } catch { /* Released with the native handle. */ }
+  }
   private fail(reason: string): void {
+    this.drainDiagnostics();
     if (this.state === 'failed' || this.state === 'stopped') return;
     this.failure ??= reason; this.state = 'failed';
     this.session?.close();
@@ -110,7 +118,8 @@ export class FixtureWorker {
       () => { this.cleanup = 'unconfirmed'; }).then(() => {
       for (const waiter of this.exitWaiters.splice(0)) waiter();
       if (this.state !== 'stopped') this.state = this.state === 'stopping' ? 'stopped' : 'failed';
-      this.finish({ reason: this.failure ?? 'STOPPED', exitCode: this.exitCode, cleanup: this.cleanup ?? 'unconfirmed' });
+      this.drainDiagnostics();
+      this.finish({ reason: this.failure ?? 'STOPPED', exitCode: this.exitCode, cleanup: this.cleanup ?? 'unconfirmed', stderr: this.stderr });
     });
     return this.closing;
   }
