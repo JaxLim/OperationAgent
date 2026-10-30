@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "phase": "P2",
+  "dependsOn": { "file": "build/p1-status.json", "p1TotalExit": "PASS_WIN32_X64" },
+  "authorizedStages": ["P2.0", "P2.1", "P2.2", "P2.3"],
+  "stopAfter": "P2.3",
+  "authorization": {
+    "kind": "user-message",
+    "date": "2026-10-30",
+    "quote": "Authorize P2.0–P2.3",
+    "question": "Which P2 scope do you formally authorize, so I can record it and finish the merge?"
+  },
+  "implementation": { "P2.0": "implemented", "P2.1": "not-started", "P2.2": "not-started", "P2.3": "not-started" },
+  "p2TotalExit": "NOT_RUN",
+  "agentReady": false,
+  "productionWorkerQualified": false,
+  "platformCapabilities": {
+    "win32-x64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },
+    "darwin-arm64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" },
+    "linux-x64": { "ui": "unverified", "read": "unverified", "gitRead": "unverified", "highRisk": "unverified", "workerIsolation": "unverified" }
+  }
+}
