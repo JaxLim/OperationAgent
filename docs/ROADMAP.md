@@ -5,8 +5,8 @@
 ## 1. 现状
 
 - P1.0–P1.7 已在 Windows x64 以真实 CI 证据退出（[P1 退出报告](P1-EXIT-REPORT.md)）；`agentReady=false`，生产 Worker 无资格，三平台全部能力 `unverified`。
-- contracts 仅含版本、握手、health/shutdown、控制面 HTTP 与 Workbench 外壳；无 Task、TaskEvent、工具流或领域错误契约。
-- SQLite 迁移止于 `003-workbench.sql`；没有任务表、事件表或补拉游标。
+- P2.0 契约（PR #3）已合并：工具流、任务状态机、TaskEvent、领域错误。
+- P2.1 事件存储：迁移 `004-task-events.sql`（`tasks` 和只追加的 `task_events`）及 Express 内 `persistence/tasks.ts`；数据库版本为 4。尚无 HTTP 路由、快照接口或补拉接口，这些属于 P2.2。
 - 本地开发需把 `.tools/node` 置于 PATH 前部，否则 `pnpm run` 内嵌脚本使用系统 Node 并因 `engines` 失败。
 
 ## 2. 优先级排序

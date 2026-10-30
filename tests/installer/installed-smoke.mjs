@@ -123,7 +123,7 @@ try {
   await step('graceful window close stops the sidecar and commits a clean run', async () => {
     await closeGracefully(first.app);
     const db = await inspect();
-    assert.deepEqual(db.migrations, [1, 2, 3]); assert.deepEqual(db.runs, ['CLEAN']);
+    assert.deepEqual(db.migrations, [1, 2, 3, 4]); assert.deepEqual(db.runs, ['CLEAN']);
     assert.equal(db.node, '24.22.1'); return db;
   });
   await step('installed sidecar writes durable workbench data through the authenticated API', async () => {

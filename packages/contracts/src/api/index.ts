@@ -21,7 +21,7 @@ export type SmokeRecord = z.infer<typeof SmokeRecordSchema>;
 export type SmokeRecords = z.infer<typeof SmokeRecordsSchema>;
 export const ControlHealthSchema = z.strictObject({ protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.literal(false),
-  databaseVersion: z.literal(3), recoveredRuns: z.number().int().nonnegative() });
+  databaseVersion: z.literal(4), recoveredRuns: z.number().int().nonnegative() });
 export type ControlHealth = z.infer<typeof ControlHealthSchema>;
 export const BootstrapSchema = z.strictObject({ kind: z.literal('bootstrap'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, token: z.string().regex(/^[a-f0-9]{64}$/),

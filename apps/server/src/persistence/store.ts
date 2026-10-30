@@ -7,12 +7,16 @@ import { randomUUID } from 'node:crypto';
 import { ControlRunListSchema, DEFAULT_WORKBENCH_SETTINGS, ProjectInputSchema, ProjectListSchema, ProjectSchema, SmokeBatchSchema,
   SmokeRecordsSchema, WORKBENCH_LIMITS, WorkbenchSettingsSchema } from '@operation-agent/contracts';
 import type { ControlRun, Project, SmokeBatch, SmokeRecord, WorkbenchSettings } from '@operation-agent/contracts';
+import { createTaskLog } from './tasks.js';
+import type { TaskLog } from './tasks.js';
 
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
-const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql'];
-export interface Store {
+const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql'];
+export interface Store extends TaskLog {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;
+  /** Unfinished tasks moved to INTERRUPTED when this instance opened the database. */
+  readonly recoveredTasks: number;
   readonly sqliteVersion: string;
   insertRecords(records: SmokeBatch['records']): SmokeRecord[];
   listRecords(): SmokeRecord[];
@@ -61,10 +65,11 @@ export function openStore(directory: string, runId: string, migrationDirectory =
         db.prepare('INSERT INTO schema_migrations VALUES (?, ?)').run(index + 1, sources[index]!.hash);
       }
     }).immediate();
-    const recoveredRuns = db.transaction(() => {
+    const tasks = createTaskLog(db);
+    const { recoveredRuns, recoveredTasks } = db.transaction(() => {
       const interrupted = db.prepare("UPDATE control_plane_runs SET outcome = 'INTERRUPTED', ended_at = ? WHERE outcome = 'RUNNING'").run(new Date().toISOString()).changes;
       db.prepare("INSERT INTO control_plane_runs(id, started_at, outcome) VALUES (?, ?, 'RUNNING')").run(runId, new Date().toISOString());
-      return interrupted;
+      return { recoveredRuns: interrupted, recoveredTasks: tasks.interruptUnfinished() };
     }).immediate();
     const select = db.prepare('SELECT id, value, created_at AS createdAt FROM smoke_records ORDER BY created_at, id LIMIT 100');
     const readSettings = db.prepare<[], { value: string }>("SELECT value FROM settings WHERE key = 'workbench'");
@@ -81,8 +86,10 @@ export function openStore(directory: string, runId: string, migrationDirectory =
     };
     const sqliteVersion = (db.prepare('SELECT sqlite_version() AS version').get() as { version: string }).version;
     return {
+      ...tasks,
       databaseVersion: migrationNames.length,
       recoveredRuns,
+      recoveredTasks,
       sqliteVersion,
       getSettings: settings,
       saveSettings(input) {
