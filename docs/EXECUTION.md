@@ -280,3 +280,14 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
 回归先在旧代码实际失败：前导 NUL 触发 `SQLITE_CONSTRAINT_CHECK`；共享预算耗尽后合法请求返回 `429`。修复后 `pnpm check:p1` 全部门禁通过：**47/47 工程/数据库测试、13/13 Windows 真实 Node/Electron 进程测试，0 fail、0 skipped**。覆盖前导/全 NUL、中文/代理对长度边界、真实 Preload 最坏转义关闭重开、未认证及重放洪泛、普通认证突发、独立心跳限额；跨越租约期限后原 Sidecar PID/实例保持、重启计数为 0。P0 冻结重放、类型、lint、导入边界、构建均通过。
 
 本地证据位于 `artifacts/p1/win32-x64/`，完成时间 `2026-10-27T12:04:20.258Z`，基线 `5fa460c` 且 `sourceDirty=true`；不将工作树结果冒充该基线 CI。新提交的 GitHub CI/审查状态另以 PR #2 的真实记录为准。用户本次已授权 P1.4–P1.7 连续开发；本修复提交仍只包含 P1.2/P1.3 修复，不提前宣称后续阶段通过。
+
+## P2.0 契约基础（2026-10-30，本地，未提交）
+
+用户要求评审现状、排出路线图（见 [ROADMAP.md](ROADMAP.md)），并执行约一小时可完成的工作。本节只记录这部分工作。`build/p1-status.json` 和检查器均未改动，P2 的阶段授权还需另行正式记录；本轮不声称 P2 已开始或已通过。
+
+- 新增 `packages/contracts/src/events/tool-output.ts`（§9.1.1）。`deltaPersistence` 只能取 `transient`，chunk 按 UTF-8 字节限长，摘要计数做一致性校验；`TOOL_OUTPUT_PERSISTENCE` 规定只有摘要会持久化。
+- 新增 `packages/contracts/src/events/task.ts`：九个任务状态和冻结的迁移表。在 §8.1 示意图的基础上，补了 §8.2–8.4 要求的停止边和中断边。`STOPPED` 要求 `cleanupConfirmed`，`INTERRUPTED` 恢复要求 `userConfirmed`，终态不再迁移。另有 `SideEffectStatus`、`TaskEvent`（任务内从 1 开始、无间隙的 `seq`）和纯函数 `replayTaskEvents`：它拒绝序号间隙、重复事件、跨任务事件和状态不连续，发现问题只报告、不修复。
+- `errors/` 新增领域错误 `AppErrorSchema` / `DomainErrorCodeSchema`。原 RPC `ErrorCodeSchema` 不变，有测试锁定。
+- 没有改数据库、HTTP 路由、Preload、Renderer 或 Worker，执行能力不变，任务入口仍返回 `WORKER_ISOLATION_UNAVAILABLE`。
+
+验证：在 PATH 前部放 `.tools/node`（v24.22.1）后运行 `pnpm check:engineering`，七项全部退出 0（typecheck、lint、check:boundaries、test、build、verify:p0、verify:p1）。测试从 76/76 增加到 **84/84**，0 fail。另做一次变异检查：给 `STOPPING` 临时加上 `FAILED` 边后，对应测试失败；还原后通过。没有运行 `test:integration`、安装包或 CI，这部分仍待提交后由 CI 产生证据。
