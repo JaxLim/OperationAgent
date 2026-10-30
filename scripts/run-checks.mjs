@@ -11,7 +11,7 @@ const output = resolve('artifacts/p1', target); mkdirSync(output, { recursive: t
 const source = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', windowsHide: true }).stdout?.trim();
 const sourceDirty = Boolean(spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', windowsHide: true }).stdout?.trim());
 const results = [];
-const names = ['typecheck', 'lint', 'check:boundaries', 'test', 'build', 'verify:p0', 'verify:p1', ...(engineeringOnly ? [] : ['test:integration'])];
+const names = ['typecheck', 'lint', 'check:boundaries', 'test', 'build', 'verify:p0', 'verify:p1', 'verify:p2', ...(engineeringOnly ? [] : ['test:integration'])];
 for (const name of names) {
   const result = spawnSync(process.execPath, [packageManager, 'run', name], {
     encoding: 'utf8', shell: false, windowsHide: true, maxBuffer: 16 * 1024 * 1024,

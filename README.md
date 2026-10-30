@@ -4,7 +4,7 @@
 
 规范来源：[ARCHITECTURE.md](ARCHITECTURE.md)、[AGENTS.md](AGENTS.md)，现为 `0.4.0-p0`。已按用户正式批准的 [ADR-WIN-001 r1](docs/adr/ADR-WIN-001.md) 更新，批准记录绑定决策包与规范补丁哈希。
 
-当前阶段记录和命令语义见 [P1 验收](docs/P1-ACCEPTANCE.md) 与 `build/p1-status.json`。P0 文件保持为冻结历史，不用改写旧批准记录推进阶段。
+当前阶段记录和命令语义见 [P1 验收](docs/P1-ACCEPTANCE.md) 与 `build/p1-status.json`；P2 授权与范围记录在 `build/p2-status.json`（`pnpm verify:p2` 校验，见 [路线图](docs/ROADMAP.md)）。P0 文件保持为冻结历史，不用改写旧批准记录推进阶段。
 
 已建立七个 workspace 包和 Main/Preload/Renderer 独立 TypeScript 项目。Express 使用版本化 SQL migration 和独占 SQLite 连接；Main 通过继承通道建立服务身份，以认证的回环 HTTP 代理固定 API。Windows 平台 WorkerLauncher（公开 API + AppContainer + Job + OWIP/1）只在一次性 runner 上启动受限测试 fixture；发布构建不包含 fixture，任务入口返回 `WORKER_ISOLATION_UNAVAILABLE`。证据见 `docs/evidence/p1/win32-x64/`。
 

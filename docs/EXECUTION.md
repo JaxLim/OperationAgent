@@ -291,3 +291,16 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
 - 没有改数据库、HTTP 路由、Preload、Renderer 或 Worker，执行能力不变，任务入口仍返回 `WORKER_ISOLATION_UNAVAILABLE`。
 
 验证：在 PATH 前部放 `.tools/node`（v24.22.1）后运行 `pnpm check:engineering`，七项全部退出 0（typecheck、lint、check:boundaries、test、build、verify:p0、verify:p1）。测试从 76/76 增加到 **84/84**，0 fail。另做一次变异检查：给 `STOPPING` 临时加上 `FAILED` 边后，对应测试失败；还原后通过。没有运行 `test:integration`、安装包或 CI，这部分仍待提交后由 CI 产生证据。
+
+### P2 授权记录（2026-10-30）
+
+用户在 PR #3 合并前正式授权 P2 范围。原话：“Authorize P2.0–P2.3”，回答的问题是 “Which P2 scope do you formally authorize, so I can record it and finish the merge?”。记录方式沿用 P1：
+
+- `build/p2-status.json`：授权阶段 P2.0–P2.3，止于 P2.3；P2.0 标为 implemented，P2.1–P2.3 标为 not-started；`p2TotalExit=NOT_RUN`；`agentReady=false`；三平台能力全部 unverified。`build/p1-status.json` 保持不变。
+- `scripts/p2-check.ts`（`pnpm verify:p2`，已加入 `run-checks`，CI 中随 `check:p1` / `check:engineering` 运行）：
+  - 逐字校验授权原话和日期；
+  - 要求 P1 已有证据支撑的退出（`PASS_WIN32_X64`）；
+  - P2.0 的完成声明要求契约文件存在；
+  - 在各自证据检查建立前，拒绝把 P2.1–P2.3 或 P2 总退出标为完成；
+  - 拒绝越出授权范围和任何虚假资格。
+- `tests/p2/stage.test.ts` 覆盖上述各项的正例和负例。
