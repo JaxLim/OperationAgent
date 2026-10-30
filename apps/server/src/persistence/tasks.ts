@@ -35,6 +35,9 @@ type EventRow = { taskId: string; seq: number; eventId: string; type: string; re
 type TaskRow = { id: string; projectId: string; state: string; lastSeq: number; createdAt: string; updatedAt: string };
 const eventColumns = `task_id AS taskId, seq, event_id AS eventId, type, request_id AS requestId, occurred_at AS occurredAt, payload`;
 const DISPATCH_POSSIBLE: readonly TaskState[] = ['RUNNING', 'WAITING_APPROVAL', 'STOPPING'];
+/** Key-order-independent JSON, so two schema-parsed values compare by content. */
+const canonical = (value: unknown): string => JSON.stringify(value, (_, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
+  ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : item);
 
 export function createTaskLog(db: Database.Database): TaskLog {
   const selectTask = db.prepare<[string], TaskRow>(`SELECT id, project_id AS projectId, state, last_seq AS lastSeq,
@@ -52,7 +55,10 @@ export function createTaskLog(db: Database.Database): TaskLog {
   const task = (id: string): TaskSnapshot | null => { const row = selectTask.get(id); return row ? TaskSnapshotSchema.parse(row) : null; };
   const existing = (id: string): TaskSnapshot => { const found = task(id); if (!found) throw new Error('NOT_FOUND'); return found; };
 
-  /** A repeated request id returns the committed result if it was the same operation, and is rejected otherwise. */
+  /**
+   * A repeated request id returns the committed result only if every recorded field of the operation is identical
+   * (task, type and the complete normalized payload); any difference is REQUEST_CONFLICT, never a silent replay.
+   */
   const replay = (requestId: string, same: (event: TaskEvent) => boolean): TaskCommit | null => {
     const row = selectByRequest.get(requestId);
     if (!row) return null;
@@ -91,14 +97,16 @@ export function createTaskLog(db: Database.Database): TaskLog {
     },
     transitionTask(taskId, to, input) {
       const target = TaskStateSchema.parse(to);
+      // `from` is derived at commit time and the confirmations are preconditions, so neither is part of the identity.
       return db.transaction(() => replay(input.requestId, event => event.taskId === taskId && event.type === 'task_state_changed' &&
-        event.payload.to === target) ?? change(existing(taskId), target, input, input.requestId)).immediate();
+        event.payload.to === target && event.payload.sideEffects === (input.sideEffects ?? null) && event.payload.reason === (input.reason ?? null))
+        ?? change(existing(taskId), target, input, input.requestId)).immediate();
     },
     recordToolSummary(input, requestId) {
       const summary = ToolOutputSummarySchema.parse(input);
       return db.transaction(() => {
-        const repeated = replay(requestId, event => event.type === 'tool_output_summary' && event.payload.toolCallId === summary.toolCallId &&
-          event.payload.attemptId === summary.attemptId);
+        const repeated = replay(requestId, event => event.type === 'tool_output_summary' && event.taskId === summary.taskId &&
+          canonical(event.payload) === canonical(summary));
         if (repeated) return repeated;
         const current = existing(summary.taskId);
         if (TERMINAL_TASK_STATES.includes(current.state)) throw new Error('TASK_TERMINAL');

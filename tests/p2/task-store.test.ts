@@ -72,7 +72,18 @@ test('a repeated request id is applied once, and reusing it for another operatio
     const recorded = store.recordToolSummary(summary(first.task.id), summaryId);
     assert.deepEqual(store.recordToolSummary(summary(first.task.id), summaryId).event, recorded.event);
     assert.throws(() => store.recordToolSummary(summary(first.task.id), queueId), /REQUEST_CONFLICT/);
+    // Same request id and tool call, but a different result or task: a conflict, never the earlier commit.
+    const other = store.createTask(projectId, randomUUID()).task.id;
+    for (const changed of [{ exitCode: 1 }, { exitCode: null }, { stdoutBytes: 5 }, { sampledBytes: 3 }, { taskId: other },
+      { diagnostics: [{ severity: 'error' as const, summary: 'failed' }] }]) {
+      assert.throws(() => store.recordToolSummary({ ...summary(first.task.id), ...changed }, summaryId), /REQUEST_CONFLICT/, JSON.stringify(changed));
+    }
+    for (const changed of [{ sideEffects: 'UNKNOWN' as const }, { reason: 'Different reason' }]) {
+      assert.throws(() => store.transitionTask(first.task.id, 'QUEUED', { requestId: queueId, ...changed }), /REQUEST_CONFLICT/, JSON.stringify(changed));
+    }
+    assert.throws(() => store.transitionTask(other, 'QUEUED', { requestId: queueId }), /REQUEST_CONFLICT/);
     assert.deepEqual(store.listTaskEvents(first.task.id, 0).map(event => event.type), ['task_created', 'task_state_changed', 'tool_output_summary']);
+    assert.deepEqual(store.listTaskEvents(other, 0).map(event => event.type), ['task_created']);
     assert.equal(store.getTask(first.task.id)?.state, 'QUEUED');
   } finally { store.close(true); }
 }));
