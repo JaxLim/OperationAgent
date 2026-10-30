@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AppErrorSchema, ErrorCodeSchema, OutputPolicySchema, TASK_TRANSITIONS, TERMINAL_TASK_STATES, TOOL_OUTPUT_LIMITS,
   TOOL_OUTPUT_PERSISTENCE, TaskEventSchema, TaskStateSchema, ToolOutputEventSchema, checkTaskTransition, replayTaskEvents,
-  utf8ByteLength } from '../../packages/contracts/dist/index.js';
-import type { TaskEvent, TaskState } from '../../packages/contracts/dist/index.js';
+  utf8ByteLength } from '../../packages/contracts/dist/index.js';import type { TaskEvent, TaskState } from '../../packages/contracts/dist/index.js';
 
 const taskId = '11111111-1111-4111-8111-111111111111';
 const ids = { taskId, toolCallId: '22222222-2222-4222-8222-222222222222', attemptId: '33333333-3333-4333-8333-333333333333' };
@@ -36,6 +35,24 @@ test('summaries reject inconsistent counts and unbounded diagnostics', () => {
     assert.equal(ToolOutputEventSchema.safeParse({ ...summary(), ...change }).success, false, JSON.stringify(change).slice(0, 60));
   }
   assert.equal(ToolOutputEventSchema.safeParse({ ...summary(), exitCode: null }).success, true);
+});
+
+test('summaries are bounded by their persisted UTF-8 size, not only by diagnostic counts', () => {
+  const cjk = (chars: number) => ({ severity: 'error', summary: '中'.repeat(chars) });
+  // 20 diagnostics × 512 CJK characters pass every per-field limit but exceed the persisted ceiling.
+  const oversized = { ...summary(), diagnostics: Array.from({ length: TOOL_OUTPUT_LIMITS.maxDiagnostics }, () => cjk(512)) };
+  assert.equal(ToolOutputEventSchema.safeParse(oversized).success, false);
+  // Fill to exactly the ceiling with multibyte text, then add one byte.
+  const size = (value: unknown) => utf8ByteLength(JSON.stringify(value));
+  const exact = { ...summary(), diagnostics: [] as Array<{ severity: string; summary: string }> };
+  while (size({ ...exact, diagnostics: [...exact.diagnostics, cjk(512)] }) <= TOOL_OUTPUT_LIMITS.maxPersistedSummaryBytes) exact.diagnostics.push(cjk(512));
+  exact.diagnostics.push(cjk(1));
+  while (size(exact) + 3 <= TOOL_OUTPUT_LIMITS.maxPersistedSummaryBytes) exact.diagnostics.at(-1)!.summary += '中';
+  exact.diagnostics.at(-1)!.summary += 'x'.repeat(TOOL_OUTPUT_LIMITS.maxPersistedSummaryBytes - size(exact));
+  assert.equal(size(exact), TOOL_OUTPUT_LIMITS.maxPersistedSummaryBytes);
+  assert.equal(ToolOutputEventSchema.safeParse(exact).success, true);
+  exact.diagnostics.at(-1)!.summary += 'x';
+  assert.equal(ToolOutputEventSchema.safeParse(exact).success, false);
 });
 
 test('output policy cannot request per-chunk persistence or exceed the trusted limits', () => {

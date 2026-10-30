@@ -43,7 +43,9 @@ export const ToolOutputSummarySchema = z.strictObject({
   exitCode: z.number().int().nullable(),
   diagnostics: z.array(ToolDiagnosticSchema).max(TOOL_OUTPUT_LIMITS.maxDiagnostics),
 }).refine(value => value.sampledBytes <= value.stdoutBytes + value.stderrBytes &&
-  value.truncatedBytes <= value.stdoutBytes + value.stderrBytes, 'SUMMARY_COUNTS_INCONSISTENT');
+  value.truncatedBytes <= value.stdoutBytes + value.stderrBytes, 'SUMMARY_COUNTS_INCONSISTENT')
+  // Hard ceiling on the persisted (JSON, UTF-8) form; a tool's OutputPolicy may only set a lower limit.
+  .refine(value => utf8ByteLength(JSON.stringify(value)) <= TOOL_OUTPUT_LIMITS.maxPersistedSummaryBytes, 'SUMMARY_TOO_LARGE');
 export type ToolOutputSummary = z.infer<typeof ToolOutputSummarySchema>;
 
 export const OutputPolicySchema = z.strictObject({
