@@ -48,6 +48,23 @@ export const IconDot = make(<circle cx="12" cy="12" r="3" fill="currentColor" st
 export const IconMoon = make(<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />);
 export const IconArchive = make(<><rect x="3.5" y="4.5" width="17" height="4" rx="1" /><path d="M5 8.5v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9" /><path d="M10 12.5h4" /></>);
 
+export const IconCompose = make(<><path d="M12 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V12" /><path d="M17.6 3.9a1.9 1.9 0 0 1 2.7 2.7L12.5 14.4 9 15l.6-3.5z" /></>);
+export const IconChat = make(<path d="M5.5 18.5 4 21l3.8-1.4A8.5 8.5 0 1 0 4 12.5a8.4 8.4 0 0 0 1.5 6z" />);
+export const IconPaperclip = make(<path d="m20 11.5-7.7 7.7a5 5 0 0 1-7.1-7.1l8.1-8.1a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.7 1.7 0 0 1-2.4-2.4l7.3-7.3" />);
+export const IconPuzzle = make(<path d="M9.5 4.5a2 2 0 1 1 4 0v1h4a1 1 0 0 1 1 1v4h-1a2 2 0 1 0 0 4h1v4a1 1 0 0 1-1 1h-4v-1a2 2 0 1 0-4 0v1h-4a1 1 0 0 1-1-1v-4h1a2 2 0 1 0 0-4h-1v-4a1 1 0 0 1 1-1h4z" />);
+export const IconTarget = make(<><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r=".8" fill="currentColor" /></>);
+export const IconLaptop = make(<><rect x="4.5" y="5.5" width="15" height="10" rx="1.5" /><path d="M2.5 18.5h19" /></>);
+export const IconPalette = make(<><path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.2-1-1.6-1-2.6 0-1 .8-1.7 1.9-1.7h2a3.8 3.8 0 0 0 3.8-3.8c0-4.1-3.8-7.2-8.5-7.2z" /><circle cx="7.8" cy="11" r=".9" fill="currentColor" /><circle cx="10.5" cy="7.5" r=".9" fill="currentColor" /><circle cx="15" cy="7.8" r=".9" fill="currentColor" /></>);
+export const IconKey = make(<><circle cx="8" cy="15" r="4" /><path d="m10.8 12.2 8.7-8.7" /><path d="m16.5 6.5 2.5 2.5" /><path d="m14 9 2 2" /></>);
+export const IconSliders = make(<><path d="M4 7h9" /><path d="M17 7h3" /><circle cx="15" cy="7" r="2" /><path d="M4 17h3" /><path d="M11 17h9" /><circle cx="9" cy="17" r="2" /></>);
+export const IconChart = make(<><path d="M4 20h16" /><path d="M7 16.5v-5" /><path d="M12 16.5v-10" /><path d="M17 16.5v-7" /></>);
+export const IconBell = make(<><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" /><path d="M10 20.5a2.2 2.2 0 0 0 4 0" /></>);
+export const IconMic = make(<><rect x="9" y="3.5" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" /><path d="M12 18v2.5" /></>);
+export const IconWrench = make(<path d="M14.5 6.5a4 4 0 0 0 5 5l-8.7 8.7a2.1 2.1 0 0 1-3-3L16.5 8.5a4 4 0 0 1-2-2zM14.5 6.5l3-3a4 4 0 0 0-3 3z" />);
+export const IconMore = make(<><circle cx="6" cy="12" r="1.1" fill="currentColor" /><circle cx="12" cy="12" r="1.1" fill="currentColor" /><circle cx="18" cy="12" r="1.1" fill="currentColor" /></>);
+export const IconFolderPlus = make(<><path d="M3.5 6.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /><path d="M12 11v5" /><path d="M9.5 13.5h5" /></>);
+export const IconGauge = make(<><path d="M4.2 16.5a8.5 8.5 0 1 1 15.6 0" /><path d="m12 13 3.5-4" /><circle cx="12" cy="13.5" r="1.2" /></>);
+
 export function Spinner({ size = 14 }: { size?: number }) {
   return (
     <svg className="spinner" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">

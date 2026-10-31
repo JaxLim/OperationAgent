@@ -25,11 +25,11 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   const renderer = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
   const expectedUrl = pathToFileURL(renderer).href;
   Menu.setApplicationMenu(null);
-  // The Renderer draws its own 44 px titlebar; Windows keeps native caption buttons as an overlay.
+  // The Renderer draws its own 44 px headers; Windows keeps native caption buttons as an overlay on the canvas colour.
   const chrome = (): { color: string; symbolColor: string; height: number } => nativeTheme.shouldUseDarkColors
-    ? { color: '#191918', symbolColor: '#ecebe7', height: 43 } : { color: '#f0eee9', symbolColor: '#1c1b19', height: 43 };
+    ? { color: '#1c1c1e', symbolColor: '#ececef', height: 43 } : { color: '#fcfcfb', symbolColor: '#1b1b1f', height: 43 };
   const window = new BrowserWindow({ show: false, width: 1360, height: 860, minWidth: 960, minHeight: 600, title: 'OperationAgent',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#151514' : '#f7f6f3', autoHideMenuBar: true,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#fcfcfb', autoHideMenuBar: true,
     ...(process.platform === 'win32' ? { titleBarStyle: 'hidden' as const, titleBarOverlay: chrome() } : {}), webPreferences: {
       contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, webviewTag: false, spellcheck: false,
       preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),

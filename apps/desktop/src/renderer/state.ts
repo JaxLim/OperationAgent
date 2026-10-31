@@ -8,8 +8,10 @@ declare global { interface Window { readonly operationAgent: DesktopApi } }
 // The Renderer only mirrors views returned by Main/Express. It never decides capability or success itself.
 
 export type Connection = 'connecting' | 'ready' | 'restarting' | 'unavailable';
-export interface Submission { readonly id: string; readonly projectId: string; readonly prompt: string; readonly at: number;
-  readonly outcome: 'refused' | 'failed'; readonly code: string }
+export interface Submission { readonly id: string; readonly projectId: string; readonly prompt: string; readonly goal: string | null;
+  readonly at: number; readonly outcome: 'refused' | 'failed'; readonly code: string }
+/** Feedback for auto-saved preferences: what the control plane last confirmed, never assumed. */
+export type SaveStatus = { state: 'idle' | 'saving' | 'saved' } | { state: 'failed'; code: string };
 export interface Notice { readonly id: number; readonly tone: 'ok' | 'warn' | 'danger'; readonly text: string }
 /**
  * A task's committed log as this window has applied it. `appliedSeq`/`replayed` are the catch-up cursor; the
@@ -40,10 +42,12 @@ export interface AppState {
   /** Model choice and credential status as Express reports them; never key material. */
   model: ModelSettingsView | null;
   modelTest: { state: 'idle' | 'running' } | { state: 'done'; result: ModelTestResult } | { state: 'failed'; code: string };
+  saveStatus: SaveStatus;
 }
 
 let state: AppState = { connection: 'connecting', desktop: null, overview: null, settings: null, projects: [], runs: [],
-  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' } };
+  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' },
+  saveStatus: { state: 'idle' } };
 const listeners = new Set<() => void>();
 function set(next: Partial<AppState>): void { state = { ...state, ...next }; for (const listener of listeners) listener(); }
 export const store = {
@@ -60,6 +64,7 @@ export function errorCode(error: unknown): string {
   const match = error instanceof Error ? /([A-Z][A-Z_]{3,})\s*$/.exec(error.message) : null;
   return match?.[1] ?? 'CONTROL_PLANE_REQUEST_FAILED';
 }
+export function composePrompt(prompt: string, goal: string | null): string { return goal ? `${prompt}\n\nGoal: ${goal}` : prompt; }
 let noticeId = 0;
 export function notify(tone: Notice['tone'], text: string): void {
   const notice = { id: ++noticeId, tone, text };
@@ -170,10 +175,14 @@ export const actions = {
   async saveSettings(patch: Partial<WorkbenchSettings>): Promise<void> {
     if (!state.settings) return;
     const previous = state.settings; const next = { ...previous, ...patch };
-    set({ settings: next });
-    try { set({ settings: await api().saveSettings(next) }); }
-    catch (error) { set({ settings: previous }); notify('danger', `Settings were not saved (${errorCode(error)}).`); }
+    set({ settings: next, saveStatus: { state: 'saving' } });
+    try { set({ settings: await api().saveSettings(next), saveStatus: { state: 'saved' } }); }
+    catch (error) {
+      const code = errorCode(error);
+      set({ settings: previous, saveStatus: { state: 'failed', code } }); notify('danger', `Settings were not saved (${code}).`);
+    }
   },
+  resetSaveStatus(): void { if (state.saveStatus.state !== 'saving') set({ saveStatus: { state: 'idle' } }); },
   async selectProject(id: string): Promise<void> { set({ selectedTaskId: null }); await actions.saveSettings({ activeProjectId: id }); },
   async addProject(): Promise<void> {
     try {
@@ -195,12 +204,13 @@ export const actions = {
       if (state.settings && !state.settings.activeProjectId && list.projects[0]) await actions.selectProject(list.projects[0].id);
     } catch (error) { notify('danger', `Could not remove the project (${errorCode(error)}).`); }
   },
-  async submitTask(projectId: string, prompt: string): Promise<void> {
+  /** A goal travels inside the prompt text the control plane receives; it is kept apart here only to display it. */
+  async submitTask(projectId: string, prompt: string, goal: string | null = null): Promise<void> {
     const at = Date.now(); const id = crypto.randomUUID();
     let outcome: Submission['outcome'] = 'refused'; let code: string;
-    try { code = (await api().startTask({ projectId, prompt })).error; }
+    try { code = (await api().startTask({ projectId, prompt: composePrompt(prompt, goal) })).error; }
     catch (error) { outcome = 'failed'; code = errorCode(error); }
-    set({ submissions: [...state.submissions, { id, projectId, prompt, at, outcome, code }].slice(-20) });
+    set({ submissions: [...state.submissions, { id, projectId, prompt, goal, at, outcome, code }].slice(-20) });
   },
   async refreshModel(): Promise<void> {
     try { set({ model: await api().getModelSettings() }); } catch { /* The status banner reports availability. */ }
@@ -209,9 +219,12 @@ export const actions = {
     const previous = state.model;
     if (!previous || previous.model === model) return;
     modelRevision++;
-    set({ model: { ...previous, model }, modelTest: { state: 'idle' } });
-    try { set({ model: await api().saveModelChoice({ model }) }); }
-    catch (error) { set({ model: previous }); notify('danger', `Model was not saved (${errorCode(error)}).`); }
+    set({ model: { ...previous, model }, modelTest: { state: 'idle' }, saveStatus: { state: 'saving' } });
+    try { set({ model: await api().saveModelChoice({ model }), saveStatus: { state: 'saved' } }); }
+    catch (error) {
+      const code = errorCode(error);
+      set({ model: previous, saveStatus: { state: 'failed', code } }); notify('danger', `Model was not saved (${code}).`);
+    }
   },
   /**
    * Hands the key to Main once. It is not kept in this store; the caller clears its input. Returns the fixed error

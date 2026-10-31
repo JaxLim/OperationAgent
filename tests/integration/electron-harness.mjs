@@ -128,9 +128,9 @@ process.on('message', async message => {
           const wait = async (check, ms = 15000) => { const end = Date.now() + ms;
             while (Date.now() < end) { const found = check(); if (found) return found; await new Promise(done => setTimeout(done, 50)); }
             throw new Error('UI_TIMEOUT ' + (document.querySelector('.modal')?.textContent ?? 'no dialog')); };
-          await wait(() => document.querySelector('.statusbar .sb-button'));
+          await wait(() => document.querySelector('.app[data-loaded="true"]'));
           window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));
-          (await wait(() => document.querySelector('.settings-nav button[data-section="Model"]'))).click();
+          (await wait(() => document.querySelector('.settings-nav button[data-section="models"]'))).click();
           const input = await wait(() => { const found = document.querySelector('input[aria-label="Anthropic API key"]'); return found && !found.disabled ? found : null; });
           const emptyState = document.querySelector('.key-form')?.dataset.keyState;
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, key);
