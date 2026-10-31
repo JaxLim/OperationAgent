@@ -1,10 +1,9 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import type { Project } from '@operation-agent/contracts';
 import { actions, errorCode, useStore } from '../state';
-import { Modal, Row, Segmented, Toggle } from './Modal';
+import { Modal } from './Modal';
 import { accent, dateTime, duration, shortId } from './format';
-import { IconCheck, IconFolder, IconInfo, IconLock, IconPlus, IconRetry, IconShield, IconX } from './Icons';
-import { ModelSection } from './ModelSettings';
+import { IconCheck, IconFolder, IconPlus, IconRetry, IconX } from './Icons';
 
 export function ProjectsDialog({ onClose }: { onClose: () => void }) {
   const projects = useStore(s => s.projects);
@@ -39,103 +38,11 @@ export function ProjectsDialog({ onClose }: { onClose: () => void }) {
       {confirm && (
         <Modal title={`Remove ${confirm.name}?`} onClose={() => setConfirm(null)} width={440} footer={<>
           <button className="btn btn-quiet" onClick={() => setConfirm(null)}>Cancel</button>
-          <button className="btn btn-danger" autoFocus onClick={() => { void actions.removeProject(confirm.id); setConfirm(null); }}>Remove</button>
+          <button className="btn btn-danger" data-autofocus onClick={() => { void actions.removeProject(confirm.id); setConfirm(null); }}>Remove</button>
         </>}>
           <p className="muted">Removes the project from OperationAgent’s list. The folder and its files on disk are not touched.</p>
         </Modal>
       )}
-    </Modal>
-  );
-}
-
-const SECTIONS = ['General', 'Model', 'Execution', 'Security', 'About'] as const;
-type Section = (typeof SECTIONS)[number];
-const SECTION_LEADS: Record<Section, string> = {
-  General: 'Appearance and layout of this workbench.',
-  Model: 'Claude, the model the agent will think with, and the key it uses.',
-  Execution: 'How tool processes will be stopped and approved.',
-  Security: 'What this build can and cannot do, as the control plane reports it.',
-  About: 'Versions and keyboard shortcuts.',
-};
-export function SettingsDialog({ onClose, initialSection = 'General' }: { onClose: () => void; initialSection?: Section }) {
-  const settings = useStore(s => s.settings);
-  const desktop = useStore(s => s.desktop);
-  const overview = useStore(s => s.overview);
-  const [section, setSection] = useState<Section>(initialSection);
-  const disabled = !settings;
-  const index = SECTIONS.indexOf(section);
-  return (
-    <Modal title="Settings" onClose={onClose} width={880} className="modal-settings">
-      <div className="settings">
-        <nav className="settings-nav" aria-label="Settings sections" style={{ '--index': index } as CSSProperties}>
-          <span className="settings-nav-indicator" aria-hidden="true" />
-          {SECTIONS.map((name, i) => (
-            <button key={name} className={name === section ? 'is-active' : ''} aria-current={name === section ? 'page' : undefined}
-              data-section={name} onClick={() => setSection(name)}>
-              <span className="settings-nav-index">{String(i + 1).padStart(2, '0')}</span>{name}
-            </button>
-          ))}
-        </nav>
-        <div className="settings-body" key={section} data-section={section}>
-          <header className="settings-head">
-            <span className="eyebrow">{String(index + 1).padStart(2, '0')} / {String(SECTIONS.length).padStart(2, '0')}</span>
-            <h3 className="settings-title">{section}</h3>
-            <p className="settings-sub">{SECTION_LEADS[section]}</p>
-          </header>
-          {disabled && <div className="settings-note"><IconInfo size={14} /> Settings load from the control plane once it is connected.</div>}
-          {section === 'General' && settings && (
-            <>
-              <Row label="Theme" hint="Follows your OS by default. Saved in the local database.">
-                <Segmented value={settings.theme} onChange={theme => void actions.saveSettings({ theme })}
-                  options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
-              </Row>
-              <Row label="Density" hint="Compact tightens the sidebar and panels.">
-                <Segmented value={settings.density} onChange={density => void actions.saveSettings({ density })}
-                  options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} />
-              </Row>
-              <Row label="Show context panel" hint="The right-hand Status / Files / Changes / Results panel.">
-                <Toggle label="Show context panel" checked={settings.contextPanel} onChange={contextPanel => void actions.saveSettings({ contextPanel })} />
-              </Row>
-            </>
-          )}
-          {section === 'Model' && <ModelSection />}
-          {section === 'Execution' && settings && (
-            <>
-              <Row label="Stop grace period" hint="Time a cancelled tool process gets before forced cleanup. Allowed range 5–30 s; takes effect once tool execution exists.">
-                <Segmented value={settings.stopGraceMs} onChange={stopGraceMs => void actions.saveSettings({ stopGraceMs })}
-                  options={[{ value: 5000, label: '5 s' }, { value: 10000, label: '10 s' }, { value: 30000, label: '30 s' }]} />
-              </Row>
-              <Row label="Approval policy" hint="Command and write approvals arrive with tool execution (P3). Approval never lifts the sandbox.">
-                <span className="badge badge-soft"><IconLock size={11} /> Not available yet</span>
-              </Row>
-              <div className="settings-note"><IconShield size={14} /> Raw <span className="mono">sh -c</span>, pipes, redirection, <span className="mono">git push --force</span> and <span className="mono">git reset --hard</span> will never be grantable at task level.</div>
-            </>
-          )}
-          {section === 'Security' && (
-            <>
-              <p className="settings-lead">Live status reported by the control plane for this installation:</p>
-              <ul className="security-list">
-                <li><IconLock size={14} /><span><strong>Agent Worker</strong> — <span className="mono">agentReady = false</span>; task start returns <span className="mono">{overview?.worker.error ?? 'WORKER_ISOLATION_UNAVAILABLE'}</span></span></li>
-                <li><IconLock size={14} /><span><strong>High-risk tools</strong> (bash, write_file) — <span className="mono">{overview?.tools.highRisk ?? 'SANDBOX_UNAVAILABLE'}</span></span></li>
-                <li><IconLock size={14} /><span><strong>read_file / git read</strong> — <span className="mono">{overview?.tools.read ?? 'READ_ADAPTER_UNAVAILABLE'}</span></span></li>
-                <li><IconInfo size={14} /><span><strong>Worker OS isolation</strong> — {overview?.capabilities.workerIsolation ?? 'unverified'}; the restricted test fixture is never launched by this build</span></li>
-              </ul>
-              <div className="settings-note"><IconShield size={14} /> The window has no Node access and no network (CSP <span className="mono">connect-src 'none'</span>). It talks only to fixed, schema-checked operations in the main process, which forwards them to the local control plane with per-request authentication.</div>
-            </>
-          )}
-          {section === 'About' && (
-            <>
-              <p className="settings-lead"><strong>OperationAgent</strong> {desktop ? desktop.app.version : ''} · M2 build</p>
-              <p className="muted">A desktop workbench for a security-gated coding agent. This build delivers the supervised control plane, local persistence, project management and Claude model settings. Agent execution is not enabled yet: it ships with the agent loop, and on each platform only after that platform's isolation gates pass.</p>
-              <p className="muted small mono">Electron {desktop?.app.electron ?? '—'} · Sidecar Node {overview?.runtime.node ?? '—'} · SQLite {overview?.runtime.sqlite ?? '—'} · {desktop ? `${desktop.app.platform}-${desktop.app.arch}` : ''}</p>
-              <div className="kbd-grid">
-                <span><kbd>Ctrl N</kbd> New task</span><span><kbd>Ctrl O</kbd> Projects</span>
-                <span><kbd>Ctrl ,</kbd> Settings</span><span><kbd>Ctrl \</kbd> Toggle context panel</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
     </Modal>
   );
 }

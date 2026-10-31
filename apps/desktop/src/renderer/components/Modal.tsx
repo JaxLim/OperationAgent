@@ -9,12 +9,19 @@ const CloseContext = createContext<() => void>(() => {});
 /** Closes the surrounding dialog through its exit animation. */
 export function useModalClose(): () => void { return useContext(CloseContext); }
 
-export function Modal({ title, onClose, children, width = 560, footer, className }: { title: string; onClose: () => void; children: ReactNode; width?: number;
-  footer?: ReactNode; className?: string }) {
+/** Open dialogs, innermost last: only the top one answers Escape and keeps Tab focus inside itself. */
+const stack: symbol[] = [];
+const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])';
+
+export function Modal({ title, onClose, children, width = 560, footer, className, onEscape, hideHeader }: { title: string; onClose: () => void;
+  children: ReactNode; width?: number | string; footer?: ReactNode; className?: string;
+  /** Lets the dialog consume Escape first (for example to clear a search); return true when handled. */
+  onEscape?: () => boolean; hideHeader?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [closing, setClosing] = useState(false);
   const latest = useRef(onClose);
-  useEffect(() => { latest.current = onClose; }, [onClose]);
+  const escape = useRef(onEscape);
+  useEffect(() => { latest.current = onClose; escape.current = onEscape; }, [onClose, onEscape]);
   const requestClose = useCallback(() => setClosing(true), []);
   useEffect(() => {
     if (!closing) return;
@@ -23,20 +30,38 @@ export function Modal({ title, onClose, children, width = 560, footer, className
     return () => clearTimeout(timer);
   }, [closing]);
   useEffect(() => {
+    const self = Symbol(title);
+    stack.push(self);
     const previous = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
-    const onKey = (event: KeyboardEvent): void => { if (event.key === 'Escape') { event.stopPropagation(); requestClose(); } };
+    (ref.current?.querySelector<HTMLElement>('[data-autofocus]') ?? ref.current)?.focus();
+    const onKey = (event: KeyboardEvent): void => {
+      if (stack.at(-1) !== self) return;
+      if (event.key === 'Escape') {
+        event.stopPropagation(); event.preventDefault();
+        if (!escape.current?.()) requestClose();
+      } else if (event.key === 'Tab' && ref.current) {
+        const items = Array.from(ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(item => item.offsetParent !== null);
+        if (!items.length) return;
+        const first = items[0]!; const last = items.at(-1)!;
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || active === ref.current)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
+      }
+    };
     window.addEventListener('keydown', onKey, true);
-    return () => { window.removeEventListener('keydown', onKey, true); previous?.focus(); };
+    return () => { window.removeEventListener('keydown', onKey, true); stack.splice(stack.indexOf(self), 1); previous?.focus(); };
+    // The title only names the entry; the dialog registers once for its lifetime.
   }, [requestClose]);
   return (
     <CloseContext.Provider value={requestClose}>
       <div className="modal-backdrop" data-state={closing ? 'closing' : 'open'} onMouseDown={event => { if (event.target === event.currentTarget) requestClose(); }}>
         <div className={`modal${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} style={{ width }} ref={ref} tabIndex={-1}>
-          <header className="modal-head">
-            <h2>{title}</h2>
-            <button className="icon-btn" onClick={requestClose} aria-label="Close"><IconX size={16} /></button>
-          </header>
+          {!hideHeader && (
+            <header className="modal-head">
+              <h2>{title}</h2>
+              <button className="icon-btn" onClick={requestClose} aria-label="Close"><IconX size={16} /></button>
+            </header>
+          )}
           <div className="modal-body">{children}</div>
           {footer && <footer className="modal-foot">{footer}</footer>}
         </div>
@@ -45,11 +70,13 @@ export function Modal({ title, onClose, children, width = 560, footer, className
   );
 }
 
-export function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export type Scope = 'global' | 'device';
+const SCOPE_LABEL: Record<Scope, string> = { global: 'Default for all chats', device: 'This app' };
+export function Row({ label, hint, children, scope, id }: { label: string; hint?: ReactNode; children: ReactNode; scope?: Scope; id?: string }) {
   return (
-    <div className="setting-row">
+    <div className="setting-row" id={id}>
       <div className="setting-text">
-        <div className="setting-label">{label}</div>
+        <div className="setting-label">{label}{scope && <span className={`scope-tag scope-${scope}`}>{SCOPE_LABEL[scope]}</span>}</div>
         {hint && <div className="setting-hint">{hint}</div>}
       </div>
       <div className="setting-control">{children}</div>

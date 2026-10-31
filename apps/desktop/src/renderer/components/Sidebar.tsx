@@ -1,86 +1,114 @@
-import { useMemo, useState } from 'react';
-import { actions, useStore } from '../state';
-import { TASK_STATE, accent, relativeTime, shortId } from './format';
-import { IconChevronDown, IconFolder, IconLock, IconPlus, IconSearch, IconSettings, IconTerminal } from './Icons';
+import { forwardRef, useMemo, useState } from 'react';
+import type { Project, TaskSnapshot } from '@operation-agent/contracts';
+import { actions, store, useStore } from '../state';
+import type { Submission } from '../state';
+import { TASK_STATE, relativeTime, shortId } from './format';
+import { IconChevronRight, IconCompose, IconFolder, IconFolderPlus, IconMore, IconPanelLeft, IconSearch, IconSettings, IconTerminal, IconX } from './Icons';
 
-interface Props { onOpenProjects: () => void; onOpenSettings: () => void; onOpenDiagnostics: () => void; onNewTask: () => void }
+interface Props { onCollapse: () => void; onNewTask: () => void; onOpenProjects: () => void; onOpenSettings: () => void; onOpenDiagnostics: () => void }
 
-export function Sidebar({ onOpenProjects, onOpenSettings, onOpenDiagnostics, onNewTask }: Props) {
+function matches(query: string, ...values: string[]): boolean { return !query || values.some(value => value.toLowerCase().includes(query)); }
+
+function TaskRow({ task, active, project }: { task: TaskSnapshot; active: boolean; project: Project }) {
+  const view = TASK_STATE[task.state] ?? { tone: 'muted' as const, label: task.state };
+  const open = async (): Promise<void> => {
+    if (store.get().settings?.activeProjectId !== project.id) await actions.selectProject(project.id);
+    actions.selectTask(task.id);
+  };
+  return (
+    <button className={`task-row${active ? ' is-active' : ''}`} data-task-id={task.id} onClick={() => void open()} title={`Task ${task.id}`}
+      aria-current={active ? 'page' : undefined}>
+      <span className={`task-row-status tone-${view.tone}`}><span className={`dot${view.live ? ' dot-live' : ''}`} /></span>
+      <span className="task-row-title">Task <span className="mono">{shortId(task.id)}</span></span>
+      <span className="task-row-meta"><span className={`tone-text-${view.tone}`}>{view.label}</span> · {relativeTime(Date.parse(task.updatedAt))}</span>
+    </button>
+  );
+}
+
+function RequestRow({ item }: { item: Submission }) {
+  return (
+    <div className="task-row is-static" title={`${item.prompt}\n\nNot started · ${item.code}`}>
+      <span className="task-row-status tone-danger"><span className="dot" /></span>
+      <span className="task-row-title">{item.prompt}</span>
+      <span className="task-row-meta">Not started</span>
+    </div>
+  );
+}
+
+export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ onCollapse, onNewTask, onOpenProjects, onOpenSettings, onOpenDiagnostics }, searchRef) {
   const projects = useStore(s => s.projects);
   const activeId = useStore(s => s.settings?.activeProjectId ?? null);
   const submissions = useStore(s => s.submissions);
-  const allTasks = useStore(s => s.tasks);
+  const tasks = useStore(s => s.tasks);
   const selectedTaskId = useStore(s => s.selectedTaskId);
-  const tasks = useMemo(() => allTasks.filter(task => task.projectId === activeId), [allTasks, activeId]);
+  const connection = useStore(s => s.connection);
   const [query, setQuery] = useState('');
-  const project = projects.find(item => item.id === activeId);
-  const requests = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return submissions.filter(item => item.projectId === activeId && (!q || item.prompt.toLowerCase().includes(q))).reverse();
-  }, [submissions, activeId, query]);
+  const [toggled, setToggled] = useState<Readonly<Record<string, boolean>>>({});
+  const q = query.trim().toLowerCase();
+  const groups = useMemo(() => projects.map(project => {
+    const own = tasks.filter(task => task.projectId === project.id && matches(q, task.id, TASK_STATE[task.state]?.label ?? task.state));
+    const requests = submissions.filter(item => item.projectId === project.id && matches(q, item.prompt)).reverse();
+    return { project, tasks: own, requests, hit: matches(q, project.name, project.path) || own.length + requests.length > 0 };
+  }).filter(group => group.hit), [projects, tasks, submissions, q]);
+  const isOpen = (id: string): boolean => q ? true : toggled[id] ?? id === activeId;
 
   return (
-    <aside className="sidebar" aria-label="Projects and tasks">
-      <button className="project-switch" onClick={onOpenProjects} title="Projects (Ctrl+O)">
-        {project ? <span className="project-glyph" style={{ background: accent(project.id) }}>{project.name[0]!.toUpperCase()}</span>
-          : <span className="project-glyph project-glyph-empty"><IconFolder size={14} /></span>}
-        <span className="project-switch-text">
-          <span className="project-switch-name">{project?.name ?? 'No project'}</span>
-          <span className="project-switch-meta" title={project?.path}>{project ? <span className="ellipsis">{project.path}</span> : 'Add a folder to begin'}</span>
-        </span>
-        <IconChevronDown size={14} className="muted" />
-      </button>
+    <aside className="sidebar" aria-label="Projects and chats">
+      <div className="sidebar-top">
+        <button className="icon-btn" onClick={onCollapse} aria-label="Hide sidebar" title="Hide sidebar (Ctrl+B)"><IconPanelLeft size={17} /></button>
+        <span className="brand"><span className="brand-mark" aria-hidden="true" />OperationAgent</span>
+      </div>
 
-      <button className="btn btn-new-task" onClick={onNewTask} disabled={!project} title="New task (Ctrl+N)">
-        <IconPlus size={15} /> New task <kbd>Ctrl N</kbd>
-      </button>
+      <div className="sidebar-nav">
+        <button className="nav-row" onClick={onNewTask} disabled={!activeId} title="New chat (Ctrl+N)">
+          <IconCompose size={16} /><span>New chat</span><kbd>Ctrl N</kbd>
+        </button>
+        <label className="nav-row nav-search">
+          <IconSearch size={16} />
+          <input ref={searchRef} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search" aria-label="Search projects and chats"
+            onKeyDown={event => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery(''); } }} />
+          {query ? <button className="nav-clear" onClick={() => setQuery('')} aria-label="Clear search"><IconX size={12} /></button> : <kbd>Ctrl K</kbd>}
+        </label>
+      </div>
 
-      <label className="search">
-        <IconSearch size={14} />
-        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search requests" aria-label="Search requests" disabled={!requests.length && !query} />
-      </label>
-
-      <nav className="task-list">
-        <section>
-          <h3 className="section-label">Tasks<span className="count">{tasks.length}</span></h3>
-          {tasks.map(task => {
-            const view = TASK_STATE[task.state] ?? { tone: 'muted' as const, label: task.state };
-            return (
-              <button key={task.id} className={`task-row${task.id === selectedTaskId ? ' is-active' : ''}`} data-task-id={task.id}
-                onClick={() => actions.selectTask(task.id)} title={`Task ${task.id}`}>
-                <span className={`task-row-status tone-${view.tone}`}><span className={`dot${'live' in view ? ' dot-live' : ''}`} /></span>
-                <span className="task-row-body">
-                  <span className="task-row-title">Task <span className="mono">{shortId(task.id)}</span></span>
-                  <span className="task-row-meta"><span className={`tone-text-${view.tone}`}>{view.label}</span><span className="sep">·</span>{relativeTime(Date.parse(task.updatedAt))}</span>
-                </span>
-              </button>
-            );
-          })}
-          {tasks.length === 0 && <div className="task-list-empty sidebar-gate">
-            <IconLock size={13} />
-            <span>No tasks can run in this build yet. Execution arrives with the agent loop, and only on platforms whose Worker passed its isolation gate (SEC-W01).</span>
-          </div>}
-        </section>
-        {requests.length > 0 && (
-          <section>
-            <h3 className="section-label">Refused this session<span className="count">{requests.length}</span></h3>
-            {requests.map(item => (
-              <div key={item.id} className="task-row is-static" title={item.prompt}>
-                <span className="task-row-status tone-danger"><span className="dot" /></span>
-                <span className="task-row-body">
-                  <span className="task-row-title">{item.prompt}</span>
-                  <span className="task-row-meta"><span className="tone-text-danger">Not started</span><span className="sep">·</span><span className="mono">{item.code}</span></span>
-                </span>
+      <nav className="sidebar-scroll" aria-label="Projects">
+        <div className="side-section-head">
+          <span>Projects</span>
+          <button className="icon-btn icon-btn-sm" onClick={() => void actions.addProject()} disabled={connection !== 'ready'} aria-label="Add project folder" title="Add project folder">
+            <IconFolderPlus size={15} /></button>
+          <button className="icon-btn icon-btn-sm" onClick={onOpenProjects} aria-label="Manage projects" title="Manage projects (Ctrl+O)"><IconMore size={15} /></button>
+        </div>
+        {groups.map(({ project, tasks: own, requests }) => {
+          const open = isOpen(project.id);
+          const active = project.id === activeId;
+          return (
+            <div key={project.id} className={`project-group${open ? ' is-open' : ''}`}>
+              <div className={`project-row${active ? ' is-active' : ''}`}>
+                <button className="project-row-caret" aria-label={open ? `Collapse ${project.name}` : `Expand ${project.name}`} aria-expanded={open}
+                  onClick={() => setToggled(value => ({ ...value, [project.id]: !open }))}><IconChevronRight size={12} /></button>
+                <button className="project-row-main" onClick={() => { if (!active) void actions.selectProject(project.id); setToggled(value => ({ ...value, [project.id]: true })); }}
+                  title={project.path} aria-current={active && !selectedTaskId ? 'page' : undefined}>
+                  <IconFolder size={15} /><span className="ellipsis">{project.name}</span>
+                </button>
               </div>
-            ))}
-          </section>
-        )}
+              {open && (
+                <div className="project-children">
+                  {own.map(task => <TaskRow key={task.id} task={task} project={project} active={task.id === selectedTaskId} />)}
+                  {requests.map(item => <RequestRow key={item.id} item={item} />)}
+                  {own.length + requests.length === 0 && <div className="side-empty">{q ? 'No matching chats' : 'No chats yet'}</div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {projects.length === 0 && <div className="side-empty side-empty-lg">Add a project folder to start. Only its path is stored.</div>}
+        {projects.length > 0 && groups.length === 0 && <div className="side-empty side-empty-lg">Nothing matches “{query.trim()}”.</div>}
       </nav>
 
-      <footer className="sidebar-footer">
-        <button className="btn-ghost" onClick={onOpenSettings} title="Settings (Ctrl+,)"><IconSettings size={15} /> Settings</button>
-        <button className="btn-ghost" onClick={onOpenDiagnostics} title="Diagnostics"><IconTerminal size={15} /> Diagnostics</button>
+      <footer className="sidebar-foot">
+        <button className="nav-row" onClick={onOpenSettings} title="Settings (Ctrl+,)"><IconSettings size={16} /><span>Settings</span></button>
+        <button className="icon-btn" onClick={onOpenDiagnostics} aria-label="Diagnostics" title="Diagnostics"><IconTerminal size={16} /></button>
       </footer>
     </aside>
   );
-}
+});

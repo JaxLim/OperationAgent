@@ -2,14 +2,18 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from '../state';
 import { duration, shortId } from './format';
-import { IconCheck, IconDiff, IconFile, IconFlask, IconInfo, IconLock, IconShield } from './Icons';
+import { IconCheck, IconDiff, IconFile, IconFlask, IconInfo, IconLock, IconShield, IconX } from './Icons';
 
-type Tab = 'status' | 'files' | 'changes' | 'results';
+// Secondary views beside the chat. Only Status shows live data; the rest explain which gate keeps them empty.
+
+type Tab = 'status' | 'files' | 'changes' | 'approvals' | 'results';
 const LOCKED: Record<Exclude<Tab, 'status'>, { icon: ReactNode; title: string; code: string; text: string }> = {
   files: { icon: <IconFile size={18} />, title: 'Files are not available', code: 'READ_ADAPTER_UNAVAILABLE',
     text: 'Reading project files requires the short-lived Read Adapter and its Read Gate (SEC-08). Express never reads workspace files itself.' },
   changes: { icon: <IconDiff size={18} />, title: 'No changes to review', code: 'SANDBOX_UNAVAILABLE',
     text: 'Writes and shell commands need an OS sandbox that passed this platform’s P3b gate. Until then they are refused, never run unsandboxed.' },
+  approvals: { icon: <IconShield size={18} />, title: 'Nothing to approve', code: 'SANDBOX_UNAVAILABLE',
+    text: 'Approvals are for commands and writes, which need the sandbox first. Approving something never lifts the sandbox or its network and .git limits.' },
   results: { icon: <IconFlask size={18} />, title: 'No results yet', code: 'WORKER_ISOLATION_UNAVAILABLE',
     text: 'Results appear once an isolated Worker can run tasks. The Worker gate (SEC-W01) has not passed on this platform.' },
 };
@@ -69,29 +73,34 @@ function StatusTab() {
   );
 }
 
-export function ContextPanel() {
+export function ContextPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<Tab>('status');
-  const tabs: { id: Tab; label: string; locked: boolean }[] = [
-    { id: 'status', label: 'Status', locked: false }, { id: 'files', label: 'Files', locked: true },
-    { id: 'changes', label: 'Changes', locked: true }, { id: 'results', label: 'Results', locked: true },
+  const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
+    { id: 'status', label: 'Status', icon: <IconInfo size={14} /> }, { id: 'files', label: 'Files', icon: <IconFile size={14} /> },
+    { id: 'changes', label: 'Changes', icon: <IconDiff size={14} /> }, { id: 'approvals', label: 'Approvals', icon: <IconShield size={14} /> },
+    { id: 'results', label: 'Results', icon: <IconFlask size={14} /> },
   ];
   const locked = tab === 'status' ? undefined : LOCKED[tab];
   return (
-    <aside className="right-panel" aria-label="Context">
-      <div className="rp-tabs" role="tablist">
-        {tabs.map(item => (
-          <button key={item.id} role="tab" aria-selected={tab === item.id} className={`rp-tab${tab === item.id ? ' is-active' : ''}`} onClick={() => setTab(item.id)}>
-            {item.label}{item.locked && <IconLock size={11} className="muted" />}
-          </button>
-        ))}
+    <aside className="right-panel" aria-label="Side panel">
+      <div className="rp-head">
+        <div className="rp-tabs" role="tablist" aria-label="Side panel views">
+          {tabs.map(item => (
+            <button key={item.id} role="tab" aria-selected={tab === item.id} className={`rp-tab${tab === item.id ? ' is-active' : ''}`} onClick={() => setTab(item.id)}
+              title={item.id === 'status' ? item.label : `${item.label} — locked`} aria-label={item.label}>
+              {item.icon}<span className="rp-tab-label">{item.label}</span>
+            </button>
+          ))}
+        </div>
+        <button className="icon-btn icon-btn-sm rp-close" onClick={onClose} aria-label="Hide side panel" title="Hide side panel (Ctrl+\)"><IconX size={15} /></button>
       </div>
-      <div className="rp-body">
+      <div className="rp-body" role="tabpanel">
         {locked ? (
           <div className="panel-empty">
             <div className="panel-empty-icon">{locked.icon}</div>
             <div className="panel-empty-title">{locked.title}</div>
             <div className="panel-empty-text">{locked.text}</div>
-            <span className="badge badge-soft mono">{locked.code}</span>
+            <span className="badge badge-soft mono"><IconLock size={11} /> {locked.code}</span>
           </div>
         ) : <StatusTab />}
       </div>

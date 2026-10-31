@@ -3,8 +3,9 @@ import { CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL } from '@operation-agent/contracts'
 import type { ClaudeModel, ModelTestResult, ModelTestStatus } from '@operation-agent/contracts';
 import { actions, useStore } from '../state';
 import { IconAlert, IconCheck, IconLock, IconRetry, IconShield, IconSparkle, IconX } from './Icons';
+import { Modal } from './Modal';
 
-const MODEL_INFO: Record<ClaudeModel, { name: string; tagline: string }> = {
+export const MODEL_INFO: Record<ClaudeModel, { name: string; tagline: string }> = {
   'claude-sonnet-5-5': { name: 'Sonnet 5.5', tagline: 'Balanced speed and depth for everyday coding' },
   'claude-opus-5-5': { name: 'Opus 5.5', tagline: 'Most capable, for long and difficult changes' },
   'claude-haiku-5-5': { name: 'Haiku 5.5', tagline: 'Fastest replies for quick questions' },
@@ -57,6 +58,7 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const configured = credential?.configured === true;
   const showForm = !configured || editing;
@@ -90,7 +92,7 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
             <span className="muted small">Encrypted on this device · never shown again</span>
           </span>
           <button className="btn btn-pill btn-xs" onClick={() => { setEditing(true); setError(null); }} disabled={disabled}>Replace</button>
-          <button className="btn btn-pill btn-xs btn-quiet btn-danger-text" onClick={() => void actions.clearApiKey()} disabled={disabled || busy}>Remove</button>
+          <button className="btn btn-pill btn-xs btn-quiet btn-danger-text" onClick={() => setConfirmRemove(true)} disabled={disabled || busy}>Remove</button>
         </div>
       )}
       {showForm && (
@@ -107,6 +109,14 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
         </form>
       )}
       {error && <div className="field-error" role="alert">{error}</div>}
+      {confirmRemove && (
+        <Modal title="Remove the API key?" onClose={() => setConfirmRemove(false)} width={440} footer={<>
+          <button className="btn btn-quiet" onClick={() => setConfirmRemove(false)}>Cancel</button>
+          <button className="btn btn-danger" data-autofocus onClick={() => { void actions.clearApiKey(); setConfirmRemove(false); }}>Remove key</button>
+        </>}>
+          <p className="muted">The encrypted key is deleted from this device. Connection tests stop working until you add a key again.</p>
+        </Modal>
+      )}
     </div>
   );
 }
