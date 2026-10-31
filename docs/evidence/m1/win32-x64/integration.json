@@ -1,0 +1,80 @@
+{
+  "startedAt": "2026-10-31T11:04:13.037Z",
+  "finishedAt": "2026-10-31T11:06:08.992Z",
+  "source": "7dce7c45a938a08faaab37d20bdfd358f5c2194e",
+  "target": "win32-x64",
+  "scope": [
+    "P1.2",
+    "P1.3",
+    "P1.4",
+    "P1.5"
+  ],
+  "passed": true,
+  "runtime": {
+    "node": "24.22.1",
+    "abi": "137",
+    "sqlite": "3.53.4",
+    "lockSha256": "d552fe3d960be858aed629f68aea60e5e1d53e9e67c4a77c08b7b2aaaa26e155"
+  },
+  "results": [
+    {
+      "command": "node scripts/workspace.mjs build",
+      "exitCode": 0,
+      "logFile": "1.log",
+      "error": null
+    },
+    {
+      "command": "node scripts/stage-sidecar.mjs",
+      "exitCode": 0,
+      "logFile": "2.log",
+      "error": null
+    },
+    {
+      "command": "node scripts/prepare-electron.mjs",
+      "exitCode": 0,
+      "logFile": "3.log",
+      "error": null
+    },
+    {
+      "command": "node --test --test-concurrency=1 --test-timeout=180000 tests/integration/sidecar.test.mjs tests/integration/electron.test.mjs",
+      "exitCode": 0,
+      "logFile": "4.log",
+      "error": null
+    },
+    {
+      "command": "node scripts/build-worker-native.mjs",
+      "exitCode": 0,
+      "logFile": "5.log",
+      "error": null
+    },
+    {
+      "command": "node scripts/build-worker-fixture.mjs",
+      "exitCode": 0,
+      "logFile": "6.log",
+      "error": null
+    },
+    {
+      "command": "node --test tests/worker-fixture/native-surface.test.mjs",
+      "exitCode": 0,
+      "logFile": "7.log",
+      "error": null
+    },
+    {
+      "command": "node --test --test-concurrency=1 --test-timeout=240000 tests/worker-fixture/isolated-fixture.test.mjs",
+      "exitCode": 0,
+      "logFile": "8.log",
+      "error": null
+    },
+    {
+      "command": "node --test --test-concurrency=1 --test-timeout=240000 tests/worker-fixture/sec-w01.test.mjs",
+      "exitCode": 0,
+      "logFile": "9.log",
+      "error": null
+    }
+  ],
+  "workerFixture": "PASS",
+  "serviceTreeSec17": "PASS",
+  "secW01": "PASS",
+  "installedSmoke": "SEPARATE_STEP",
+  "agentReady": false
+}

@@ -29,8 +29,15 @@ const withReport = (change: (value: Record<string, unknown>) => void) => { const
 const results = (value: Record<string, unknown>) => (value.report as { results: Record<string, unknown> }).results;
 const controls = (value: Record<string, unknown>) => (value.prepared as { controls: Record<string, unknown> }).controls;
 
-test('the recorded M1–M4 authorization is valid and claims no Worker qualification yet', () => {
-  assert.deepEqual(validateAgentStage(stage(), {}), []);
+/** The runner evidence actually committed for Windows x64. */
+const committed = () => ({ 'win32-x64': { integration: readJson('docs/evidence/m1/win32-x64/integration.json'),
+  report: readJson('docs/evidence/m1/win32-x64/sec-w01.json') } });
+
+test('the recorded authorization and Windows qualification are backed by the committed runner evidence', () => {
+  assert.deepEqual(evaluateSecW01(committed()['win32-x64'].report), []);
+  assert.deepEqual(validateAgentStage(stage(), committed()), []);
+  // The same claims without the committed evidence are rejected.
+  assert.notEqual(validateAgentStage(stage(), {}).length, 0);
 });
 
 test('altered authorization, scope growth and unproven claims fail closed', () => {
@@ -38,9 +45,9 @@ test('altered authorization, scope growth and unproven claims fail closed', () =
   for (const change of [
     { authorizedMilestones: ['M1', 'M2', 'M3', 'M4', 'M5'] }, { authorization: { ...(stage().authorization as object), modelProvider: 'other' } },
     { authorization: { ...(stage().authorization as object), quotes: ['Yes, use Claude'] } },
-    { secW01: { ...(stage().secW01 as object), 'win32-x64': 'PASS' } }, { productionWorkerQualified: true }, { agentReady: true },
-    { milestones: { ...milestones, M1: 'implemented' } }, { milestones: { ...milestones, M5: 'not-started' } },
-  ]) assert.notEqual(validateAgentStage({ ...stage(), ...change }, {}).length, 0, JSON.stringify(change).slice(0, 80));
+    { secW01: { ...(stage().secW01 as object), 'linux-x64': 'PASS' } }, { agentReady: true },
+    { milestones: { ...milestones, M1: 'in-progress' } }, { milestones: { ...milestones, M5: 'not-started' } },
+  ]) assert.notEqual(validateAgentStage({ ...stage(), ...change }, committed()).length, 0, JSON.stringify(change).slice(0, 80));
 });
 
 test('a complete passing runner report with matching provenance can qualify the Windows Worker', () => {

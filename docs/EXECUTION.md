@@ -410,3 +410,18 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
 - `check:engineering` 九项全部退出 0（100/100）。
 
 真实结论只能来自一次性 Windows runner。在证据提交之前，`secW01` 保持 NOT_RUN，`productionWorkerQualified` 保持 false。
+
+### M1 结果：Windows x64 SEC-W01 通过（2026-10-31）
+
+一次性 runner 运行 [41195176816](https://github.com/JaxLim/OperationAgent/actions/runs/41195176816)，源提交 `7dce7c4`，`integration.json` 中 `secW01: PASS`。证据已提交到 `docs/evidence/m1/win32-x64/`，包括 `integration.json`、原始 `sec-w01.json` 和测试日志。
+
+- 文件、凭据、进程和原生边界：全部 DENIED。
+- 环境：启动时恰好是 6 项白名单，通道加载后只剩 5 项。
+- 正向对照：原生通道只导出 `close,read,write`，旁路进程存活，三个回环监听器命中数均为 0。
+- 公网 TCP4：EACCES，WFP 审计有出站拦截记录（5152/5157）。
+- 回环 TCP4/TCP6：系统报 ETIMEDOUT（AppContainer 回环隔离），宿主对照可达，监听器零命中。
+- 公网 UDP DNS：Worker 收不到响应，而宿主对照收到了；WFP 审计记录了 `1.1.1.1:53/UDP` 的出站丢包和拦截（5152、5157）。
+- 公网 IPv6：runner 本身没有 IPv6 出口，因此添加 ULA 地址和指向不存在下一跳的主机路由。宿主对照为“已路由但无应答”（TIMEOUT），不再是 ENETUNREACH；Worker 的连接为 DENIED，WFP 审计记录了 `[2606:4700:4700::1111]:443/TCP` 的出站连接拦截（5157）。
+- 两条 Codex 审查意见均已处理：原始报告必须逐项通过共享规则并与集成记录同源；无路由一律视为“无法判定”，不算拒绝。
+
+据此，`build/agent-status.json` 记录：Windows x64 SEC-W01 PASS，M1 完成，`productionWorkerQualified: true`，`verify:agent` 用已提交的原始证据复核。`agentReady` 仍为 false，要等 M2 的 Agent Loop 实现后才能设置；macOS 和 Linux 的 SEC-W01 仍为 NOT_RUN，不继承 Windows 的结论。

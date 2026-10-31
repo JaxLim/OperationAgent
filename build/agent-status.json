@@ -1,8 +1,15 @@
 {
   "schemaVersion": 1,
   "phase": "AGENT",
-  "dependsOn": { "file": "build/p2-status.json" },
-  "authorizedMilestones": ["M1", "M2", "M3", "M4"],
+  "dependsOn": {
+    "file": "build/p2-status.json"
+  },
+  "authorizedMilestones": [
+    "M1",
+    "M2",
+    "M3",
+    "M4"
+  ],
   "authorization": {
     "kind": "user-message",
     "date": "2026-10-31",
@@ -13,8 +20,24 @@
     ],
     "modelProvider": "anthropic-claude"
   },
-  "milestones": { "M1": "in-progress", "M2": "not-started", "M3": "not-started", "M4": "not-started" },
-  "secW01": { "win32-x64": "NOT_RUN", "darwin-arm64": "NOT_RUN", "linux-x64": "NOT_RUN" },
+  "milestones": {
+    "M1": "implemented",
+    "M2": "not-started",
+    "M3": "not-started",
+    "M4": "not-started"
+  },
+  "secW01": {
+    "win32-x64": "PASS",
+    "darwin-arm64": "NOT_RUN",
+    "linux-x64": "NOT_RUN"
+  },
   "agentReady": false,
-  "productionWorkerQualified": false
+  "productionWorkerQualified": true,
+  "evidence": {
+    "win32-x64": {
+      "ciRun": "https://github.com/JaxLim/OperationAgent/actions/runs/41195176816",
+      "sourceCommit": "7dce7c45a938a08faaab37d20bdfd358f5c2194e",
+      "files": "docs/evidence/m1/win32-x64/"
+    }
+  }
 }
