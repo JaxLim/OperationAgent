@@ -150,6 +150,8 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
     const [goalDraft, setGoalDraft] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     const ref = useRef<HTMLTextAreaElement>(null);
+    /** Set while the goal editor closes itself, so the blur that moving focus causes does not save it a second time. */
+    const closingGoal = useRef(false);
     useImperativeHandle(handle, () => ({ focus: () => ref.current?.focus() }), []);
     useEffect(() => { if (focusOnMount) { focusOnMount = false; ref.current?.focus(); } }, []);
     useEffect(() => {
@@ -166,9 +168,11 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
     }, [text, docked]);
     const composed = composePrompt(text.trim(), goal).length;
     const room = WORKBENCH_LIMITS.maxPromptChars - (goal ? goal.length + 8 : 0);
+    // A goal added after the text can push the request past the limit; maxLength never shortens existing text.
+    const tooLong = composed > WORKBENCH_LIMITS.maxPromptChars;
     const submit = async (): Promise<void> => {
       const prompt = text.trim();
-      if (!prompt || sending || disabled) return;
+      if (!prompt || sending || disabled || tooLong) return;
       setSending(true);
       // The first request swaps the centered composer for the docked one, which mounts while the request is recorded:
       // drop the draft first so it starts empty, and let whichever composer is mounted afterwards take focus.
@@ -176,10 +180,13 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
       drafts.delete(project.id);
       try { await actions.submitTask(project.id, prompt, goal); setText(''); setGoal(null); } finally { setSending(false); ref.current?.focus(); }
     };
-    const commitGoal = (): void => {
+    const closeGoal = (save: boolean, refocus: boolean): void => {
       const value = goalDraft?.trim() ?? '';
-      if (value) setGoal(value.slice(0, MAX_GOAL));
-      setGoalDraft(null); ref.current?.focus();
+      if (save && value) setGoal(value.slice(0, MAX_GOAL));
+      setGoalDraft(null);
+      if (!refocus) return;
+      closingGoal.current = true;
+      try { ref.current?.focus(); } finally { closingGoal.current = false; }
     };
     return (
       <div className={`composer-wrap${docked ? ' is-docked' : ''}`}>
@@ -192,10 +199,10 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
                 <label className="goal-input">
                   <IconTarget size={14} />
                   <input autoFocus value={goalDraft} maxLength={MAX_GOAL} placeholder="What does done look like?" aria-label="Task goal"
-                    onChange={event => setGoalDraft(event.target.value)} onBlur={commitGoal}
+                    onChange={event => setGoalDraft(event.target.value)} onBlur={() => { if (!closingGoal.current) closeGoal(true, false); }}
                     onKeyDown={event => {
-                      if (event.key === 'Enter') { event.preventDefault(); commitGoal(); }
-                      if (event.key === 'Escape') { event.preventDefault(); setGoalDraft(null); ref.current?.focus(); }
+                      if (event.key === 'Enter') { event.preventDefault(); closeGoal(true, true); }
+                      if (event.key === 'Escape') { event.preventDefault(); closeGoal(false, true); }
                     }} />
                 </label>
               ) : goal && (
@@ -215,11 +222,18 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
             <span className="tool-spacer" />
             <ContextMeter chars={composed} onOpenSettings={onOpenSettings} />
             <ModelPicker onOpenSettings={onOpenSettings} />
-            <button className="send-btn" onClick={() => void submit()} disabled={!text.trim() || sending || disabled} aria-label="Send" title="Send (Enter)">
+            <button className="send-btn" onClick={() => void submit()} disabled={!text.trim() || sending || disabled || tooLong} aria-label="Send"
+              title={tooLong ? 'Too long to send' : 'Send (Enter)'}>
               <IconSend size={16} />
             </button>
           </div>
         </div>
+        {tooLong && (
+          <div className="composer-error" role="alert">
+            The request and goal together are {(composed - WORKBENCH_LIMITS.maxPromptChars).toLocaleString()} characters over the{' '}
+            {WORKBENCH_LIMITS.maxPromptChars.toLocaleString()}-character limit. Shorten one of them to send; your draft is kept.
+          </div>
+        )}
         <div className="composer-meta">
           <span className="meta-chip is-static" title="Tasks would run on this computer. Remote and cloud execution are not supported."><IconLaptop size={14} />This computer</span>
           <ProjectChip project={project} />

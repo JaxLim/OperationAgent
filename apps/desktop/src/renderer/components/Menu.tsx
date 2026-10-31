@@ -29,12 +29,15 @@ export function Popover({ label, role = 'menu', placement = 'bottom-start', clas
   useEffect(() => {
     if (!open) return;
     const root = panel.current;
+    // Fit the panel to the room between its trigger and the window edge; long lists scroll inside it.
+    const box = anchor.current?.getBoundingClientRect();
+    if (root && box) root.style.maxHeight = `${Math.max(120, (placement.startsWith('top') ? box.top : window.innerHeight - box.bottom) - 16)}px`;
     const first = root?.querySelector<HTMLElement>('[aria-checked="true"]') ?? root?.querySelector<HTMLElement>(`${ITEMS}, input, button`);
     first?.focus();
     const outside = (event: MouseEvent): void => { if (!anchor.current?.contains(event.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', outside);
     return () => document.removeEventListener('mousedown', outside);
-  }, [open]);
+  }, [open, placement]);
   const onPanelKey = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
     if (event.key === 'Tab' && role === 'menu') { setOpen(false); return; }
