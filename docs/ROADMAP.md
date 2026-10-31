@@ -8,7 +8,9 @@
 - P2.0 契约（PR #3）已合并：工具流、任务状态机、TaskEvent、领域错误。
 - P2.1 事件存储（PR #4）已合并：迁移 `004-task-events.sql`（`tasks` 和只追加的 `task_events`）及 Express 内 `persistence/tasks.ts`；数据库版本为 4。
 - P2.2 只读任务视图（PR #5）已合并：任务列表、快照和按游标分页的事件接口，经 Main 固定通道和 Preload 暴露。
-- P2.3 Workbench 任务视图：侧栏列出当前项目的已提交任务；详情页按游标同步并显示事件时间线；中断任务显示“副作用未知”和“不会自动恢复”；控制面重启后从游标重新同步。P2 四个阶段均已实现，P2 总退出（`p2TotalExit`）需要已提交的 CI 证据，暂为 NOT_RUN。
+- P2.3 Workbench 任务视图（PR #6）已合并：侧栏列出当前项目的已提交任务；详情页按游标同步并显示事件时间线；中断任务显示“副作用未知”和“不会自动恢复”；控制面重启后从游标重新同步。P2 四个阶段均已实现，P2 总退出（`p2TotalExit`）需要已提交的 CI 证据，暂为 NOT_RUN。
+- M1 SEC-W01（PR #7）已合并：Windows x64 在一次性 runner 上真实通过，证据见 `docs/evidence/m1/win32-x64/`。UDP 无响应由 WFP 审计丢包证明；IPv6 通过“路由到不存在下一跳 + WFP 审计拦截”证明，没有豁免任何要求。
+- M2 第一切片（2026-10-31，PR #8）：CredentialService + Main safeStorage Crypto Bridge（迁移 `005`，数据库版本 5）、Express Model Gateway（Claude Messages API 连接测试）、模型设置的 5 个固定 IPC 操作，以及参考 Lusion 的设计系统和 Settings › Model 分区。M1 已合并，Windows 生产 Worker 已获资格；但 Agent Loop 尚未实现，真实执行仍关闭（`agentReady=false`）。Read Adapter（SEC-08）和 Worker Agent Loop 留待 M2 后续切片。详见 `EXECUTION.md` 末节。
 - 本地开发需把 `.tools/node` 置于 PATH 前部，否则 `pnpm run` 内嵌脚本使用系统 Node 并因 `engines` 失败。
 
 ## 2. 优先级排序
@@ -43,7 +45,7 @@
 | 里程碑 | 交付 | 退出证据 | 依赖 |
 |---|---|---|---|
 | **M1 SEC-W01（Windows）** | 在 P1.4 受限 fixture 上补齐生产 Worker 攻击面测试：用户文件与凭据不可读、全网络与回环被拒、无危险句柄继承、启动竞态、原生边界只暴露通道。全部在一次性 CI runner 上运行 | runner 证据全部 PASS 后，Windows 才能 `workerIsolation=verified`；有任何 UNKNOWN 都不放行 | P1.4 |
-| **M2 只读 Agent（P3a Read Gate + P4 最小闭环）** | Read Adapter 短命子进程（AppContainer，仅授权项目目录可读）+ SEC-08；Express Model Gateway + CredentialService/safeStorage + Claude 适配器；Worker Agent Loop 只能调用 `read_file` | SEC-08、SEC-20 真实测试；用模拟模型服务端做端到端 CI；第一次真正可用：能读代码并回答问题的 Agent | M1 |
+| **M2 只读 Agent（P3a Read Gate + P4 最小闭环）**（进行中：凭据、模型网关与模型设置已在第一切片实现；Read Adapter 和 Agent Loop 未开始） | Read Adapter 短命子进程（AppContainer，仅授权项目目录可读）+ SEC-08；Express Model Gateway + CredentialService/safeStorage + Claude 适配器；Worker Agent Loop 只能调用 `read_file` | SEC-08、SEC-20 真实测试；用模拟模型服务端做端到端 CI；第一次真正可用：能读代码并回答问题的 Agent | M1 |
 | **M3 写入与 Shell（P3a 沙箱 + P3b）** | `write_file`/`bash` 的 AppContainer + Job 沙箱、审批流程、Shell 规范化、工具流背压与停止 | SEC-05～08/12/16/19/21/23 | M2 |
 | **M4 产品化** | 审批/停止/恢复 UI 打磨，MCP（P5），签名与升级（P7） | 见 §13 | M3 |
 

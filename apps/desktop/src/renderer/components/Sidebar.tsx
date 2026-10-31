@@ -58,7 +58,7 @@ export function Sidebar({ onOpenProjects, onOpenSettings, onOpenDiagnostics, onN
           })}
           {tasks.length === 0 && <div className="task-list-empty sidebar-gate">
             <IconLock size={13} />
-            <span>No tasks can run in this build. Execution unlocks only after the Worker isolation gate (SEC-W01) passes on this platform.</span>
+            <span>No tasks can run in this build yet. Execution arrives with the agent loop, and only on platforms whose Worker passed its isolation gate (SEC-W01).</span>
           </div>}
         </section>
         {requests.length > 0 && (

@@ -5,7 +5,8 @@ import { createRequire } from 'node:module';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { resolve, sep } from 'node:path';
 import { root, until, environment, launchSidecar, closeDirectory, httpCall } from './sidecar-helper.mjs';
 import { CONTROL_ROUTES, CONTROL_POLICY } from '../../packages/contracts/dist/index.js';
@@ -14,10 +15,10 @@ import { openStore } from '../../apps/server/dist/persistence/store.js';
 const require = createRequire(import.meta.url);
 const electron = require('../../apps/desktop/node_modules/electron');
 function alive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
-async function launch(directory) {
+async function launch(directory, modelEndpoint) {
   const env = { ...environment() };
   for (const key of ['DISPLAY', 'XAUTHORITY', 'DBUS_SESSION_BUS_ADDRESS', 'XDG_RUNTIME_DIR']) if (process.env[key]) env[key] = process.env[key];
-  const child = spawn(electron, [resolve(root, 'tests/integration/electron-harness.mjs'), directory], { cwd: root, env,
+  const child = spawn(electron, [resolve(root, 'tests/integration/electron-harness.mjs'), directory, ...(modelEndpoint ? [modelEndpoint] : [])], { cwd: root, env,
     windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   let logs = ''; for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => { logs = (logs + chunk).slice(-65536); });
   const exited = once(child, 'exit');
@@ -48,11 +49,11 @@ async function launch(directory) {
   };
 }
 
-async function fixture(t) {
+async function fixture(t, modelEndpoint) {
   const cache = resolve(root, '.cache'); await mkdir(cache, { recursive: true });
   const directory = await mkdtemp(resolve(cache, 'electron-test-')); const hosts = [];
   t.after(async () => { for (const host of hosts) await host.close(); if (directory.startsWith(cache + sep)) await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
-  const create = async () => { const host = await launch(directory); hosts.push(host); return host; };
+  const create = async () => { const host = await launch(directory, modelEndpoint); hosts.push(host); return host; };
   create.directory = directory;
   return create;
 }
@@ -65,7 +66,7 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
   assert.equal(first.renderer.node, 'undefined'); assert.equal(first.renderer.require, 'undefined');
   assert.deepEqual(first.renderer.keys.sort(), ['getFoundationInfo', 'getControlPlaneHealth', 'listSmokeRecords', 'writeSmokeRecords', 'getDesktopStatus',
     'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask',
-    'listTasks', 'getTask', 'listTaskEvents'].sort());
+    'listTasks', 'getTask', 'listTaskEvents', 'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection'].sort());
   assert.equal(first.renderer.mounted, true);
   assert.equal(await host.command('csp'), 'blocked'); assert.equal(await host.command('invalid-input'), 'rejected');
   assert.match(await host.command('foreign-window'), /IPC_SENDER_REJECTED/);
@@ -169,7 +170,7 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   assert.equal(result.tooLong, 'rejected'); assert.match(result.missing, /NOT_FOUND/);
   assert.deepEqual(result.task, { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' });
   assert.equal(result.emptyTask, 'rejected'); assert.equal(result.forged, 'rejected');
-  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 4);
+  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 5);
   assert.equal(result.overview.worker.error, 'WORKER_ISOLATION_UNAVAILABLE');
   assert.ok(Object.values(result.overview.capabilities).every(value => value !== 'verified'));
   assert.equal(result.runs.runs[0].outcome, 'RUNNING'); assert.deepEqual(result.projects.projects, []);
@@ -217,4 +218,72 @@ test('the Workbench lists committed tasks, replays their events and resyncs afte
   // The new Express instance serves the same committed log; the view resumes from its cursor.
   const after = await host.command('task-ui', { taskId: running, entries: 4, fresh: true });
   assert.deepEqual([after.entries, after.rows], [4, 2]); assert.match(after.meta, /4 ?\/ ?4 events/);
+});
+
+/** Every file under a directory, for a plaintext scan of everything Electron, Express and SQLite left on disk. */
+async function allBytes(directory) {
+  const chunks = [];
+  for (const entry of await readdir(directory, { recursive: true, withFileTypes: true })) {
+    if (entry.isFile()) chunks.push((await readFile(resolve(entry.parentPath, entry.name)).catch(() => Buffer.alloc(0))).toString('latin1'));
+  }
+  return chunks.join('\n');
+}
+
+test('M2 model settings: the key goes in once through the real bridge, is encrypted at rest and tested against a fake provider', { timeout: 120_000 }, async t => {
+  // A loopback stand-in for api.anthropic.com: accepts exactly the expected key, never anything else.
+  const key = `sk-ant-api03-${randomUUID().replaceAll('-', '')}M2LEAKPROBE${'k'.repeat(36)}Qx9v`;
+  const seen = [];
+  const provider = createServer((req, res) => {
+    let body = ''; req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      seen.push({ path: req.url, key: req.headers['x-api-key'], version: req.headers['anthropic-version'], body: JSON.parse(body) });
+      res.writeHead(req.headers['x-api-key'] === key ? 200 : 401, { 'content-type': 'application/json' }).end('{"type":"message"}');
+    });
+  });
+  provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
+  t.after(() => new Promise(done => provider.close(done)));
+  const create = await fixture(t, `http://127.0.0.1:${provider.address().port}`);
+  const host = await create();
+
+  // Real DOM: Settings → Model, type the key, save it, Test connection.
+  const ui = await host.command('model-ui', { key });
+  assert.equal(ui.emptyState, 'empty'); assert.equal(ui.leftInDom, false, 'the typed key must be cleared from the DOM once saved');
+  assert.equal(ui.masked, 'sk-ant-••••••••••••Qx9v'); assert.equal(ui.credential, 'configured');
+  assert.equal(ui.status, 'ok'); assert.match(ui.resultText, /Connected/); assert.equal(ui.active, 'claude-sonnet-5-5');
+  assert.deepEqual(seen.at(-1), { path: '/v1/messages', key, version: '2023-06-01',
+    body: { model: 'claude-sonnet-5-5', max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] } });
+  await host.command('capture', `m2/${process.platform}-${process.arch}/settings-model-light.png`);
+  await host.command('appearance', 'dark');
+  await host.command('capture', `m2/${process.platform}-${process.arch}/settings-model-dark.png`);
+  await host.command('appearance', 'system');
+
+  // Fixed operations: schema checks on both sides, a model switch, and a replies that never carry key material.
+  const api = await host.command('model-api', { key });
+  assert.equal(api.before.credential.configured, true); assert.equal(api.before.secureStorage, 'available');
+  assert.equal(api.invalid, 'VALIDATION_ERROR'); assert.equal(api.extra, 'VALIDATION_ERROR'); assert.match(api.badModel, /invalid|Invalid/);
+  assert.equal(api.chosen.model, 'claude-opus-5-5');
+  assert.deepEqual(Object.keys(api.saved.credential).sort(), ['configured', 'hint', 'updatedAt']);
+  assert.equal(api.saved.credential.hint, 'Qx9v');
+  assert.equal(api.test.status, 'ok'); assert.equal(api.test.model, 'claude-opus-5-5'); assert.equal(seen.at(-1).body.model, 'claude-opus-5-5');
+  assert.equal(JSON.stringify(api).includes('M2LEAKPROBE'), false, 'no reply may contain the key');
+
+  // SEC-14 through the real Main bridge: no OS-backed encryption means no save, and the stored key is untouched.
+  const refused = await host.command('model-unavailable', { key: key.replace('Qx9v', 'Zz00') });
+  if (refused !== 'unpatchable') {
+    assert.equal(refused.view.secureStorage, 'unavailable'); assert.match(refused.error, /SECURE_STORAGE_UNAVAILABLE$/);
+    assert.equal(refused.after.credential.hint, 'Qx9v');
+  } else t.diagnostic('safeStorage could not be patched in this Electron build; SEC-14 refusal is covered by tests/m2 unit tests');
+
+  // The ciphertext survives a full restart and still decrypts through the new instance's bridge.
+  await host.close();
+  const reopened = await create();
+  assert.equal((await reopened.command('model-test')).status, 'ok');
+  assert.equal(seen.at(-1).key, key);
+  const cleared = await reopened.command('model-clear');
+  assert.deepEqual(cleared.cleared.credential, { configured: false }); assert.equal(cleared.test.status, 'not_configured');
+  const logs = host.logs() + reopened.logs();
+  await reopened.close();
+  // SEC-20: nothing on disk (SQLite, WAL, Chromium profile) or in process output holds the plaintext.
+  assert.equal((await allBytes(create.directory)).includes('M2LEAKPROBE'), false, 'plaintext key found on disk');
+  assert.equal(logs.includes('M2LEAKPROBE'), false, 'plaintext key found in process output');
 });

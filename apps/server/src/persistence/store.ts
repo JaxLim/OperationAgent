@@ -9,10 +9,12 @@ import { ControlRunListSchema, DEFAULT_WORKBENCH_SETTINGS, ProjectInputSchema, P
 import type { ControlRun, Project, SmokeBatch, SmokeRecord, WorkbenchSettings } from '@operation-agent/contracts';
 import { createTaskLog } from './tasks.js';
 import type { TaskLog } from './tasks.js';
+import { createModelStore } from './models.js';
+import type { ModelStore } from './models.js';
 
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
-const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql'];
-export interface Store extends TaskLog {
+const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql'];
+export interface Store extends TaskLog, ModelStore {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;
   /** Unfinished tasks moved to INTERRUPTED when this instance opened the database. */
@@ -66,6 +68,7 @@ export function openStore(directory: string, runId: string, migrationDirectory =
       }
     }).immediate();
     const tasks = createTaskLog(db);
+    const models = createModelStore(db);
     const { recoveredRuns, recoveredTasks } = db.transaction(() => {
       const interrupted = db.prepare("UPDATE control_plane_runs SET outcome = 'INTERRUPTED', ended_at = ? WHERE outcome = 'RUNNING'").run(new Date().toISOString()).changes;
       db.prepare("INSERT INTO control_plane_runs(id, started_at, outcome) VALUES (?, ?, 'RUNNING')").run(runId, new Date().toISOString());
@@ -87,6 +90,7 @@ export function openStore(directory: string, runId: string, migrationDirectory =
     const sqliteVersion = (db.prepare('SELECT sqlite_version() AS version').get() as { version: string }).version;
     return {
       ...tasks,
+      ...models,
       databaseVersion: migrationNames.length,
       recoveredRuns,
       recoveredTasks,

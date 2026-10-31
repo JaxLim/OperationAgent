@@ -10,6 +10,6 @@
     "outDir": "dist/tooling",
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["scripts/**/*.ts", "tests/p0/**/*.ts", "tests/p1/**/*.ts", "tests/p2/**/*.ts"],
+  "include": ["scripts/**/*.ts", "tests/p0/**/*.ts", "tests/p1/**/*.ts", "tests/p2/**/*.ts", "tests/m2/**/*.ts"],
   "references": [{ "path": "packages/contracts" }, { "path": "packages/worker-transport" }]
 }

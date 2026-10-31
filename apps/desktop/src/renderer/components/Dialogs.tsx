@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { Project } from '@operation-agent/contracts';
 import { actions, errorCode, useStore } from '../state';
 import { Modal, Row, Segmented, Toggle } from './Modal';
 import { accent, dateTime, duration, shortId } from './format';
 import { IconCheck, IconFolder, IconInfo, IconLock, IconPlus, IconRetry, IconShield, IconX } from './Icons';
+import { ModelSection } from './ModelSettings';
 
 export function ProjectsDialog({ onClose }: { onClose: () => void }) {
   const projects = useStore(s => s.projects);
@@ -47,20 +48,40 @@ export function ProjectsDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-const SECTIONS = ['General', 'Execution', 'Security', 'About'] as const;
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
+const SECTIONS = ['General', 'Model', 'Execution', 'Security', 'About'] as const;
+type Section = (typeof SECTIONS)[number];
+const SECTION_LEADS: Record<Section, string> = {
+  General: 'Appearance and layout of this workbench.',
+  Model: 'Claude, the model the agent will think with, and the key it uses.',
+  Execution: 'How tool processes will be stopped and approved.',
+  Security: 'What this build can and cannot do, as the control plane reports it.',
+  About: 'Versions and keyboard shortcuts.',
+};
+export function SettingsDialog({ onClose, initialSection = 'General' }: { onClose: () => void; initialSection?: Section }) {
   const settings = useStore(s => s.settings);
   const desktop = useStore(s => s.desktop);
   const overview = useStore(s => s.overview);
-  const [section, setSection] = useState<(typeof SECTIONS)[number]>('General');
+  const [section, setSection] = useState<Section>(initialSection);
   const disabled = !settings;
+  const index = SECTIONS.indexOf(section);
   return (
-    <Modal title="Settings" onClose={onClose} width={760}>
+    <Modal title="Settings" onClose={onClose} width={880} className="modal-settings">
       <div className="settings">
-        <nav className="settings-nav">
-          {SECTIONS.map(name => <button key={name} className={name === section ? 'is-active' : ''} onClick={() => setSection(name)}>{name}</button>)}
+        <nav className="settings-nav" aria-label="Settings sections" style={{ '--index': index } as CSSProperties}>
+          <span className="settings-nav-indicator" aria-hidden="true" />
+          {SECTIONS.map((name, i) => (
+            <button key={name} className={name === section ? 'is-active' : ''} aria-current={name === section ? 'page' : undefined}
+              data-section={name} onClick={() => setSection(name)}>
+              <span className="settings-nav-index">{String(i + 1).padStart(2, '0')}</span>{name}
+            </button>
+          ))}
         </nav>
-        <div className="settings-body">
+        <div className="settings-body" key={section} data-section={section}>
+          <header className="settings-head">
+            <span className="eyebrow">{String(index + 1).padStart(2, '0')} / {String(SECTIONS.length).padStart(2, '0')}</span>
+            <h3 className="settings-title">{section}</h3>
+            <p className="settings-sub">{SECTION_LEADS[section]}</p>
+          </header>
           {disabled && <div className="settings-note"><IconInfo size={14} /> Settings load from the control plane once it is connected.</div>}
           {section === 'General' && settings && (
             <>
@@ -77,6 +98,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </Row>
             </>
           )}
+          {section === 'Model' && <ModelSection />}
           {section === 'Execution' && settings && (
             <>
               <Row label="Stop grace period" hint="Time a cancelled tool process gets before forced cleanup. Allowed range 5–30 s; takes effect once tool execution exists.">
@@ -103,8 +125,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           )}
           {section === 'About' && (
             <>
-              <p className="settings-lead"><strong>OperationAgent</strong> {desktop ? desktop.app.version : ''} · Phase 1 build</p>
-              <p className="muted">A desktop workbench for a security-gated coding agent. This build delivers the supervised control plane, local persistence and project management. Agent execution stays disabled until its isolation gates pass.</p>
+              <p className="settings-lead"><strong>OperationAgent</strong> {desktop ? desktop.app.version : ''} · M2 build</p>
+              <p className="muted">A desktop workbench for a security-gated coding agent. This build delivers the supervised control plane, local persistence, project management and Claude model settings. Agent execution is not enabled yet: it ships with the agent loop, and on each platform only after that platform's isolation gates pass.</p>
               <p className="muted small mono">Electron {desktop?.app.electron ?? '—'} · Sidecar Node {overview?.runtime.node ?? '—'} · SQLite {overview?.runtime.sqlite ?? '—'} · {desktop ? `${desktop.app.platform}-${desktop.app.arch}` : ''}</p>
               <div className="kbd-grid">
                 <span><kbd>Ctrl N</kbd> New task</span><span><kbd>Ctrl O</kbd> Projects</span>

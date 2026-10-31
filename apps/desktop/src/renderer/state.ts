@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { catchUpTaskEvents } from '@operation-agent/contracts';
-import type { ControlOverview, ControlRun, DesktopApi, DesktopStatus, Project, TaskEvent, TaskSnapshot, TaskState, WorkbenchSettings } from '@operation-agent/contracts';
+import type { ClaudeModel, ControlOverview, ControlRun, DesktopApi, DesktopStatus, ModelSettingsView, ModelTestResult, Project, TaskEvent, TaskSnapshot, TaskState,
+  WorkbenchSettings } from '@operation-agent/contracts';
 
 declare global { interface Window { readonly operationAgent: DesktopApi } }
 
@@ -36,10 +37,13 @@ export interface AppState {
   tasks: TaskSnapshot[];
   taskViews: Readonly<Record<string, TaskView>>;
   selectedTaskId: string | null;
+  /** Model choice and credential status as Express reports them; never key material. */
+  model: ModelSettingsView | null;
+  modelTest: { state: 'idle' | 'running' } | { state: 'done'; result: ModelTestResult } | { state: 'failed'; code: string };
 }
 
 let state: AppState = { connection: 'connecting', desktop: null, overview: null, settings: null, projects: [], runs: [],
-  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, selectedTaskId: null };
+  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' } };
 const listeners = new Set<() => void>();
 function set(next: Partial<AppState>): void { state = { ...state, ...next }; for (const listener of listeners) listener(); }
 export const store = {
@@ -64,14 +68,15 @@ export function notify(tone: Notice['tone'], text: string): void {
 }
 
 async function loadDomain(): Promise<void> {
-  const [settings, projects, runs, overview] = await Promise.all([api().getSettings(), api().listProjects(), api().listRuns(), api().getOverview()]);
+  const [settings, projects, runs, overview, model] = await Promise.all([api().getSettings(), api().listProjects(), api().listRuns(), api().getOverview(),
+    api().getModelSettings()]);
   let active = settings;
   // Keep the remembered project valid; otherwise fall back to the first registered one.
   if (!projects.projects.some(project => project.id === settings.activeProjectId)) {
     const fallback = projects.projects[0]?.id ?? null;
     if (fallback !== settings.activeProjectId) active = await api().saveSettings({ ...settings, activeProjectId: fallback });
   }
-  set({ settings: active, projects: projects.projects, runs: runs.runs, overview, loaded: true });
+  set({ settings: active, projects: projects.projects, runs: runs.runs, overview, model, loaded: true });
 }
 
 const EMPTY_VIEW: TaskView = { events: [], appliedSeq: 0, replayed: null, sync: 'syncing', error: null, syncedAt: 0 };
@@ -146,6 +151,8 @@ async function poll(): Promise<void> {
 }
 export function startPolling(): void { void poll(); setInterval(() => { void poll(); }, 2_000); }
 
+/** Bumped on every model or key change; a connection test result only lands if nothing changed while it ran. */
+let modelRevision = 0;
 export const actions = {
   selectTask(taskId: string | null): void {
     set({ selectedTaskId: taskId });
@@ -194,6 +201,45 @@ export const actions = {
     try { code = (await api().startTask({ projectId, prompt })).error; }
     catch (error) { outcome = 'failed'; code = errorCode(error); }
     set({ submissions: [...state.submissions, { id, projectId, prompt, at, outcome, code }].slice(-20) });
+  },
+  async refreshModel(): Promise<void> {
+    try { set({ model: await api().getModelSettings() }); } catch { /* The status banner reports availability. */ }
+  },
+  async saveModelChoice(model: ClaudeModel): Promise<void> {
+    const previous = state.model;
+    if (!previous || previous.model === model) return;
+    modelRevision++;
+    set({ model: { ...previous, model }, modelTest: { state: 'idle' } });
+    try { set({ model: await api().saveModelChoice({ model }) }); }
+    catch (error) { set({ model: previous }); notify('danger', `Model was not saved (${errorCode(error)}).`); }
+  },
+  /**
+   * Hands the key to Main once. It is not kept in this store; the caller clears its input. Returns the fixed error
+   * code on failure so the form can explain it without ever echoing the value.
+   */
+  async setApiKey(apiKey: string): Promise<string | null> {
+    modelRevision++; set({ modelTest: { state: 'idle' } });
+    try { set({ model: await api().setApiKey({ apiKey }) }); return null; }
+    catch (error) {
+      // A timeout leaves the outcome unknown: show what Express actually holds instead of assuming nothing was saved.
+      await actions.refreshModel();
+      return errorCode(error);
+    }
+  },
+  async clearApiKey(): Promise<void> {
+    modelRevision++; set({ modelTest: { state: 'idle' } });
+    try { set({ model: await api().clearApiKey(), modelTest: { state: 'idle' } }); notify('ok', 'API key removed from this device.'); }
+    catch (error) { notify('danger', `The key was not removed (${errorCode(error)}).`); }
+  },
+  async testModel(): Promise<void> {
+    if (state.modelTest.state === 'running') return;
+    const revision = modelRevision;
+    set({ modelTest: { state: 'running' } });
+    let next: AppState['modelTest'];
+    try { next = { state: 'done', result: await api().testModelConnection() }; }
+    catch (error) { next = { state: 'failed', code: errorCode(error) }; }
+    // Discard a result for a model or key that changed while the test ran.
+    if (revision === modelRevision) set({ modelTest: next });
   },
   async refreshRuns(): Promise<void> {
     try { set({ runs: (await api().listRuns()).runs, overview: await api().getOverview() }); } catch { /* The status banner reports availability. */ }

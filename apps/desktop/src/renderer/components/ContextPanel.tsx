@@ -40,7 +40,7 @@ function StatusTab() {
         <h3 className="status-title"><IconShield size={14} />Agent Worker</h3>
         <dl className="kv-list">
           <Kv label="agentReady" tone="danger"><span className="mono">false</span></Kv>
-          <Kv label="Gate"><span className="mono">{overview?.worker.reason ?? 'SEC_W01_NOT_PASSED'}</span></Kv>
+          <Kv label="Blocked by"><span className="mono">{overview?.worker.reason ?? 'AGENT_LOOP_NOT_IMPLEMENTED'}</span></Kv>
           <Kv label="Task start"><span className="mono">{overview?.worker.error ?? 'WORKER_ISOLATION_UNAVAILABLE'}</span></Kv>
           <Kv label="Fixture launch"><span className="mono">{overview?.worker.fixtureLaunch ?? 'disabled-in-release'}</span></Kv>
         </dl>

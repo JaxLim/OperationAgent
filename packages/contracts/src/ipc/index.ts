@@ -5,6 +5,7 @@ import type { ControlOverview, ControlRunList, ProjectList, ProjectRef, TaskStar
 import { ProjectSchema } from '../api/workbench.js';
 import type { TaskEventPage, TaskEventsQuery, TaskList, TaskRef } from '../api/tasks.js';
 import type { TaskSnapshot } from '../events/task.js';
+import type { ApiKeyInput, ModelChoice, ModelSettingsView, ModelTestResult } from '../api/model.js';
 export { ServiceTreeIdentitySchema } from './identity.js';
 export type { ServiceTreeIdentity } from './identity.js';
 
@@ -21,6 +22,8 @@ export const IPC_CHANNELS = Object.freeze({
   getSettings: 'oa:settings-get', saveSettings: 'oa:settings-save', listProjects: 'oa:projects-list',
   addProject: 'oa:projects-add', removeProject: 'oa:projects-remove', listRuns: 'oa:runs-list', startTask: 'oa:tasks-start',
   listTasks: 'oa:tasks-list', getTask: 'oa:tasks-snapshot', listTaskEvents: 'oa:tasks-events',
+  getModelSettings: 'oa:model-settings-get', saveModelChoice: 'oa:model-choice-save', setApiKey: 'oa:model-key-set',
+  clearApiKey: 'oa:model-key-clear', testModelConnection: 'oa:model-test',
 });
 export const EmptyInputSchema = z.strictObject({});
 
@@ -58,4 +61,10 @@ export interface DesktopApi {
   listTasks(): Promise<TaskList>;
   getTask(input: TaskRef): Promise<TaskSnapshot>;
   listTaskEvents(input: TaskEventsQuery): Promise<TaskEventPage>;
+  /** M2 model settings. A key goes in once and never comes back: replies carry only "configured" and a hint. */
+  getModelSettings(): Promise<ModelSettingsView>;
+  saveModelChoice(input: ModelChoice): Promise<ModelSettingsView>;
+  setApiKey(input: ApiKeyInput): Promise<ModelSettingsView>;
+  clearApiKey(): Promise<ModelSettingsView>;
+  testModelConnection(): Promise<ModelTestResult>;
 }

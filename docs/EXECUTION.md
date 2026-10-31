@@ -425,3 +425,74 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
 - 两条 Codex 审查意见均已处理：原始报告必须逐项通过共享规则并与集成记录同源；无路由一律视为“无法判定”，不算拒绝。
 
 据此，`build/agent-status.json` 记录：Windows x64 SEC-W01 PASS，M1 完成，`productionWorkerQualified: true`，`verify:agent` 用已提交的原始证据复核。`agentReady` 仍为 false，要等 M2 的 Agent Loop 实现后才能设置；macOS 和 Linux 的 SEC-W01 仍为 NOT_RUN，不继承 Windows 的结论。
+
+## M2 第一切片：Claude 接入、模型设置与设计系统（2026-10-31）
+
+授权：用户授权里程碑 M1–M4，模型供应商为 Anthropic Claude，要求优先交付可用且精致的 Agent，并从 M2 起采用参考 Lusion 的高级界面风格。本切片只交付凭据、模型网关、模型设置和设计系统；**真实 Worker/Agent 执行仍关闭**：本切片开发时 SEC-W01（M1，PR #7）尚未合并。PR #7 合并后（`27d3014`），Windows 生产 Worker 已获资格（`productionWorkerQualified=true`），但 Agent Loop 还不存在，所以任务启动继续返回 `WORKER_ISOLATION_UNAVAILABLE`，`agentReady=false`。本切片未改动 `tests/worker-fixture/**`、`scripts/sec-w01-rules.ts` 和 `scripts/agent-check.ts`；合并 main 后，`build/agent-status.json` 中只把 `M2` 改为 `in-progress`，其余字段保持 M1 的取值。
+
+- 契约 `packages/contracts/src/api/model.ts`：
+  - 模型固定为 `claude-sonnet-5-5`（默认）、`claude-opus-5-5`、`claude-haiku-5-5`。
+  - `ApiKeySchema`：20–256 个可见 ASCII 字符，不允许空白；Zod 校验失败的信息不含输入值。
+  - Renderer 视图 `ModelSettingsView` 只包含供应商、模型、`configured` 状态、4 位识别提示（`hint`，密钥末 4 位）和 `secureStorage`（available/unavailable）。严格 Schema 保证回复不会携带任何密钥材料。
+  - 连接测试结果 `ModelTestResult` 归一化为 `ok / auth_failed / rate_limited / model_unavailable / provider_error / unreachable / not_configured / credential_unavailable`，只附 HTTP 状态码和耗时，不转发供应商的正文、头或错误文本。
+  - Crypto Bridge 消息（`crypto-request` / `crypto-response`）绑定 `mainRunId/expressRunId` 和 `requestId`，只有 encrypt、decrypt 两个操作，大小有界。
+  - 端点：生产固定为 `https://api.anthropic.com`。Bootstrap 新增可选 `modelEndpoint`，只接受 `http://127.0.0.1:<port>`，供测试接入本地假供应商；生产入口从不设置它。
+  - 新增控制面错误码 `SECURE_STORAGE_UNAVAILABLE`；`ControlHealth`/`ControlOverview` 的数据库版本由 4 升到 5。
+- 持久化：迁移 `005-model-credentials.sql` 新建 `model_credentials`（provider、scheme=`electron-safestorage-v1`、base64 密文、hint、更新时间）和 `model_settings`（模型选择）。SQLite 只保存密文和非敏感元数据；读取到未知模型时回退默认值，不信任存储内容。数据库版本 4→5，同批更新了 P1 持久化测试、Electron 集成测试和安装后烟测的期望值。
+- Express（`apps/server/src`）：
+  - `credentials/service.ts`（CredentialService）：保存前必须先经 Main Crypto Bridge 加密；桥不可用时拒绝（SEC-14），不做任何弱化回退。若桥返回的“密文”包含明文，同样拒绝。失败只抛固定错误码且不带 cause。使用密钥时每次解密一次，只交给一个回调，不缓存。
+  - `credentials/bridge.ts`：Express 端经继承的 Node IPC 通道向 Main 请求加/解密。回复必须匹配未完成的 `requestId` 和本服务树身份；同时最多 4 个请求，每个 5 秒超时。没有 Main 时默认 fail closed。
+  - `models/gateway.ts`（Model Gateway）：唯一操作是“测试连接”，用 `fetch` 发送一次最小的 Messages API 请求（`max_tokens: 1`，`anthropic-version: 2023-06-01`），15 秒超时，并设置 `redirect: 'error'`，防止 `x-api-key` 随重定向发往其他源。响应正文直接丢弃。
+  - 新增 4 个路由：`GET/PUT /v1/model/settings`、`PUT /v1/model/credential`、`POST /v1/model/credential/clear`、`POST /v1/model/test`。连接测试同一时间只跑一个，并发请求共用同一结果。没有通用代理。
+- Main（`apps/desktop/src/main`）：
+  - `crypto-bridge.ts`：Main 中唯一接触明文的模块，使用 Electron `safeStorage` 的异步 API（`isAsyncEncryptionAvailable`、`encryptStringAsync`、`decryptStringAsync`）。只响应当前活动服务树经自身继承通道发来、身份一致的请求，限制并发数，不缓存、不记日志，错误里不带明文。Linux 的 `basic_text` 后端视为不可用。
+  - Supervisor 只对当前活动实例的继承通道提供 Crypto Bridge。新增 5 个固定 IPC 通道：`oa:model-settings-get`、`oa:model-choice-save`、`oa:model-key-set`、`oa:model-key-clear`、`oa:model-test`。
+  - 设置密钥使用单独的注册函数：先在 Main 检查安全存储是否可用，失败只返回固定错误码、不附 cause。连接测试的 Main 侧超时为 20 秒，其余请求仍为 2 秒。
+  - Preload 对应新增 5 个方法，两侧都做 Schema 校验；本地校验失败只抛 `VALIDATION_ERROR`。IPC 操作白名单（`scripts/import-boundaries.mjs`）同步新增这 5 项。
+- 已知残余风险（ARCHITECTURE §6.3，未改变）：首次录入时明文依次经过 Renderer、Preload、Main 代理，再经回环 HTTP 到 Express，并在 Crypto Bridge 加/解密时短暂出现在 Main；连接测试时 Express 短暂持有明文。JS 字符串无法保证清零。已保存的密钥不回读到 Renderer：输入框在保存成功后立即清空，不进入长期状态。`decryptStringAsync` 返回的 `shouldReEncrypt` 暂不处理（不影响正确性，后续切片可补上重新加密）。
+- 设计系统（`styles/app.css`，在原有令牌上扩展，没有重写应用）：
+  - 参考 lusion.co 的克制风格：单一电光蓝强调色（浅色 `#1f3bf0` / 深色 `#7d8cff`），展示字号配紧字距，微标签采用大写加宽字距，按钮为胶囊形，层次靠细线加柔和多层阴影和毛玻璃浮层，过渡采用 expo-out 曲线（`cubic-bezier(0.16, 1, 0.3, 1)`，与 Lusion 站点 CSS 一致）。
+  - 动效令牌：时长 `--dur-fast/base/slow`；三条按 SwiftUI `spring(response, dampingFraction)` 采样成 CSS `linear()` 的弹簧曲线（`--spring-snappy` 0.32/0.86、`--spring-smooth` 0.45/1.0、`--spring-bouncy` 0.5/0.72），各配一个停稳时长。没有引入新依赖。
+  - 对话框带弹簧进场和短退场动画（`Modal` 等退场动画播完再卸载）。分段控件和设置导航的滑块用弹簧移动，设置分区切换时内容平滑落位，提示条改为毛玻璃样式。`prefers-reduced-motion` 下所有动画和过渡缩短到 1ms，状态变化保留。
+  - Settings 重排为带编号的分区导航（01–05），新增 **Model** 分区，包含：供应商卡片（显示是否已配置密钥）、三张模型卡片、API Key 字段（已保存时只显示 `sk-ant-••••末4位`，可替换或移除；安全存储不可用时说明原因并禁止保存）、Test connection 按钮及各结果状态的说明。状态栏显示当前模型和密钥状态，点击可直接打开 Model 设置。
+
+验证（本地 Windows x64，工作树基于 `ee8eeed`，改动未提交）：
+- `pnpm check:engineering` 八项全部退出 0，测试从 97 增加到 **106/106**。新增 `tests/m2/model.test.ts`（9 项），覆盖：
+  - 契约：拒绝的密钥不出现在错误中；端点只能是固定地址或回环；视图不能携带密钥材料。
+  - CredentialService：SQLite、WAL 文件的全部字节中都找不到明文。
+  - SEC-14：安全存储不可用、桥原样回显明文、桥报错这三种情况都不写入任何数据，错误信息也不透传。
+  - Express 端桥客户端：按 requestId 和身份匹配回复，并发上限与超时生效。
+  - Main Crypto Bridge（使用假存储）：拒绝外部服务树，安全存储不可用或 Linux `basic_text` 时拒绝，错误中没有明文。
+  - Gateway（对接本地假供应商）：请求头与请求体正确，各状态码映射正确，端口关闭时报 unreachable，重定向目标收不到任何请求，超时按 unreachable 处理。
+- 本地 `pnpm test:integration` 退出 0：真实进程测试 **17/17**，原生接口测试 2/2。新增的 Electron 测试使用回环假供应商，全程走真实桥：
+  - 在真实 DOM 中打开 Settings › Model，输入并保存密钥，然后运行 Test connection；保存后 DOM 中不再残留明文。
+  - 经 API 验证两侧的 Schema 校验和模型切换，所有回复都不含密钥。
+  - 把 `safeStorage` 修改为不可用后，保存被拒绝（`SECURE_STORAGE_UNAVAILABLE`），已存的密钥不变。
+  - 重启后密文仍能经新实例的桥解密并测试成功；清除后返回 `not_configured`。
+  - 扫描整个数据目录（SQLite、WAL、Chromium 配置目录）以及全部进程输出，均未发现明文。
+  - Worker fixture 在本机仍为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`。
+- 截图：测试从真实窗口截取的浅色和深色截图，复制到 `docs/evidence/m2/win32-x64/settings-model-{light,dark}.png` 供评审。
+- 未验证：安装后烟测（`pnpm package && pnpm test:smoke`，期望值已改为迁移 1–5）由 CI 运行；未对真实 api.anthropic.com 发起请求；macOS/Linux 的 `safeStorage` 行为未测试。本地结果不能代替 CI 证据。
+
+PR #8 评审修正（同日）：
+- 保存时立即清空输入框：不论成功还是失败，密钥都不会留在 Renderer 状态或 DOM 中。
+- 保存和移除密钥时，Main 侧超时改为 12 秒，长于 Crypto Bridge 的 5 秒超时。保存若未得到确认，界面会重新读取实际状态，不再断言“未写入”。
+- Express 收到超时后才到达、但身份合法的加密回复时，直接丢弃，不再误判为关闭消息而停止控制面。
+- CredentialService 的保存与移除按请求顺序串行执行，先发出的保存不会撤销已确认的移除。
+- 连接测试按配置版本区分：Express 只让配置相同的测试共享进行中的请求；Renderer 丢弃在模型或密钥变更前发起的测试结果。
+
+以上修正新增 2 项单元测试；本地 `check:engineering` 与 `test:integration`（17/17、2/2）均再次退出 0。
+
+合并 main（M1，`27d3014`）后：`pnpm check:engineering` 九项（含 `verify:agent`）全部退出 0，单元测试 **113/113**；本地 `pnpm test:integration` 退出 0，真实进程测试 17/17，原生接口测试 2/2。本机的 Worker fixture、SEC-17 和 SEC-W01 仍为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`，Windows SEC-W01 的 PASS 来自 M1 已提交的 CI 证据。
+
+### PR #8 收尾审查（2026-10-31）
+
+主会话接手 PR #8 后，复核了凭据、Crypto Bridge、模型网关和 IPC 链路。Codex 的 5 条意见已在 `ae79ddd` 中处理，包括 Renderer 不保留明文 key、凭据请求时限长于 bridge、过期的 bridge 回复不触发关停、保存与删除串行化、过时的连接测试结果被丢弃，线程均已解决。本轮另外做了两处修正：
+
+- 纵深防御：打包后的应用如果收到 `modelEndpoint` 覆盖（测试用的本机假服务端），直接拒绝启动（`MODEL_ENDPOINT_OVERRIDE_REJECTED`），避免真实 key 以明文 HTTP 发往本机监听者。生产入口本来就不传这个参数，此项只是防止将来误用。
+- 状态文案更正：M1 合并后，“Windows Worker 门禁未通过”已不成立。概览契约中 `worker.reason` 改为 `AGENT_LOOP_NOT_IMPLEMENTED`，这在所有平台都成立；Status 面板标签改为 “Blocked by”；Settings、About、侧栏和任务拒绝提示统一说明执行能力随 Agent Loop 推出，且只在 Worker 已通过隔离门禁的平台开放。控制面不在运行时声称任何平台的门禁结论，该结论只以构建记录 `build/agent-status.json` 为准。
+
+收尾验证（Windows x64 本地）：
+- `pnpm check:engineering` 九项全部退出 0（**113/113**），`verify:agent` 显示 M1 已完成、M2 进行中、Windows SEC-W01 PASS、`agentReady=false`。
+- `pnpm test:integration` 退出 0：真实进程测试 **17/17**（含模型设置经真实桥接的完整流程），原生接口测试 2/2。
+- Worker fixture 和 SEC-W01 在开发机上按规定为 BLOCKED，由 CI 一次性 runner 执行。

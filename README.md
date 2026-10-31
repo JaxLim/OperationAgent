@@ -1,10 +1,10 @@
 # OperationAgent
 
-当前阶段：**P1（P1.0–P1.7）已在 Windows x64 完成真实验收，见 [P1 退出报告](docs/P1-EXIT-REPORT.md)；`agentReady=false`，不授予生产 Worker 资格**。
+当前阶段：**M2 进行中**（2026-10-31）。P1 已在 Windows x64 完成真实验收（[P1 退出报告](docs/P1-EXIT-REPORT.md)）；P2.0–P2.3（契约、任务事件存储、快照和游标补拉、Workbench 任务视图）已合并。**M1 已完成：Windows x64 的生产 Worker 门禁 SEC-W01 在一次性 runner 上真实通过**，证据见 `docs/evidence/m1/win32-x64/`，由 `pnpm verify:agent` 复核。M2 第一切片提供 Claude 模型设置、经 Main safeStorage 加密的密钥存储和连接测试。**Agent Loop 尚未实现，任务执行仍关闭（`agentReady=false`）**；macOS 和 Linux 的 SEC-W01 仍为 NOT_RUN。进度与后续里程碑见 [路线图](docs/ROADMAP.md)，每次变更的验证记录见 [执行记录](docs/EXECUTION.md)。
 
 规范来源：[ARCHITECTURE.md](ARCHITECTURE.md)、[AGENTS.md](AGENTS.md)，现为 `0.4.0-p0`。已按用户正式批准的 [ADR-WIN-001 r1](docs/adr/ADR-WIN-001.md) 更新，批准记录绑定决策包与规范补丁哈希。
 
-当前阶段记录和命令语义见 [P1 验收](docs/P1-ACCEPTANCE.md) 与 `build/p1-status.json`；P2 授权与范围记录在 `build/p2-status.json`（`pnpm verify:p2` 校验，见 [路线图](docs/ROADMAP.md)）。P0 文件保持为冻结历史，不用改写旧批准记录推进阶段。
+阶段记录：P1 见 [P1 验收](docs/P1-ACCEPTANCE.md) 与 `build/p1-status.json`；P2 授权与范围见 `build/p2-status.json`（`pnpm verify:p2`）；M1–M4 授权（模型供应商 Claude）、各平台 SEC-W01 结论和 Worker 资格见 `build/agent-status.json`（`pnpm verify:agent`，只接受已提交的原始 runner 证据）。P0 文件保持为冻结历史，不用改写旧批准记录推进阶段。
 
 已建立七个 workspace 包和 Main/Preload/Renderer 独立 TypeScript 项目。Express 使用版本化 SQL migration 和独占 SQLite 连接；Main 通过继承通道建立服务身份，以认证的回环 HTTP 代理固定 API。Windows 平台 WorkerLauncher（公开 API + AppContainer + Job + OWIP/1）只在一次性 runner 上启动受限测试 fixture；发布构建不包含 fixture，任务入口返回 `WORKER_ISOLATION_UNAVAILABLE`。证据见 `docs/evidence/p1/win32-x64/`。
 
@@ -57,4 +57,4 @@ Windows x64 可用现有 Node 运行 `node scripts/bootstrap-windows.mjs`，将�
 
 CI 在各平台先选定锁定的 Node；Windows 运行完整 `bootstrap-windows.mjs`，为真实进程验收准备独立 Node，macOS/Linux 使用 `--pnpm-only` 安装并校验 pnpm。版本与 SRI 统一读取 `build/runtime-lock.json`，不使用另一个包管理器自安装当前包管理器。
 
-生产支持状态：所有平台 `ui/read/gitRead/highRisk/workerIsolation` 均为 **unverified**；依赖和工具链检查通过不改变这些状态。
+生产支持状态：Windows x64 的生产 Worker 隔离（SEC-W01）已由一次性 runner 证据验证（`build/agent-status.json`），其余平台为 NOT_RUN。所有平台的 `ui/read/gitRead/highRisk` 仍为 **unverified**：只读工具需 SEC-08，Git 只读需 SEC-22，高危工具需该平台 P3b。依赖和工具链检查通过不改变这些状态。
