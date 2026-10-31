@@ -4,11 +4,15 @@ import { pathToFileURL } from 'node:url';
 import { object, readJson } from './p0-check.ts';
 
 const STAGES = ['P2.0', 'P2.1', 'P2.2', 'P2.3'];
-// Contract slice whose presence backs the P2.0 completion claim; its tests run in `pnpm test`.
-export const P2_0_FILES = ['packages/contracts/src/events/tool-output.ts', 'packages/contracts/src/events/task.ts', 'tests/p2/contracts.test.ts'];
+// Files whose presence backs a completion claim; their tests run in `pnpm test` and CI.
+export const STAGE_FILES = {
+  'P2.0': ['packages/contracts/src/events/tool-output.ts', 'packages/contracts/src/events/task.ts', 'tests/p2/contracts.test.ts'],
+  'P2.1': ['apps/server/migrations/004-task-events.sql', 'apps/server/src/persistence/tasks.ts', 'tests/p2/task-store.test.ts'],
+} as const;
+export type StagePresence = Record<keyof typeof STAGE_FILES, boolean>;
 
-/** P2 scope, authorization and claims. P2.1–P2.3 cannot be claimed until their evidence checks exist. */
-export function validateP2Stage(value: unknown, p1Stage: unknown, p2_0Present: boolean): string[] {
+/** P2 scope, authorization and claims. P2.2–P2.3 cannot be claimed until their evidence checks exist. */
+export function validateP2Stage(value: unknown, p1Stage: unknown, present: StagePresence): string[] {
   const errors: string[] = [];
   const need = (ok: boolean, message: string): void => { if (!ok) errors.push(message); };
   try {
@@ -26,8 +30,9 @@ export function validateP2Stage(value: unknown, p1Stage: unknown, p2_0Present: b
     const implementation = object(stage.implementation);
     need(Object.keys(implementation).join('|') === STAGES.join('|') &&
       STAGES.every(name => ['implemented', 'blocked', 'in-progress', 'not-started'].includes(String(implementation[name]))), 'P2_IMPLEMENTATION_SCOPE');
-    need(implementation['P2.0'] !== 'implemented' || p2_0Present, 'P2_IMPLEMENTATION_SCOPE');
-    need(['P2.1', 'P2.2', 'P2.3'].every(name => implementation[name] !== 'implemented'), 'P2_IMPLEMENTATION_SCOPE');
+    need(implementation['P2.0'] !== 'implemented' || present['P2.0'], 'P2_IMPLEMENTATION_SCOPE');
+    need(implementation['P2.1'] !== 'implemented' || (present['P2.1'] && implementation['P2.0'] === 'implemented'), 'P2_IMPLEMENTATION_SCOPE');
+    need(['P2.2', 'P2.3'].every(name => implementation[name] !== 'implemented'), 'P2_IMPLEMENTATION_SCOPE');
     need(stage.p2TotalExit === 'NOT_RUN', 'P2_FALSE_EXIT');
     const capabilities = object(stage.platformCapabilities);
     need(Object.keys(capabilities).sort().join('|') === ['darwin-arm64', 'linux-x64', 'win32-x64'].join('|'), 'P2_CAPABILITY_MATRIX');
@@ -42,7 +47,9 @@ export function validateP2Stage(value: unknown, p1Stage: unknown, p2_0Present: b
 
 export function checkP2(root: string): void {
   const stage = readJson(resolve(root, 'build/p2-status.json'));
-  const errors = validateP2Stage(stage, readJson(resolve(root, 'build/p1-status.json')), P2_0_FILES.every(file => existsSync(resolve(root, file))));
+  const present = (files: readonly string[]): boolean => files.every(file => existsSync(resolve(root, file)));
+  const errors = validateP2Stage(stage, readJson(resolve(root, 'build/p1-status.json')),
+    { 'P2.0': present(STAGE_FILES['P2.0']), 'P2.1': present(STAGE_FILES['P2.1']) });
   if (errors.length) throw new Error(errors.join('\n'));
   console.log(JSON.stringify({ check: 'P2_SCOPE', passed: true, stopAfter: 'P2.3', implementation: stage.implementation,
     p2TotalExit: stage.p2TotalExit, agentReady: false, productionWorkerQualified: false }));

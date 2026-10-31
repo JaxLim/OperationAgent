@@ -165,7 +165,7 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   assert.equal(result.tooLong, 'rejected'); assert.match(result.missing, /NOT_FOUND/);
   assert.deepEqual(result.task, { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' });
   assert.equal(result.emptyTask, 'rejected'); assert.equal(result.forged, 'rejected');
-  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 3);
+  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 4);
   assert.equal(result.overview.worker.error, 'WORKER_ISOLATION_UNAVAILABLE');
   assert.ok(Object.values(result.overview.capabilities).every(value => value !== 'verified'));
   assert.equal(result.runs.runs[0].outcome, 'RUNNING'); assert.deepEqual(result.projects.projects, []);

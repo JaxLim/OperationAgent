@@ -87,3 +87,8 @@ export function replayTaskEvents(taskId: string, afterSeq: number, state: TaskSt
   }
   return { ok: true, state, lastSeq };
 }
+
+/** Express's committed view of one task; `lastSeq` is the cursor a client resumes events from. */
+export const TaskSnapshotSchema = z.strictObject({ id: z.uuid(), projectId: z.uuid(), state: TaskStateSchema,
+  lastSeq: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() });
+export type TaskSnapshot = z.infer<typeof TaskSnapshotSchema>;

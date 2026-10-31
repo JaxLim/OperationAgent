@@ -304,3 +304,23 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
   - 在各自证据检查建立前，拒绝把 P2.1–P2.3 或 P2 总退出标为完成；
   - 拒绝越出授权范围和任何虚假资格。
 - `tests/p2/stage.test.ts` 覆盖上述各项的正例和负例。
+
+## P2.1 任务与事件存储（2026-10-30）
+
+授权：用户 2026-10-30 授权 P2.0–P2.3（记录于 `build/p2-status.json`），随后指示“Start P2.1”。
+
+- `apps/server/migrations/004-task-events.sql`：
+  - `tasks` 每个任务一行，保存当前状态和 `last_seq`；`project_id` 不设外键，项目被移除后任务的审计记录仍然保留。
+  - `task_events` 以 `(task_id, seq)` 为主键，`event_id` 唯一，`request_id` 在非空时唯一，payload 必须是不超过 32 KiB 的合法 JSON。
+  - 数据库触发器保证 seq 从 1 起连续无间隙，并拒绝任何 UPDATE/DELETE（`TASK_EVENTS_APPEND_ONLY`），作为 Express 代码之外的第二道防线。
+  - 不保存提示词、tool_output_delta 或任何密钥。
+- `apps/server/src/persistence/tasks.ts`（仅 Express 内部使用）：
+  - `createTask`、`transitionTask`、`recordToolSummary` 都在 immediate 事务内把状态和事件一起提交；迁移合法性由 contracts 的 `checkTaskTransition` 判定，被拒绝的请求不写入任何数据。
+  - 同一个 `requestId` 只应用一次：重复的相同操作返回已提交的结果，用于不同操作则返回 `REQUEST_CONFLICT`。
+  - `listTaskEvents(taskId, afterSeq, limit≤200)` 按 seq 顺序分页；读取时用 contracts 重新校验存储的 JSON，不合法即失败（fail closed）。
+- 启动对账：`openStore` 在原有的运行记录恢复事务内，把所有未结束的任务迁移到 `INTERRUPTED` 并写入事件。RUNNING、WAITING_APPROVAL、STOPPING 的副作用记为 `UNKNOWN`，CREATED、QUEUED 记为 null。恢复需要用户确认，不会自动重放任何任务（ADR-005/010）。
+- 数据库版本从 3 升到 4，同批更新了 contracts（`ControlHealth`/`ControlOverview`）、P1 持久化测试、Electron 集成测试和安装后烟测的期望值。`verify:p2` 扩展为：P2.1 的完成声明要求迁移、`tasks.ts` 和测试文件存在，且 P2.0 已标记完成；P2.2、P2.3 仍不得声称完成。
+
+验证：`pnpm check:engineering` 八项全部退出 0，测试从 88 增加到 **94/94**；新增 `tests/p2/task-store.test.ts`（6 项）覆盖原子提交、拒绝不写入、seq 连续与游标分页、请求去重与冲突、摘要上限与终态拒绝、重启对账与读回，以及数据库层的只追加和无间隙约束。另做一次变异检查：去掉 `transitionTask` 的事务后，注入的提交失败会留下孤立事件，对应测试失败；还原后通过。真实进程集成结果见下文；安装后烟测（`pnpm package && pnpm test:smoke`）未在本地运行，由 CI 执行。
+
+本地真实进程集成（`pnpm test:integration`，Windows x64，工作树基于 `f5740ee` 且有未提交改动）退出 0：真实 Node/Electron 进程测试 14/14，原生接口测试 2/2，0 fail、0 skipped；Electron 测试确认 `overview.database.version` 为 4。Worker fixture 在本开发机上按 ADR-WIN-001 §3 记为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`，真实 fixture 证据仍只能来自一次性 CI runner。本地结果不能代替 CI 证据。
