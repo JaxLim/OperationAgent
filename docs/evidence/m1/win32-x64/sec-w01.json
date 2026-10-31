@@ -1,0 +1,136 @@
+{
+  "check": "SEC_W01_WIN32_X64",
+  "source": "7dce7c45a938a08faaab37d20bdfd358f5c2194e",
+  "finishedAt": "2026-10-31T11:06:08.961Z",
+  "baseline": {
+    "pid": 7852,
+    "parentPid": 2784,
+    "integrityRid": 4096,
+    "appContainer": true,
+    "capabilityCount": 0,
+    "jobAssignedAtCreation": true,
+    "noChildProcessCreation": true,
+    "inheritedHandleCount": 3,
+    "inheritedHandles": "rpc-pipe,nul-read,stderr-pipe",
+    "verifiedBeforeResume": true,
+    "profile": "OperationAgent.P1.8745e283071cdb4771249dc1249a4a23"
+  },
+  "prepared": {
+    "controls": {
+      "tcp4Public": "REACHABLE",
+      "tcp6Public": "TIMEOUT",
+      "udp4Dns": "REACHABLE",
+      "dns": "REACHABLE",
+      "loopbackTcp4": "REACHABLE",
+      "loopbackTcp6": "REACHABLE",
+      "loopbackUdp4": "REACHABLE"
+    },
+    "ipv6Route": true,
+    "parentAddonExists": true,
+    "canaries": [
+      "workspace",
+      "profile",
+      "temp",
+      "repo-git-config"
+    ]
+  },
+  "report": {
+    "envAtStart": [
+      "LOCALAPPDATA",
+      "OA_INHERITED_CHANNEL",
+      "SystemRoot",
+      "TEMP",
+      "TMP",
+      "WINDIR"
+    ],
+    "env": [
+      "LOCALAPPDATA",
+      "SystemRoot",
+      "TEMP",
+      "TMP",
+      "WINDIR"
+    ],
+    "results": {
+      "self.read-runtime": "ALLOWED",
+      "native.dlopen-parent-addon": "DENIED",
+      "proc.spawn": "DENIED",
+      "proc.kill-sibling": "DENIED",
+      "net.tcp4.public": "DENIED",
+      "net.tcp6.public": "DENIED",
+      "net.tcp4.loopback": "ERROR:ETIMEDOUT",
+      "net.tcp6.loopback": "ERROR:ETIMEDOUT",
+      "net.udp4.dns-public": "NO_RESPONSE",
+      "net.udp4.loopback": "SENT",
+      "net.dns.lookup": "ERROR:ENOTFOUND",
+      "file.read.workspace": "DENIED",
+      "file.read.profile": "DENIED",
+      "file.read.temp": "DENIED",
+      "file.read.repo-git-config": "DENIED",
+      "file.list.profile": "DENIED",
+      "file.list.workspace": "DENIED",
+      "file.list.users": "DENIED",
+      "file.write.workspace": "DENIED",
+      "file.write.profile": "DENIED",
+      "file.write.temp": "DENIED",
+      "file.write.runtime": "DENIED",
+      "native.exports": "close,read,write"
+    }
+  },
+  "observed": {
+    "hits": {
+      "tcp4": 0,
+      "tcp6": 0,
+      "udp4": 0
+    },
+    "siblingAlive": true,
+    "wfpAudit": true,
+    "wfp": [
+      {
+        "id": 5152,
+        "direction": "outbound",
+        "destination": "1.1.1.1",
+        "port": 443,
+        "protocol": 6
+      },
+      {
+        "id": 5157,
+        "direction": "outbound",
+        "destination": "1.1.1.1",
+        "port": 443,
+        "protocol": 6
+      },
+      {
+        "id": 5152,
+        "direction": "outbound",
+        "destination": "2606:4700:4700::1111",
+        "port": 443,
+        "protocol": 6
+      },
+      {
+        "id": 5157,
+        "direction": "outbound",
+        "destination": "2606:4700:4700::1111",
+        "port": 443,
+        "protocol": 6
+      },
+      {
+        "id": 5152,
+        "direction": "outbound",
+        "destination": "1.1.1.1",
+        "port": 53,
+        "protocol": 17
+      },
+      {
+        "id": 5157,
+        "direction": "outbound",
+        "destination": "1.1.1.1",
+        "port": 53,
+        "protocol": 17
+      }
+    ]
+  },
+  "exit": {
+    "reason": "STOPPED",
+    "cleanup": "confirmed"
+  }
+}
