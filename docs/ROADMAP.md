@@ -7,7 +7,8 @@
 - P1.0–P1.7 已在 Windows x64 以真实 CI 证据退出（[P1 退出报告](P1-EXIT-REPORT.md)）；`agentReady=false`，生产 Worker 无资格，三平台全部能力 `unverified`。
 - P2.0 契约（PR #3）已合并：工具流、任务状态机、TaskEvent、领域错误。
 - P2.1 事件存储（PR #4）已合并：迁移 `004-task-events.sql`（`tasks` 和只追加的 `task_events`）及 Express 内 `persistence/tasks.ts`；数据库版本为 4。
-- P2.2 只读任务视图：任务列表、快照和按游标分页的事件接口，经 Main 固定通道和 Preload 暴露；契约中的 `catchUpTaskEvents` 负责先取快照再补拉。Workbench 界面接入属于 P2.3。
+- P2.2 只读任务视图（PR #5）已合并：任务列表、快照和按游标分页的事件接口，经 Main 固定通道和 Preload 暴露。
+- P2.3 Workbench 任务视图：侧栏列出当前项目的已提交任务；详情页按游标同步并显示事件时间线；中断任务显示“副作用未知”和“不会自动恢复”；控制面重启后从游标重新同步。P2 四个阶段均已实现，P2 总退出（`p2TotalExit`）需要已提交的 CI 证据，暂为 NOT_RUN。
 - 本地开发需把 `.tools/node` 置于 PATH 前部，否则 `pnpm run` 内嵌脚本使用系统 Node 并因 `engines` 失败。
 
 ## 2. 优先级排序
@@ -34,3 +35,18 @@
 ## 4. 本轮（2026-10-30）执行范围
 
 仅实施 P2.0 契约基础（纯 `packages/contracts` Schema + `tests/p2` 单元测试），不改数据库、HTTP 路由、Renderer、阶段状态文件或任何冻结文件；工程门禁本地运行，未产生 CI 证据。结果见 `EXECUTION.md` 末节。
+
+## 5. P2 之后：通往可用 Agent 的最短合规路径（2026-10-31）
+
+目标是尽快得到一个能真正执行任务的桌面 Agent，同时不绕过任何安全门禁。按 ARCHITECTURE §13，真实执行依赖三道门：生产 Worker 资格（SEC-W01）、工具门禁（只读走 SEC-08，高危走 P3a/P3b）和模型闭环（P4）。建议顺序如下，每个里程碑单独提 PR、单独 CI：
+
+| 里程碑 | 交付 | 退出证据 | 依赖 |
+|---|---|---|---|
+| **M1 SEC-W01（Windows）** | 在 P1.4 受限 fixture 上补齐生产 Worker 攻击面测试：用户文件与凭据不可读、全网络与回环被拒、无危险句柄继承、启动竞态、原生边界只暴露通道。全部在一次性 CI runner 上运行 | runner 证据全部 PASS 后，Windows 才能 `workerIsolation=verified`；有任何 UNKNOWN 都不放行 | P1.4 |
+| **M2 只读 Agent（P3a Read Gate + P4 最小闭环）** | Read Adapter 短命子进程（AppContainer，仅授权项目目录可读）+ SEC-08；Express Model Gateway + CredentialService/safeStorage + Claude 适配器；Worker Agent Loop 只能调用 `read_file` | SEC-08、SEC-20 真实测试；用模拟模型服务端做端到端 CI；第一次真正可用：能读代码并回答问题的 Agent | M1 |
+| **M3 写入与 Shell（P3a 沙箱 + P3b）** | `write_file`/`bash` 的 AppContainer + Job 沙箱、审批流程、Shell 规范化、工具流背压与停止 | SEC-05～08/12/16/19/21/23 | M2 |
+| **M4 产品化** | 审批/停止/恢复 UI 打磨，MCP（P5），签名与升级（P7） | 见 §13 | M3 |
+
+需要用户决定的事项：
+1. **模型供应商**：默认采用 Anthropic Claude（Messages API）。API Key 由用户在应用内输入，经 safeStorage 加密，Worker 不可见。
+2. **执行顺序**：上表把 P4 的最小闭环和 P3a 的 Read Gate 合并为 M2，先交付只读 Agent，写入和 Shell 留到 M3。这样不改变任何门禁，只调整交付顺序；ARCHITECTURE §13 也允许只读能力先于高危能力开放。

@@ -4,6 +4,7 @@ import type { Project } from '@operation-agent/contracts';
 import { actions, useStore } from '../state';
 import type { Submission } from '../state';
 import { accent, relativeTime } from './format';
+import { TaskDetail } from './TaskDetail';
 import { IconAlert, IconFolder, IconLock, IconPlus, IconSend, IconShield, IconCheck, IconX } from './Icons';
 
 export interface ComposerHandle { focus(): void }
@@ -80,6 +81,7 @@ export const Workspace = forwardRef<ComposerHandle>(function Workspace(_props, h
   const submissions = useStore(s => s.submissions);
   const project = projects.find(item => item.id === activeId);
   const mine = submissions.filter(item => item.projectId === activeId);
+  const selected = useStore(s => s.tasks.find(task => task.id === s.selectedTaskId && task.projectId === activeId));
 
   if (!loaded) {
     return (
@@ -101,6 +103,7 @@ export const Workspace = forwardRef<ComposerHandle>(function Workspace(_props, h
       </div></div></section>
     );
   }
+  if (selected) return <TaskDetail task={selected} />;
   return (
     <section className="center">
       <div className="scroll">

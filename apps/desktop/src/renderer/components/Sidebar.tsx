@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useStore } from '../state';
-import { accent } from './format';
+import { actions, useStore } from '../state';
+import { TASK_STATE, accent, relativeTime, shortId } from './format';
 import { IconChevronDown, IconFolder, IconLock, IconPlus, IconSearch, IconSettings, IconTerminal } from './Icons';
 
 interface Props { onOpenProjects: () => void; onOpenSettings: () => void; onOpenDiagnostics: () => void; onNewTask: () => void }
@@ -9,6 +9,9 @@ export function Sidebar({ onOpenProjects, onOpenSettings, onOpenDiagnostics, onN
   const projects = useStore(s => s.projects);
   const activeId = useStore(s => s.settings?.activeProjectId ?? null);
   const submissions = useStore(s => s.submissions);
+  const allTasks = useStore(s => s.tasks);
+  const selectedTaskId = useStore(s => s.selectedTaskId);
+  const tasks = useMemo(() => allTasks.filter(task => task.projectId === activeId), [allTasks, activeId]);
   const [query, setQuery] = useState('');
   const project = projects.find(item => item.id === activeId);
   const requests = useMemo(() => {
@@ -39,11 +42,24 @@ export function Sidebar({ onOpenProjects, onOpenSettings, onOpenDiagnostics, onN
 
       <nav className="task-list">
         <section>
-          <h3 className="section-label">Tasks<span className="count">0</span></h3>
-          <div className="task-list-empty sidebar-gate">
+          <h3 className="section-label">Tasks<span className="count">{tasks.length}</span></h3>
+          {tasks.map(task => {
+            const view = TASK_STATE[task.state] ?? { tone: 'muted' as const, label: task.state };
+            return (
+              <button key={task.id} className={`task-row${task.id === selectedTaskId ? ' is-active' : ''}`} data-task-id={task.id}
+                onClick={() => actions.selectTask(task.id)} title={`Task ${task.id}`}>
+                <span className={`task-row-status tone-${view.tone}`}><span className={`dot${'live' in view ? ' dot-live' : ''}`} /></span>
+                <span className="task-row-body">
+                  <span className="task-row-title">Task <span className="mono">{shortId(task.id)}</span></span>
+                  <span className="task-row-meta"><span className={`tone-text-${view.tone}`}>{view.label}</span><span className="sep">·</span>{relativeTime(Date.parse(task.updatedAt))}</span>
+                </span>
+              </button>
+            );
+          })}
+          {tasks.length === 0 && <div className="task-list-empty sidebar-gate">
             <IconLock size={13} />
             <span>No tasks can run in this build. Execution unlocks only after the Worker isolation gate (SEC-W01) passes on this platform.</span>
-          </div>
+          </div>}
         </section>
         {requests.length > 0 && (
           <section>

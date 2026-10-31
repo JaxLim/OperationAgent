@@ -10,7 +10,7 @@
     "quote": "Authorize P2.0–P2.3",
     "question": "Which P2 scope do you formally authorize, so I can record it and finish the merge?"
   },
-  "implementation": { "P2.0": "implemented", "P2.1": "implemented", "P2.2": "implemented", "P2.3": "not-started" },
+  "implementation": { "P2.0": "implemented", "P2.1": "implemented", "P2.2": "implemented", "P2.3": "implemented" },
   "p2TotalExit": "NOT_RUN",
   "agentReady": false,
   "productionWorkerQualified": false,

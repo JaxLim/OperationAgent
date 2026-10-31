@@ -298,6 +298,7 @@ kbd {
 .task-actions { display: flex; gap: 8px; flex: none; }
 
 .timeline { display: flex; flex-direction: column; gap: var(--gap); }
+.task-banner { margin-bottom: calc(var(--gap) * 1.5); }
 .timeline-entry { animation: enter 260ms var(--ease) both; }
 @keyframes enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .timeline-entry, .modal, .modal-backdrop { animation: none !important; } .dot-live { animation: none; } }
