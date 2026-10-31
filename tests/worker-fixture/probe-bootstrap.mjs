@@ -12,6 +12,8 @@ import { join } from 'node:path';
 import { runFixture } from '../../apps/agent-worker/dist/fixture.js';
 
 const here = name => fileURLToPath(new URL(`./${name}`, import.meta.url));
+// The inherited-channel variable is consumed by the channel addon, so the environment is recorded before and after.
+const envAtStart = Object.keys(process.env).sort();
 const targets = JSON.parse(readFileSync(here('targets.json'), 'utf8'));
 const TIMEOUT_MS = 1500;
 
@@ -28,11 +30,17 @@ const tcp = (host, port) => withTimeout(new Promise(done => {
   socket.once('connect', () => { socket.destroy(); done('ALLOWED'); });
   socket.once('error', error => { socket.destroy(); done(error.code === 'ECONNREFUSED' ? 'ALLOWED_REFUSED' : classify(error)); });
 }));
+// A connected UDP socket: Windows authorizes the remote at connect time, so a blocked AppContainer gets an explicit
+// error instead of an unconnected send that "succeeds" locally and is dropped silently.
 const udp = (type, host, port, payload, expectReply) => withTimeout(new Promise(done => {
   const socket = createSocket(type);
-  socket.once('error', error => { socket.close(); done(classify(error)); });
-  socket.once('message', () => { socket.close(); done('ALLOWED'); });
-  socket.send(payload, port, host, error => { if (error) { socket.close(); done(classify(error)); } else if (!expectReply) { setTimeout(() => { socket.close(); done('SENT'); }, 300); } });
+  const finish = outcome => { try { socket.close(); } catch { /* Already closed. */ } done(outcome); };
+  socket.once('error', error => finish(classify(error)));
+  socket.once('message', () => finish('ALLOWED'));
+  socket.connect(port, host, error => {
+    if (error) { finish(classify(error)); return; }
+    socket.send(payload, sendError => { if (sendError) finish(classify(sendError)); else if (!expectReply) setTimeout(() => finish('SENT'), 300); });
+  });
 }), 'NO_RESPONSE');
 // A minimal DNS A query for example.com.
 const dnsQuery = Buffer.from('abcd01000001000000000000076578616d706c6503636f6d0000010001', 'hex');
@@ -66,9 +74,10 @@ const outcomes = await Promise.all(names.map(name => probes[name]().catch(error 
 const addon = { exports: {} };
 let loaded = true;
 try { process.dlopen(addon, here('channel.node')); } catch (error) { loaded = false; names.push('native.load'); outcomes.push(classify(error)); }
-names.push('native.exports'); outcomes.push(Object.keys(addon.exports).sort().join(','));
+// Node-API exports are non-enumerable; list every own property.
+names.push('native.exports'); outcomes.push(Object.getOwnPropertyNames(addon.exports).sort().join(','));
 const native = addon.exports;
-const report = { env: Object.keys(process.env).sort(), results: Object.fromEntries(names.map((name, index) => [name, outcomes[index]])) };
+const report = { envAtStart, env: Object.keys(process.env).sort(), results: Object.fromEntries(names.map((name, index) => [name, outcomes[index]])) };
 process.stderr.write(`OA-PROBE ${JSON.stringify(report)}\n`);
 if (!loaded) process.exit(1);
 
