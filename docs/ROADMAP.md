@@ -6,7 +6,8 @@
 
 - P1.0–P1.7 已在 Windows x64 以真实 CI 证据退出（[P1 退出报告](P1-EXIT-REPORT.md)）；`agentReady=false`，生产 Worker 无资格，三平台全部能力 `unverified`。
 - P2.0 契约（PR #3）已合并：工具流、任务状态机、TaskEvent、领域错误。
-- P2.1 事件存储：迁移 `004-task-events.sql`（`tasks` 和只追加的 `task_events`）及 Express 内 `persistence/tasks.ts`；数据库版本为 4。尚无 HTTP 路由、快照接口或补拉接口，这些属于 P2.2。
+- P2.1 事件存储（PR #4）已合并：迁移 `004-task-events.sql`（`tasks` 和只追加的 `task_events`）及 Express 内 `persistence/tasks.ts`；数据库版本为 4。
+- P2.2 只读任务视图：任务列表、快照和按游标分页的事件接口，经 Main 固定通道和 Preload 暴露；契约中的 `catchUpTaskEvents` 负责先取快照再补拉。Workbench 界面接入属于 P2.3。
 - 本地开发需把 `.tools/node` 置于 PATH 前部，否则 `pnpm run` 内嵌脚本使用系统 Node 并因 `engines` 失败。
 
 ## 2. 优先级排序

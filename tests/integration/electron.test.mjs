@@ -61,7 +61,8 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
   assert.equal(first.renderer.health.controlPlaneReady, true); assert.equal(first.renderer.health.agentReady, false);
   assert.equal(first.renderer.node, 'undefined'); assert.equal(first.renderer.require, 'undefined');
   assert.deepEqual(first.renderer.keys.sort(), ['getFoundationInfo', 'getControlPlaneHealth', 'listSmokeRecords', 'writeSmokeRecords', 'getDesktopStatus',
-    'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask'].sort());
+    'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask',
+    'listTasks', 'getTask', 'listTaskEvents'].sort());
   assert.equal(first.renderer.mounted, true);
   assert.equal(await host.command('csp'), 'blocked'); assert.equal(await host.command('invalid-input'), 'rejected');
   assert.match(await host.command('foreign-window'), /IPC_SENDER_REJECTED/);
@@ -169,6 +170,9 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   assert.equal(result.overview.worker.error, 'WORKER_ISOLATION_UNAVAILABLE');
   assert.ok(Object.values(result.overview.capabilities).every(value => value !== 'verified'));
   assert.equal(result.runs.runs[0].outcome, 'RUNNING'); assert.deepEqual(result.projects.projects, []);
+  // P2.2 read-only task views: a refused start persists nothing, and unknown or malformed queries fail closed.
+  assert.deepEqual(result.tasks, { tasks: [] });
+  assert.match(result.missingTask, /NOT_FOUND/); assert.match(result.missingEvents, /NOT_FOUND/); assert.equal(result.badCursor, 'rejected');
   await host.close();
   const reopened = await create();
   const again = await reopened.command('workbench');

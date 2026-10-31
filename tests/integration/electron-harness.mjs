@@ -54,7 +54,11 @@ process.on('message', async message => {
           const task = await api.startTask({ projectId: crypto.randomUUID(), prompt: 'run anything' });
           const emptyTask = await api.startTask({ projectId: crypto.randomUUID(), prompt: '   ' }).then(() => 'allowed', () => 'rejected');
           const forged = await api.removeProject({ id: 'not-a-uuid' }).then(() => 'allowed', () => 'rejected');
+          const missingTask = await api.getTask({ taskId: crypto.randomUUID() }).then(() => 'allowed', error => error.message);
+          const missingEvents = await api.listTaskEvents({ taskId: crypto.randomUUID(), afterSeq: 0 }).then(() => 'allowed', error => error.message);
+          const badCursor = await api.listTaskEvents({ taskId: crypto.randomUUID(), afterSeq: -1 }).then(() => 'allowed', () => 'rejected');
           return { saved, tooLong, missing, task, emptyTask, forged, overview: await api.getOverview(), runs: await api.listRuns(),
+            tasks: await api.listTasks(), missingTask, missingEvents, badCursor,
             projects: await api.listProjects(), after: await api.getSettings() };
         })()`);
         break;

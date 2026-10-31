@@ -324,3 +324,29 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
 验证：`pnpm check:engineering` 八项全部退出 0，测试从 88 增加到 **94/94**；新增 `tests/p2/task-store.test.ts`（6 项）覆盖原子提交、拒绝不写入、seq 连续与游标分页、请求去重与冲突、摘要上限与终态拒绝、重启对账与读回，以及数据库层的只追加和无间隙约束。另做一次变异检查：去掉 `transitionTask` 的事务后，注入的提交失败会留下孤立事件，对应测试失败；还原后通过。真实进程集成结果见下文；安装后烟测（`pnpm package && pnpm test:smoke`）未在本地运行，由 CI 执行。
 
 本地真实进程集成（`pnpm test:integration`，Windows x64，工作树基于 `f5740ee` 且有未提交改动）退出 0：真实 Node/Electron 进程测试 14/14，原生接口测试 2/2，0 fail、0 skipped；Electron 测试确认 `overview.database.version` 为 4。Worker fixture 在本开发机上按 ADR-WIN-001 §3 记为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`，真实 fixture 证据仍只能来自一次性 CI runner。本地结果不能代替 CI 证据。
+
+## P2.2 快照与游标补拉（2026-10-31）
+
+授权：P2.0–P2.3（`build/p2-status.json`），用户指示 “Start P2.2”。全部为只读接口：没有任何路由会创建、启动或修改任务，任务启动入口仍返回 `WORKER_ISOLATION_UNAVAILABLE`。
+
+- 契约 `packages/contracts/src/api/tasks.ts`：
+  - `TaskRef`、`TaskEventsQuery`（`afterSeq` 为非负安全整数，`limit` 为 1–200）、`TaskList`（最多 50 个）、`TaskEventPage`。
+  - 页面结构本身就能证明三件事：属于同一任务；从 `afterSeq+1` 起连续无间隙；且 `hasMore` 为真时必然前进（每页至少一个事件），因此客户端循环一定会结束。
+  - `catchUpTaskEvents` 是先取快照、再按游标补拉的纯函数（受 `maxCatchUpPages` 限制）。出现无效页、页面游标或任务不符、序号或状态不连续时，它返回错误、不做修补，调用方应重新获取快照。
+  - 新增控制面错误 `CURSOR_AHEAD`：客户端游标超出已提交的日志，例如数据库已被替换。
+- Express 新增三个路由：`GET /v1/tasks`、`POST /v1/tasks/snapshot`、`POST /v1/tasks/events`。
+  - 快照和页面在单写入者的同一同步调用中读取，彼此一致。
+  - 页面按序列化后的字节数截断（`maxPageBytes` 60 KiB，单个事件总能放下），远低于 Main 的 192 KiB 响应上限。
+  - 游标超前返回 409，未知任务返回 404，输入不合法返回 400。
+- Main 新增 3 个固定 IPC 通道（`oa:tasks-list`、`oa:tasks-snapshot`、`oa:tasks-events`），Preload 新增 `listTasks`、`getTask`、`listTaskEvents`，两侧都做 Schema 校验。没有通用请求通道。
+- 导入边界：`scripts/import-boundaries.mjs` 的 IPC 操作白名单新增上述 3 个只读操作，做法与 P1 Workbench 新增操作时相同。规则本身不变：每个 `invoke` 仍只能使用白名单内的 `IPC_CHANNELS` 成员。
+- `verify:p2`：P2.2 的完成声明要求 `api/tasks.ts` 和 `tests/p2/task-api.test.ts` 存在，且 P2.1 已标记完成；P2.3 仍不得声称完成。
+
+验证：
+- `pnpm check:engineering`：八项全部退出 0，测试从 94 增加到 **97/97**。新增 `tests/p2/task-api.test.ts`，覆盖页面连续性和必然前进、查询边界、多页补拉、从游标恢复，以及各类不一致页面被拒绝。
+- 本地 `pnpm test:integration`（Windows x64）退出 0：真实进程测试 **15/15**，原生接口测试 2/2。
+  - 新增的真实进程测试先用 Express 存储写入一个已完成任务（12 个事件，其中 8 个约 15.6 KiB 的摘要），再从独立启动的 staged sidecar 经认证 HTTP 读取：多页字节受限分页、完整重建、从游标恢复，以及不一致状态、游标超前、未知任务和非法输入均按预期失败。
+  - Electron 测试确认真实桥接暴露了新增的 3 个 API：被拒绝的任务启动不留下任何任务，未知查询返回 NOT_FOUND，非法游标被拒绝。
+  - Worker fixture 在本机仍为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`。
+
+安装后烟测由 CI 运行。

@@ -2,7 +2,8 @@ import express from 'express';
 import type { Express, ErrorRequestHandler, Response } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { AuthHeadersSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlHealthSchema, ControlOverviewSchema, PROTOCOL_VERSION,
-  ProjectInputSchema, ProjectRefSchema, TaskStartInputSchema, WorkbenchSettingsSchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
+  ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
+  TaskStartInputSchema, WorkbenchSettingsSchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
 import type { Bootstrap, AuthHeaders, ControlError } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
 
@@ -138,6 +139,38 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     } catch (error) { failure(res, error); }
   });
   app.get(CONTROL_ROUTES.runs, (_req, res) => { try { res.json({ runs: store.listRuns() }); } catch (error) { failure(res, error); } });
+  // Read-only task views (P2.2). Every value comes from committed SQLite rows, never from process memory.
+  app.get(CONTROL_ROUTES.tasks, (_req, res) => {
+    try { res.json(TaskListSchema.parse({ tasks: store.listTasks(TASK_API_LIMITS.maxTasks) })); } catch (error) { failure(res, error); }
+  });
+  app.post(CONTROL_ROUTES.taskSnapshot, (req, res) => {
+    const input = TaskRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try {
+      const task = store.getTask(input.data.taskId);
+      if (!task) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
+      res.json(TaskSnapshotSchema.parse(task));
+    } catch (error) { failure(res, error); }
+  });
+  app.post(CONTROL_ROUTES.taskEvents, (req, res) => {
+    const input = TaskEventsQuerySchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    const { taskId, afterSeq, limit = TASK_API_LIMITS.maxEventsPerPage } = input.data;
+    try {
+      // Snapshot and page are read in the same synchronous turn of the single writer, so they agree.
+      const task = store.getTask(taskId);
+      if (!task) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
+      if (afterSeq > task.lastSeq) { res.status(409).json({ error: 'CURSOR_AHEAD' }); return; }
+      const events = [];
+      let bytes = 0;
+      for (const event of store.listTaskEvents(taskId, afterSeq, limit)) {
+        const size = Buffer.byteLength(JSON.stringify(event));
+        if (events.length > 0 && bytes + size > TASK_API_LIMITS.maxPageBytes) break;
+        events.push(event); bytes += size;
+      }
+      res.json(TaskEventPageSchema.parse({ taskId, afterSeq, lastSeq: task.lastSeq, events, hasMore: afterSeq + events.length < task.lastSeq }));
+    } catch (error) { failure(res, error); }
+  });
   // No qualified Worker exists (ADR-WIN-001 D4): validate, then refuse before anything is scheduled or persisted.
   app.post(CONTROL_ROUTES.taskStart, (req, res) => {
     const input = TaskStartInputSchema.safeParse(req.body);
