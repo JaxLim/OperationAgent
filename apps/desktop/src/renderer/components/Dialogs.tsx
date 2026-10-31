@@ -126,7 +126,7 @@ export function SettingsDialog({ onClose, initialSection = 'General' }: { onClos
           {section === 'About' && (
             <>
               <p className="settings-lead"><strong>OperationAgent</strong> {desktop ? desktop.app.version : ''} · M2 build</p>
-              <p className="muted">A desktop workbench for a security-gated coding agent. This build delivers the supervised control plane, local persistence, project management and Claude model settings. Agent execution stays disabled until its isolation gates pass.</p>
+              <p className="muted">A desktop workbench for a security-gated coding agent. This build delivers the supervised control plane, local persistence, project management and Claude model settings. Agent execution is not enabled yet: it ships with the agent loop, and on each platform only after that platform's isolation gates pass.</p>
               <p className="muted small mono">Electron {desktop?.app.electron ?? '—'} · Sidecar Node {overview?.runtime.node ?? '—'} · SQLite {overview?.runtime.sqlite ?? '—'} · {desktop ? `${desktop.app.platform}-${desktop.app.arch}` : ''}</p>
               <div className="kbd-grid">
                 <span><kbd>Ctrl N</kbd> New task</span><span><kbd>Ctrl O</kbd> Projects</span>

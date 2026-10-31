@@ -42,7 +42,7 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
           onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void submit(); } }} />
         <div className="composer-bar">
           <span className="chip chip-quiet" title={project.path}><IconFolder size={12} />{project.name}</span>
-          <span className="chip chip-gate" title="Task execution requires a Worker that passed its OS isolation gate"><IconLock size={12} />Agent unavailable</span>
+          <span className="chip chip-gate" title="Task execution arrives with the agent loop, on platforms whose Worker passed its OS isolation gate"><IconLock size={12} />Agent unavailable</span>
           <span className="tool-spacer" />
           <button className="send-btn" onClick={() => void submit()} disabled={!text.trim() || sending || disabled} aria-label="Send" title="Send (Enter)">
             <IconSend size={16} />
@@ -63,7 +63,7 @@ function Refusal({ item }: { item: Submission }) {
       </div>
       <p className="refusal-prompt">{item.prompt}</p>
       <p className="muted small">{item.outcome === 'refused'
-        ? 'The control plane validated this request and refused it: no Worker on this platform has passed the isolation gate, so nothing was scheduled, executed or saved. There is no unisolated fallback.'
+        ? 'The control plane validated this request and refused it: this build has no agent loop yet, so nothing was scheduled, executed or saved. There is no unisolated fallback.'
         : 'The request could not reach the control plane. Nothing was scheduled.'}</p>
       <div className="card-foot"><span className="card-foot-meta">{relativeTime(item.at)}</span></div>
     </article>

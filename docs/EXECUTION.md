@@ -484,3 +484,15 @@ PR #8 评审修正（同日）：
 以上修正新增 2 项单元测试；本地 `check:engineering` 与 `test:integration`（17/17、2/2）均再次退出 0。
 
 合并 main（M1，`27d3014`）后：`pnpm check:engineering` 九项（含 `verify:agent`）全部退出 0，单元测试 **113/113**；本地 `pnpm test:integration` 退出 0，真实进程测试 17/17，原生接口测试 2/2。本机的 Worker fixture、SEC-17 和 SEC-W01 仍为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`，Windows SEC-W01 的 PASS 来自 M1 已提交的 CI 证据。
+
+### PR #8 收尾审查（2026-10-31）
+
+主会话接手 PR #8 后，复核了凭据、Crypto Bridge、模型网关和 IPC 链路。Codex 的 5 条意见已在 `ae79ddd` 中处理，包括 Renderer 不保留明文 key、凭据请求时限长于 bridge、过期的 bridge 回复不触发关停、保存与删除串行化、过时的连接测试结果被丢弃，线程均已解决。本轮另外做了两处修正：
+
+- 纵深防御：打包后的应用如果收到 `modelEndpoint` 覆盖（测试用的本机假服务端），直接拒绝启动（`MODEL_ENDPOINT_OVERRIDE_REJECTED`），避免真实 key 以明文 HTTP 发往本机监听者。生产入口本来就不传这个参数，此项只是防止将来误用。
+- 状态文案更正：M1 合并后，“Windows Worker 门禁未通过”已不成立。概览契约中 `worker.reason` 改为 `AGENT_LOOP_NOT_IMPLEMENTED`，这在所有平台都成立；Status 面板标签改为 “Blocked by”；Settings、About、侧栏和任务拒绝提示统一说明执行能力随 Agent Loop 推出，且只在 Worker 已通过隔离门禁的平台开放。控制面不在运行时声称任何平台的门禁结论，该结论只以构建记录 `build/agent-status.json` 为准。
+
+收尾验证（Windows x64 本地）：
+- `pnpm check:engineering` 九项全部退出 0（**113/113**），`verify:agent` 显示 M1 已完成、M2 进行中、Windows SEC-W01 PASS、`agentReady=false`。
+- `pnpm test:integration` 退出 0：真实进程测试 **17/17**（含模型设置经真实桥接的完整流程），原生接口测试 2/2。
+- Worker fixture 和 SEC-W01 在开发机上按规定为 BLOCKED，由 CI 一次性 runner 执行。

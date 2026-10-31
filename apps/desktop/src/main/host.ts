@@ -16,6 +16,9 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   modelEndpoint?: string }): Promise<{
   window: BrowserWindow; supervisor: SidecarSupervisor; stop(): Promise<void>;
 }> {
+  // A packaged app never talks to anything but the fixed provider endpoint: a loopback override would send the real
+  // key in plaintext HTTP to whatever listens there, so it is refused outright rather than trusted.
+  if (options.modelEndpoint !== undefined && app.isPackaged) throw new Error('MODEL_ENDPOINT_OVERRIDE_REJECTED');
   const modelEndpoint = options.modelEndpoint === undefined ? undefined : ModelEndpointSchema.parse(options.modelEndpoint);
   const supervisor = new SidecarSupervisor(options.stageDirectory, options.dataDirectory,
     { cryptoHandler: createCryptoBridge(safeStorage), ...(modelEndpoint ? { modelEndpoint } : {}) });

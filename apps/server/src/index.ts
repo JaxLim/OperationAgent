@@ -124,7 +124,7 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
         controlPlaneReady: true, agentReady: false, startedAt: startedAt.toISOString(), uptimeMs: Date.now() - startedAt.getTime(),
         runtime: { node: process.versions.node, abi: process.versions.modules, sqlite: store.sqliteVersion, platform: process.platform, arch: process.arch },
         database: { version: store.databaseVersion, recoveredRuns: store.recoveredRuns, ...counts },
-        worker: { state: 'unavailable', error: 'WORKER_ISOLATION_UNAVAILABLE', reason: 'SEC_W01_NOT_PASSED', fixtureLaunch: 'disabled-in-release' },
+        worker: { state: 'unavailable', error: 'WORKER_ISOLATION_UNAVAILABLE', reason: 'AGENT_LOOP_NOT_IMPLEMENTED', fixtureLaunch: 'disabled-in-release' },
         tools: { read: 'READ_ADAPTER_UNAVAILABLE', highRisk: 'SANDBOX_UNAVAILABLE' },
         capabilities: { ui: 'unverified', read: 'unavailable', gitRead: 'unavailable', highRisk: 'unavailable', workerIsolation: 'unverified' } }));
     } catch (error) { failure(res, error); }

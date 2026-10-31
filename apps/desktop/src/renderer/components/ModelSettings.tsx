@@ -167,7 +167,7 @@ export function ModelSection() {
       )}
 
       <div className="settings-note"><IconShield size={14} /> <span>The key is encrypted by the operating system before it is stored and is used only by the local
-        control plane for requests to Anthropic. The agent worker never receives it, and agent execution stays disabled until its isolation gate passes.</span></div>
+        control plane for requests to Anthropic. The agent worker never receives it. Agent execution is not enabled in this build yet.</span></div>
     </div>
   );
 }
