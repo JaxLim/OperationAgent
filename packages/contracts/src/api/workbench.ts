@@ -52,7 +52,7 @@ export const ControlOverviewSchema = z.strictObject({
   controlPlaneReady: z.literal(true), agentReady: z.literal(false),
   startedAt: z.iso.datetime(), uptimeMs: z.number().int().nonnegative(),
   runtime: z.strictObject({ node: z.string().max(32), abi: z.string().max(8), sqlite: z.string().max(32), platform: z.string().max(16), arch: z.string().max(16) }),
-  database: z.strictObject({ version: z.literal(4), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
+  database: z.strictObject({ version: z.literal(5), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
     runs: z.number().int().nonnegative(), records: z.number().int().nonnegative() }),
   worker: z.strictObject({ state: z.literal('unavailable'), error: z.literal('WORKER_ISOLATION_UNAVAILABLE'),
     reason: z.literal('SEC_W01_NOT_PASSED'), fixtureLaunch: z.literal('disabled-in-release') }),

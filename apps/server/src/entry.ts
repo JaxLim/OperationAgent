@@ -6,9 +6,11 @@ import type { Bootstrap } from '@operation-agent/contracts';
 import { createControlPlane } from './index.js';
 import { openStore } from './persistence/store.js';
 import type { Store } from './persistence/store.js';
+import { createIpcCryptoBridge } from './credentials/bridge.js';
+import type { IpcCryptoBridge } from './credentials/bridge.js';
 
 let store: Store | undefined; let server: Server | undefined; let identity: Bootstrap | undefined;
-let stopping = false; let lastContact = Date.now(); let bootstrapped = false;
+let stopping = false; let lastContact = Date.now(); let bootstrapped = false; let bridge: IpcCryptoBridge | undefined;
 const handshake = setTimeout(() => stop(false), CONTROL_POLICY.handshakeMs);
 const lease = setInterval(() => { if (Date.now() - lastContact > CONTROL_POLICY.shutdownMs) stop(false); }, CONTROL_POLICY.heartbeatMs);
 function stop(clean: boolean): void {
@@ -32,9 +34,12 @@ async function start(message: unknown): Promise<void> {
     process.platform !== runtime.platform || process.arch !== runtime.arch) throw new Error('RUNTIME_MISMATCH');
   identity = input;
   store = openStore(input.dataDirectory, input.expressRunId);
+  // The Crypto Bridge rides the same inherited channel as the bootstrap; Main serves it only for this service tree.
+  bridge = createIpcCryptoBridge({ mainRunId: input.mainRunId, expressRunId: input.expressRunId },
+    message => process.connected && process.send ? process.send(message) : false);
   server = createServer({ maxHeaderSize: 8192 }, createControlPlane(input, store, () => {
     const address = server?.address(); return address && typeof address !== 'string' ? address.port : 0;
-  }, () => { lastContact = Date.now(); }));
+  }, () => { lastContact = Date.now(); }, { bridge }));
   server.maxConnections = 16; server.requestTimeout = 5_000; server.headersTimeout = 5_000; server.keepAliveTimeout = 1_000;
   server.on('error', () => stop(false));
   await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', resolve); });
@@ -50,6 +55,8 @@ process.on('message', (message: unknown) => {
   if (!bootstrapped) {
     bootstrapped = true;
     void start(message).catch(() => { process.stderr.write('SIDECAR_START_FAILED\n'); stop(false); });
+  } else if (bridge?.receive(message)) {
+    // A Crypto Bridge reply for an outstanding request.
   } else {
     const parsed = ShutdownSchema.safeParse(message);
     if (!parsed.success || !identity || parsed.data.mainRunId !== identity.mainRunId || parsed.data.expressRunId !== identity.expressRunId) stop(false);

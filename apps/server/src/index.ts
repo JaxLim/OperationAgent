@@ -1,14 +1,25 @@
 import express from 'express';
 import type { Express, ErrorRequestHandler, Response } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { AuthHeadersSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlHealthSchema, ControlOverviewSchema, PROTOCOL_VERSION,
+import { ApiKeyInputSchema, AuthHeadersSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlHealthSchema, ControlOverviewSchema, EmptyInputSchema,
+  MODEL_PROVIDER, ModelChoiceSchema, ModelSettingsSchema, ModelTestResultSchema, PROTOCOL_VERSION,
   ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
   TaskStartInputSchema, WorkbenchSettingsSchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
-import type { Bootstrap, AuthHeaders, ControlError } from '@operation-agent/contracts';
+import type { Bootstrap, AuthHeaders, ControlError, ModelSettings, ModelTestResult } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
+import { UNAVAILABLE_BRIDGE } from './credentials/bridge.js';
+import type { CryptoBridge } from './credentials/bridge.js';
+import { createCredentialService } from './credentials/service.js';
+import { createModelGateway } from './models/gateway.js';
+import type { ModelGateway } from './models/gateway.js';
 
-export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: () => number, contact: () => void): Express {
+export interface ModelServices { bridge?: CryptoBridge; gateway?: ModelGateway }
+
+export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: () => number, contact: () => void, services: ModelServices = {}): Express {
   const app = express();
+  // Without a Main Crypto Bridge every key operation fails closed (SEC-14).
+  const credentials = createCredentialService(store, services.bridge ?? UNAVAILABLE_BRIDGE);
+  const gateway = services.gateway ?? createModelGateway({ endpoint: bootstrap.modelEndpoint });
   const startedAt = new Date();
   app.disable('x-powered-by');
   app.disable('etag'); app.set('trust proxy', false);
@@ -170,6 +181,40 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
       }
       res.json(TaskEventPageSchema.parse({ taskId, afterSeq, lastSeq: task.lastSeq, events, hasMore: afterSeq + events.length < task.lastSeq }));
     } catch (error) { failure(res, error); }
+  });
+  // M2 model settings (ARCHITECTURE §6.2/§6.3). Replies carry the model choice and credential status, never key material.
+  const modelSettings = (): ModelSettings => ModelSettingsSchema.parse({ provider: MODEL_PROVIDER, model: store.getModel(), credential: credentials.status() });
+  app.get(CONTROL_ROUTES.modelSettings, (_req, res) => { try { res.json(modelSettings()); } catch (error) { failure(res, error); } });
+  app.put(CONTROL_ROUTES.modelSettings, (req, res) => {
+    const input = ModelChoiceSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try { store.saveModel(input.data.model); res.json(modelSettings()); } catch (error) { failure(res, error); }
+  });
+  app.put(CONTROL_ROUTES.modelCredential, (req, res) => {
+    const input = ApiKeyInputSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    // Only fixed codes are returned; the key is never part of a reply, log line or error.
+    credentials.set(input.data.apiKey).then(() => { res.json(modelSettings()); }, (error: unknown) => {
+      const code = error instanceof Error ? error.message : '';
+      if (code === 'SECURE_STORAGE_UNAVAILABLE' || code === 'SERVICE_UNAVAILABLE') res.status(503).json({ error: code });
+      else if (code === 'VALIDATION_ERROR') validationError(res);
+      else res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
+    });
+  });
+  app.post(CONTROL_ROUTES.modelCredentialClear, (req, res) => {
+    if (!EmptyInputSchema.safeParse(req.body).success) { validationError(res); return; }
+    try { credentials.clear(); res.json(modelSettings()); } catch (error) { failure(res, error); }
+  });
+  // One test at a time: a second request joins the one in flight instead of sending another provider request.
+  let testing: Promise<ModelTestResult> | undefined;
+  app.post(CONTROL_ROUTES.modelTest, (req, res) => {
+    if (!EmptyInputSchema.safeParse(req.body).success) { validationError(res); return; }
+    testing ??= (async () => {
+      const model = store.getModel();
+      const used = await credentials.withKey(apiKey => gateway.testConnection(apiKey, model));
+      return used.ok ? used.value : ModelTestResultSchema.parse({ status: used.reason, model, httpStatus: null, latencyMs: null, checkedAt: new Date().toISOString() });
+    })().finally(() => { testing = undefined; });
+    testing.then(result => { res.json(result); }, (error: unknown) => { failure(res, error); });
   });
   // No qualified Worker exists (ADR-WIN-001 D4): validate, then refuse before anything is scheduled or persisted.
   app.post(CONTROL_ROUTES.taskStart, (req, res) => {

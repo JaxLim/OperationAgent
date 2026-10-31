@@ -4,10 +4,13 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { request } from 'node:http';
 import { BootstrapSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlFailureSchema, ControlHealthSchema, PROTOCOL_VERSION,
   SidecarReadySchema, SmokeBatchSchema, SmokeRecordsSchema, requestProof, responseProof } from '@operation-agent/contracts';
-import type { Bootstrap, SidecarReady, SmokeBatch, ControlHealth, SmokeRecords, DesktopStatus } from '@operation-agent/contracts';
+import type { Bootstrap, SidecarReady, SmokeBatch, ControlHealth, SmokeRecords, DesktopStatus, CryptoBridgeResponse, ServiceTreeIdentity } from '@operation-agent/contracts';
 import { verifyStagedRuntime } from './staged-runtime.js';
 
 interface Instance { child: ChildProcess; bootstrap: Bootstrap; exited: Promise<void>; ready?: SidecarReady; accepted: boolean }
+/** Serves Crypto Bridge requests arriving on one instance's inherited channel; null means no attributable reply. */
+export type CryptoHandler = (identity: ServiceTreeIdentity, message: unknown) => Promise<CryptoBridgeResponse | null>;
+export interface SupervisorOptions { cryptoHandler?: CryptoHandler; modelEndpoint?: Bootstrap['modelEndpoint'] }
 export class SidecarSupervisor {
   private readonly mainRunId = randomUUID();
   private active: Instance | undefined;
@@ -18,7 +21,7 @@ export class SidecarSupervisor {
   private pending = 0;
   private state: DesktopStatus['service']['state'] = 'stopped';
   private launchPromise: Promise<void> | undefined;
-  constructor(private readonly stageDirectory: string, private readonly dataDirectory: string) {}
+  constructor(private readonly stageDirectory: string, private readonly dataDirectory: string, private readonly options: SupervisorOptions = {}) {}
   snapshot(): { state: DesktopStatus['service']['state']; pid: number | null; port: number | null; expressRunId: string | null; restarts: number } {
     return { state: this.state, pid: this.active?.child.pid ?? null, port: this.active?.ready?.port ?? null,
       expressRunId: this.active?.bootstrap.expressRunId ?? null, restarts: this.attempts.length };
@@ -37,7 +40,8 @@ export class SidecarSupervisor {
     const runtime = await verifyStagedRuntime(this.stageDirectory);
     if (!this.wanted || this.active) throw new Error('SERVICE_UNAVAILABLE');
     const bootstrap = BootstrapSchema.parse({ kind: 'bootstrap', protocolVersion: PROTOCOL_VERSION, mainRunId: this.mainRunId,
-      expressRunId: randomUUID(), parentPid: process.pid, token: randomBytes(32).toString('hex'), dataDirectory: this.dataDirectory });
+      expressRunId: randomUUID(), parentPid: process.pid, token: randomBytes(32).toString('hex'), dataDirectory: this.dataDirectory,
+      ...(this.options.modelEndpoint ? { modelEndpoint: this.options.modelEndpoint } : {}) });
     // spawn avoids Electron's fork shim and ELECTRON_RUN_AS_NODE. No PATH, NODE_OPTIONS or user argv are inherited.
     const env: NodeJS.ProcessEnv = {};
     for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'TMPDIR', 'LANG']) if (process.env[key]) env[key] = process.env[key];
@@ -68,6 +72,14 @@ export class SidecarSupervisor {
           child.removeListener('exit', fail); child.removeListener('error', fail); resolve(ready.data);
         });
         child.send(bootstrap, error => { if (error) fail(); });
+      });
+      // Crypto Bridge (ARCHITECTURE §6.3): only this instance's own inherited channel, only while it is the active tree.
+      const handler = this.options.cryptoHandler;
+      child.on('message', (message: unknown) => {
+        if (!handler || this.active !== instance || !this.wanted) return;
+        void handler({ mainRunId: bootstrap.mainRunId, expressRunId: bootstrap.expressRunId }, message).then(reply => {
+          if (reply && this.active === instance && child.connected) child.send(reply, () => {});
+        }, () => {});
       });
       const health = ControlHealthSchema.parse(await this.http(instance, 'GET', CONTROL_ROUTES.health));
       if (!this.wanted || this.active !== instance || health.mainRunId !== bootstrap.mainRunId || health.expressRunId !== bootstrap.expressRunId) throw new Error('IDENTITY_MISMATCH');
@@ -137,8 +149,9 @@ export class SidecarSupervisor {
     return SmokeRecordsSchema.parse(await this.http(this.instance(), 'POST', CONTROL_ROUTES.records, SmokeBatchSchema.parse(input)));
   }
   /** Authenticated call to one fixed control route; the caller validates input and the reply schema. */
-  async call<T>(method: 'GET' | 'POST' | 'PUT', path: (typeof CONTROL_ROUTES)[keyof typeof CONTROL_ROUTES], schema: { parse(value: unknown): T }, input?: unknown): Promise<T> {
-    return schema.parse(await this.http(this.instance(), method, path, input));
+  async call<T>(method: 'GET' | 'POST' | 'PUT', path: (typeof CONTROL_ROUTES)[keyof typeof CONTROL_ROUTES], schema: { parse(value: unknown): T },
+    input?: unknown, timeoutMs: number = CONTROL_POLICY.requestMs): Promise<T> {
+    return schema.parse(await this.http(this.instance(), method, path, input, timeoutMs));
   }
   /** A user-initiated retry: stop whatever is left of the tree, forget the exhausted budget and start fresh. */
   async restart(): Promise<void> {
@@ -146,7 +159,7 @@ export class SidecarSupervisor {
     await this.stop(); this.attempts = [];
     await this.start();
   }
-  private async http(instance: Instance, method: 'GET' | 'POST' | 'PUT', path: string, input?: unknown): Promise<unknown> {
+  private async http(instance: Instance, method: 'GET' | 'POST' | 'PUT', path: string, input?: unknown, timeoutMs: number = CONTROL_POLICY.requestMs): Promise<unknown> {
     const pendingLimit = path === CONTROL_ROUTES.heartbeat ? 16 : 15;
     if (!instance.ready || this.pending >= pendingLimit || !this.wanted) throw new Error('SERVICE_UNAVAILABLE');
     const body = input ? JSON.stringify(input) : '';
@@ -181,7 +194,7 @@ export class SidecarSupervisor {
             } catch { reject(new Error('VALIDATION_ERROR')); }
           });
         });
-        const deadline = setTimeout(() => req.destroy(new Error('SERVICE_UNAVAILABLE')), CONTROL_POLICY.requestMs);
+        const deadline = setTimeout(() => req.destroy(new Error('SERVICE_UNAVAILABLE')), timeoutMs);
         req.on('error', () => { clearTimeout(deadline); reject(new Error('SERVICE_UNAVAILABLE')); }); req.end(body);
       });
     } finally { this.pending--; }

@@ -1,5 +1,5 @@
 // Test-only entry point. Never included in Desktop or Sidecar production files.
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, safeStorage } from 'electron';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ app.disableHardwareAcceleration();
 const root = resolve(import.meta.dirname, '../..');
 const stageDirectory = resolve(root, 'build/stage', `${{ win32: 'win', darwin: 'mac', linux: 'linux' }[process.platform]}-${process.arch}`, 'sidecar');
 let host;
-const initial = { kind: 'test-start', dataDirectory: process.argv[2] };
+const initial = { kind: 'test-start', dataDirectory: process.argv[2], modelEndpoint: process.argv[3] };
 if (!initial.dataDirectory?.startsWith(resolve(root, '.cache'))) app.exit(1);
 app.setPath('userData', initial.dataDirectory);
 // A poisoned parent environment must not reach the independent Node sidecar.
@@ -18,7 +18,8 @@ process.env.NODE_PATH = resolve(root, '.cache/untrusted-modules');
 process.env.PATH = resolve(root, '.cache/untrusted-executables');
 void app.whenReady().then(async () => {
   try {
-    host = await startDesktop({ stageDirectory, dataDirectory: resolve(initial.dataDirectory, 'database'), show: false, requireControlPlane: true });
+    host = await startDesktop({ stageDirectory, dataDirectory: resolve(initial.dataDirectory, 'database'), show: false, requireControlPlane: true,
+      ...(initial.modelEndpoint ? { modelEndpoint: initial.modelEndpoint } : {}) });
     process.send({ kind: 'ready', pid: process.pid });
   } catch (error) { process.send({ kind: 'failed', error: error.message }, () => app.exit(1)); }
 });
@@ -82,6 +83,74 @@ process.on('message', async message => {
         })()`);
         break;
       }
+      case 'model-api': {
+        // M2 model settings through the real Preload → Main → Express → Crypto Bridge path.
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const api = window.operationAgent; const key = ${JSON.stringify(message.input.key)};
+          const errorOf = promise => promise.then(() => 'allowed', error => error.message);
+          const before = await api.getModelSettings();
+          const invalid = await errorOf(api.setApiKey({ apiKey: 'too short' }));
+          const extra = await errorOf(api.setApiKey({ apiKey: key, provider: 'other' }));
+          const badModel = await errorOf(api.saveModelChoice({ model: 'gpt-4' }));
+          const chosen = await api.saveModelChoice({ model: 'claude-opus-5-5' });
+          const saved = await api.setApiKey({ apiKey: key });
+          const test = await api.testModelConnection();
+          return { before, invalid, extra, badModel, chosen, saved, test, after: await api.getModelSettings() };
+        })()`);
+        break;
+      }
+      case 'model-unavailable': {
+        // SEC-14 through the real bridge: make OS-backed encryption report unavailable, then try to save a key.
+        const original = safeStorage.isAsyncEncryptionAvailable;
+        try { safeStorage.isAsyncEncryptionAvailable = async () => false; } catch { value = 'unpatchable'; break; }
+        if (safeStorage.isAsyncEncryptionAvailable === original) { value = 'unpatchable'; break; }
+        try {
+          value = await host.window.webContents.executeJavaScript(`(async () => {
+            const api = window.operationAgent;
+            const view = await api.getModelSettings();
+            const error = await api.setApiKey({ apiKey: ${JSON.stringify(message.input.key)} }).then(() => 'allowed', failure => failure.message);
+            return { view, error, after: await api.getModelSettings() };
+          })()`);
+        } finally { safeStorage.isAsyncEncryptionAvailable = original; }
+        break;
+      }
+      case 'model-clear':
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const api = window.operationAgent; const cleared = await api.clearApiKey();
+          return { cleared, test: await api.testModelConnection() };
+        })()`);
+        break;
+      case 'model-test': value = await host.window.webContents.executeJavaScript('window.operationAgent.testModelConnection()'); break;
+      case 'model-ui':
+        // Drives the real Settings → Model DOM: types a key, saves it, then runs Test connection.
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const key = ${JSON.stringify(message.input.key)};
+          const wait = async (check, ms = 15000) => { const end = Date.now() + ms;
+            while (Date.now() < end) { const found = check(); if (found) return found; await new Promise(done => setTimeout(done, 50)); }
+            throw new Error('UI_TIMEOUT ' + (document.querySelector('.modal')?.textContent ?? 'no dialog')); };
+          await wait(() => document.querySelector('.statusbar .sb-button'));
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));
+          (await wait(() => document.querySelector('.settings-nav button[data-section="Model"]'))).click();
+          const input = await wait(() => { const found = document.querySelector('input[aria-label="Anthropic API key"]'); return found && !found.disabled ? found : null; });
+          const emptyState = document.querySelector('.key-form')?.dataset.keyState;
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, key);
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          (await wait(() => { const button = document.querySelector('.key-form button[type="submit"]'); return button && !button.disabled ? button : null; })).click();
+          const saved = await wait(() => document.querySelector('[data-key-state="configured"]'));
+          const leftInDom = document.documentElement.outerHTML.includes(key) || [...document.querySelectorAll('input')].some(field => field.value.includes(key));
+          (await wait(() => { const button = document.querySelector('[data-action="test-connection"]'); return button && !button.disabled ? button : null; })).click();
+          const result = await wait(() => document.querySelector('[data-test-status]'));
+          return { emptyState, masked: saved.querySelector('.key-mask').textContent, leftInDom, status: result.dataset.testStatus,
+            resultText: result.textContent, credential: document.querySelector('[data-credential]').dataset.credential,
+            active: document.querySelector('.model-option.is-active').dataset.model };
+        })()`);
+        break;
+      case 'appearance':
+        // Evidence only: switch the saved theme through the bridge so the next capture shows the other palette.
+        value = await host.window.webContents.executeJavaScript(`window.operationAgent.getSettings().then(settings =>
+          window.operationAgent.saveSettings({ ...settings, theme: ${JSON.stringify(message.input)} })).then(settings => settings.theme)`);
+        await new Promise(done => setTimeout(done, 300));
+        break;
       case 'write': value = await host.window.webContents.executeJavaScript(`window.operationAgent.writeSmokeRecords(${JSON.stringify(message.input)})`); break;
       case 'list': value = await host.window.webContents.executeJavaScript('window.operationAgent.listSmokeRecords()'); break;
       case 'csp':

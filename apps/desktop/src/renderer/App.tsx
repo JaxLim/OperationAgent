@@ -5,9 +5,10 @@ import { Workspace, requestComposerFocus } from './components/Workspace';
 import type { ComposerHandle } from './components/Workspace';
 import { ContextPanel } from './components/ContextPanel';
 import { DiagnosticsDialog, ProjectsDialog, SettingsDialog } from './components/Dialogs';
-import { IconAlert, IconChevronRight, IconLock, IconPanelLeft, IconPanelRight, IconRetry, IconSettings } from './components/Icons';
+import { IconAlert, IconChevronRight, IconLock, IconPanelLeft, IconPanelRight, IconRetry, IconSettings, IconSparkle } from './components/Icons';
+import { modelName } from './components/ModelSettings';
 
-type Dialog = 'projects' | 'settings' | 'diagnostics' | null;
+type Dialog = 'projects' | 'settings' | 'model' | 'diagnostics' | null;
 
 function useAppearance(): void {
   const theme = useStore(s => s.settings?.theme ?? 'system');
@@ -55,6 +56,7 @@ export function App() {
   const desktop = useStore(s => s.desktop);
   const overview = useStore(s => s.overview);
   const connection = useStore(s => s.connection);
+  const model = useStore(s => s.model);
   const composer = useRef<ComposerHandle>(null);
   const rightOpen = settings?.contextPanel ?? true;
   const project = projects.find(item => item.id === settings?.activeProjectId);
@@ -102,6 +104,8 @@ export function App() {
       <footer className="statusbar">
         <span className="sb-item"><span className={`dot ${connection === 'ready' ? 'tone-ok' : connection === 'unavailable' ? 'tone-danger' : 'tone-wait'}`} />
           Control plane · {desktop?.service.state ?? 'starting'}{overview && connection === 'ready' ? ` · DB v${overview.database.version}` : ''}</span>
+        {model && <button className="sb-item sb-button" onClick={() => setDialog('model')} title="Model settings">
+          <IconSparkle size={11} />{modelName(model.model)} · {model.credential.configured ? 'key configured' : 'no API key'}</button>}
         <span className="sb-item"><IconLock size={11} />Agent unavailable · WORKER_ISOLATION_UNAVAILABLE</span>
         <span className="sb-item"><IconLock size={11} />Tools disabled · no sandbox</span>
         <span className="tool-spacer" />
@@ -110,6 +114,7 @@ export function App() {
 
       {dialog === 'projects' && <ProjectsDialog onClose={close} />}
       {dialog === 'settings' && <SettingsDialog onClose={close} />}
+      {dialog === 'model' && <SettingsDialog onClose={close} initialSection="Model" />}
       {dialog === 'diagnostics' && <DiagnosticsDialog onClose={close} />}
       <Notices />
     </div>
