@@ -7,9 +7,12 @@ export const CONTROL_POLICY = Object.freeze({ handshakeMs: 10_000, requestMs: 2_
   // 100 records × 256 UTF-16 code units may expand to six JSON bytes per unit, plus record metadata.
   maxBodyBytes: 16_384, maxResponseBytes: 196_608, maxRequestsPerWindow: 240, maxHeartbeatsPerWindow: 60, authWindowMs: 30_000 });
 export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '/v1/heartbeat', records: '/v1/smoke-records', taskStart: '/v1/tasks/start',
-  overview: '/v1/overview', settings: '/v1/settings', projects: '/v1/projects', projectRemove: '/v1/projects/remove', runs: '/v1/runs' });
+  overview: '/v1/overview', settings: '/v1/settings', projects: '/v1/projects', projectRemove: '/v1/projects/remove', runs: '/v1/runs',
+  tasks: '/v1/tasks', taskSnapshot: '/v1/tasks/snapshot', taskEvents: '/v1/tasks/events' });
 export const ControlErrorSchema = z.enum(['VALIDATION_ERROR', 'AUTHENTICATION_FAILED', 'IDENTITY_MISMATCH',
-  'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'RECORD_CONFLICT', 'RATE_LIMITED', 'WORKER_ISOLATION_UNAVAILABLE', 'NOT_FOUND', 'LIMIT_EXCEEDED']);
+  'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'RECORD_CONFLICT', 'RATE_LIMITED', 'WORKER_ISOLATION_UNAVAILABLE', 'NOT_FOUND', 'LIMIT_EXCEEDED',
+  // The client's cursor is past the committed log (e.g. another database); it must refetch the snapshot.
+  'CURSOR_AHEAD']);
 export type ControlError = z.infer<typeof ControlErrorSchema>;
 export const ControlFailureSchema = z.strictObject({ error: ControlErrorSchema });
 export const SmokeRecordInputSchema = z.strictObject({ id: z.uuid(), value: z.string().min(1).max(256) });

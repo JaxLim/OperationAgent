@@ -4,7 +4,8 @@ import { basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CONTROL_ROUTES, ControlErrorSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, EmptyInputSchema,
   IPC_CHANNELS, ProjectAddResultSchema, ProjectInputSchema, ProjectListSchema, ProjectRefSchema, ProjectSchema, SmokeBatchSchema,
-  TaskStartInputSchema, TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
+  TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
+  WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
 import type { DesktopStatus, ProjectAddResult, TaskStartResult, WorkbenchSettings } from '@operation-agent/contracts';
 import { SidecarSupervisor } from './sidecar.js';
 
@@ -94,6 +95,10 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
     }
     throw new Error('CONTROL_PLANE_REQUEST_FAILED');
   });
+  register(IPC_CHANNELS.listTasks, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.tasks, TaskListSchema); });
+  register(IPC_CHANNELS.getTask, async input => supervisor.call('POST', CONTROL_ROUTES.taskSnapshot, TaskSnapshotSchema, TaskRefSchema.parse(input)));
+  register(IPC_CHANNELS.listTaskEvents, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.taskEvents, TaskEventPageSchema, TaskEventsQuerySchema.parse(input)));
   const stop = (): Promise<void> => {
     stopPromise ??= (async () => {
       stopping = true;

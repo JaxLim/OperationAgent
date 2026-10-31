@@ -22,6 +22,8 @@ export interface TaskLog {
   /** Persists the redacted summary only (deltas are never stored). Throws NOT_FOUND or TASK_TERMINAL. */
   recordToolSummary(summary: ToolOutputSummary, requestId: string): TaskCommit;
   getTask(taskId: string): TaskSnapshot | null;
+  /** Most recently created first. */
+  listTasks(limit: number): TaskSnapshot[];
   /** Events after the cursor in seq order, at most one page. Throws NOT_FOUND for an unknown task. */
   listTaskEvents(taskId: string, afterSeq: number, limit?: number): TaskEvent[];
   /**
@@ -42,6 +44,8 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_, item: un
 export function createTaskLog(db: Database.Database): TaskLog {
   const selectTask = db.prepare<[string], TaskRow>(`SELECT id, project_id AS projectId, state, last_seq AS lastSeq,
     created_at AS createdAt, updated_at AS updatedAt FROM tasks WHERE id = ?`);
+  const selectRecent = db.prepare<[number], TaskRow>(`SELECT id, project_id AS projectId, state, last_seq AS lastSeq,
+    created_at AS createdAt, updated_at AS updatedAt FROM tasks ORDER BY created_at DESC, id LIMIT ?`);
   const selectByRequest = db.prepare<[string], EventRow>(`SELECT ${eventColumns} FROM task_events WHERE request_id = ?`);
   const selectPage = db.prepare<[string, number, number], EventRow>(`SELECT ${eventColumns} FROM task_events
     WHERE task_id = ? AND seq > ? ORDER BY seq LIMIT ?`);
@@ -114,6 +118,10 @@ export function createTaskLog(db: Database.Database): TaskLog {
       }).immediate();
     },
     getTask: task,
+    listTasks(limit) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('VALIDATION_ERROR');
+      return selectRecent.all(limit).map(row => TaskSnapshotSchema.parse(row));
+    },
     listTaskEvents(taskId, afterSeq, limit = TASK_LOG_LIMITS.maxEventsPerPage) {
       if (!Number.isSafeInteger(afterSeq) || afterSeq < 0 || !Number.isInteger(limit) || limit < 1 || limit > TASK_LOG_LIMITS.maxEventsPerPage) {
         throw new Error('VALIDATION_ERROR');

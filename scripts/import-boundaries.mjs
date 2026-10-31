@@ -16,7 +16,9 @@ export const zones = [
 
 // Each listed name maps to one fixed, schema-validated operation in packages/contracts IPC_CHANNELS.
 const ipcOperations = ['health', 'listRecords', 'writeRecords', 'desktopStatus', 'retryControlPlane', 'overview', 'getSettings',
-  'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask'];
+  'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask',
+  // P2.2 read-only task views: committed snapshots and cursor pages; none creates, starts or changes a task.
+  'listTasks', 'getTask', 'listTaskEvents'];
 
 export function zoneFor(filename, cwd) {
   const name = relative(cwd, filename).replaceAll('\\', '/');

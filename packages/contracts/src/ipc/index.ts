@@ -3,6 +3,8 @@ import { PROTOCOL_VERSION } from '../version/index.js';
 import type { ControlHealth, SmokeBatch, SmokeRecords } from '../api/index.js';
 import type { ControlOverview, ControlRunList, ProjectList, ProjectRef, TaskStartInput, TaskStartResult, WorkbenchSettings } from '../api/workbench.js';
 import { ProjectSchema } from '../api/workbench.js';
+import type { TaskEventPage, TaskEventsQuery, TaskList, TaskRef } from '../api/tasks.js';
+import type { TaskSnapshot } from '../events/task.js';
 export { ServiceTreeIdentitySchema } from './identity.js';
 export type { ServiceTreeIdentity } from './identity.js';
 
@@ -18,6 +20,7 @@ export const IPC_CHANNELS = Object.freeze({
   desktopStatus: 'oa:desktop-status', retryControlPlane: 'oa:control-retry', overview: 'oa:control-overview',
   getSettings: 'oa:settings-get', saveSettings: 'oa:settings-save', listProjects: 'oa:projects-list',
   addProject: 'oa:projects-add', removeProject: 'oa:projects-remove', listRuns: 'oa:runs-list', startTask: 'oa:tasks-start',
+  listTasks: 'oa:tasks-list', getTask: 'oa:tasks-snapshot', listTaskEvents: 'oa:tasks-events',
 });
 export const EmptyInputSchema = z.strictObject({});
 
@@ -51,4 +54,8 @@ export interface DesktopApi {
   removeProject(input: ProjectRef): Promise<ProjectList>;
   listRuns(): Promise<ControlRunList>;
   startTask(input: TaskStartInput): Promise<TaskStartResult>;
+  /** Read-only task views (P2.2): committed snapshots and cursor pages; nothing here starts or changes a task. */
+  listTasks(): Promise<TaskList>;
+  getTask(input: TaskRef): Promise<TaskSnapshot>;
+  listTaskEvents(input: TaskEventsQuery): Promise<TaskEventPage>;
 }
