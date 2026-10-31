@@ -23,6 +23,8 @@ const NETWORK: ReadonlyArray<{ probe: string; control: string; accepted: readonl
 
 /** The public resolver the probe queries; must match the test host's targets. */
 export const DNS_TARGET = '1.1.1.1';
+/** The public IPv6 target the probe connects to on port 443; must match the test host's targets. */
+export const IPV6_TARGET = '2606:4700:4700::1111';
 
 type Json = Record<string, unknown>;
 const record = (value: unknown): Json => (value && typeof value === 'object' && !Array.isArray(value) ? value as Json : {});
@@ -55,14 +57,19 @@ export function evaluateSecW01(evidence: unknown): string[] {
   // A UDP send can "succeed" locally while WFP drops it. Silence then counts only with an audited outbound drop or
   // block of exactly that datagram from the probe runtime (WFP events 5152/5157, UDP = protocol 17).
   const wfp = Array.isArray(observed.wfp) ? observed.wfp.map(record) : [];
-  const auditedDrop = (destination: string, port: number): boolean => observed.wfpAudit === true && wfp.some(event =>
-    [5152, 5157].includes(Number(event.id)) && event.direction === 'outbound' && event.destination === destination &&
-    event.port === port && event.protocol === 17);
+  const audited = (ids: number[], destination: string, port: number, protocol: number): boolean => observed.wfpAudit === true &&
+    wfp.some(event => ids.includes(Number(event.id)) && event.direction === 'outbound' && event.destination === destination &&
+      event.port === port && event.protocol === protocol);
+  // Without an IPv6 internet path the runner routes the target through a dead ULA next hop: the host's attempt then
+  // goes unanswered instead of failing route lookup, so a denial is policy, and WFP must have audited the block.
+  const routedIpv6 = prepared.ipv6Route === true && ['TIMEOUT', 'ERROR:ETIMEDOUT'].includes(String(controls.tcp6Public)) &&
+    audited([5157], IPV6_TARGET, 443, 6);
   for (const { probe, control, accepted } of NETWORK) {
-    // Without a successful control the denial cannot be told apart from an unreachable target: inconclusive.
-    need(controls[control] === 'REACHABLE', `${probe}:INCONCLUSIVE_CONTROL_${String(controls[control])}`);
     const outcome = String(results[probe]);
-    const proven = accepted.includes(outcome) || (probe === 'net.udp4.dns-public' && outcome === 'NO_RESPONSE' && auditedDrop(DNS_TARGET, 53));
+    const controlled = controls[control] === 'REACHABLE' || (probe === 'net.tcp6.public' && routedIpv6);
+    // Without a successful (or audited, routed) control a denial cannot be told apart from an unreachable target.
+    need(controlled, `${probe}:INCONCLUSIVE_CONTROL_${String(controls[control])}`);
+    const proven = accepted.includes(outcome) || (probe === 'net.udp4.dns-public' && outcome === 'NO_RESPONSE' && audited([5152, 5157], DNS_TARGET, 53, 17));
     need(proven, `${probe}:${outcome}`);
   }
   return violations;

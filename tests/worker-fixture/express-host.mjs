@@ -52,8 +52,25 @@ function wfpEvents(since) {
     .filter(event => event.application.includes('probe-runtime'))
     .map(({ id, direction, destination, port, protocol }) => ({ id, direction, destination, port, protocol }));
 }
+// The hosted runner has no IPv6 route, so the IPv6 stack would fail before policy is ever consulted. On the
+// disposable runner only, give the primary adapter a ULA address and a host route for the probe target through a
+// next hop that does not exist: the stack now routes the SYN (the host's own attempt goes unanswered rather than
+// ENETUNREACH), so a sandbox denial there is policy, and WFP audits it as an outbound connection block.
+function routeIpv6Target() {
+  if (process.env.GITHUB_ACTIONS !== 'true') return false;
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "$alias = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Sort-Object RouteMetric | Select-Object -First 1).InterfaceAlias",
+    "New-NetIPAddress -InterfaceAlias $alias -IPAddress 'fd7a:5ec0:1::10' -PrefixLength 64 | Out-Null",
+    `New-NetRoute -InterfaceAlias $alias -DestinationPrefix '${PUBLIC.public6.host}/128' -NextHop 'fd7a:5ec0:1::1' | Out-Null`,
+    "'ROUTED'",
+  ].join('; ');
+  const result = spawnSync(resolve(process.env.SystemRoot ?? 'C:\\Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+    ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true });
+  return result.status === 0 && result.stdout.trim().endsWith('ROUTED');
+}
 async function prepareProbe() {
-  probe.since = new Date().toISOString(); probe.wfpAudit = enableWfpAudit();
+  probe.since = new Date().toISOString(); probe.wfpAudit = enableWfpAudit(); probe.ipv6Route = routeIpv6Target();
   const secret = randomUUID();
   const canary = (label, directory) => {
     const path = resolve(directory, `oa-canary-${randomUUID()}.txt`); writeFileSync(path, secret); probe.cleanup.push(() => rmSync(path, { force: true }));
@@ -84,7 +101,7 @@ async function prepareProbe() {
   // Hits caused by the host's own controls are the baseline; only later hits can come from the Worker.
   probe.baseline = { ...probe.hits };
   return { controls: { tcp4Public, tcp6Public, udp4Dns, dns, loopbackTcp4, loopbackTcp6, loopbackUdp4 },
-    parentAddonExists: existsSync(parentAddon), canaries: readCanaries.map(item => item.label) };
+    ipv6Route: probe.ipv6Route === true, parentAddonExists: existsSync(parentAddon), canaries: readCanaries.map(item => item.label) };
 }
 async function observeProbe() {
   const siblingAlive = probe.sibling?.exitCode === null && probe.sibling?.signalCode === null;

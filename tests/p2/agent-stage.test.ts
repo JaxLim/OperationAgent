@@ -73,6 +73,26 @@ test('silent UDP egress counts only with an audited WFP drop of exactly that dat
   assert.notEqual(evaluateSecW01(silent([drop], false)).length, 0, 'events without an enabled audit are not evidence');
 });
 
+test('without an IPv6 internet path, IPv6 denial needs a routed target and an audited WFP connection block', () => {
+  const routed = (change: (value: Record<string, unknown>) => void = () => {}) => withReport(value => {
+    controls(value).tcp6Public = 'TIMEOUT';
+    Object.assign(value.prepared as object, { ipv6Route: true });
+    Object.assign(value.observed as object, { wfpAudit: true,
+      wfp: [{ id: 5157, direction: 'outbound', destination: '2606:4700:4700::1111', port: 443, protocol: 6 }] });
+    change(value);
+  });
+  assert.deepEqual(evaluateSecW01(routed()), []);
+  for (const change of [
+    (value: Record<string, unknown>) => { Object.assign(value.prepared as object, { ipv6Route: false }); },
+    (value: Record<string, unknown>) => { controls(value).tcp6Public = 'ERROR:ENETUNREACH'; },
+    (value: Record<string, unknown>) => { Object.assign(value.observed as object, { wfp: [] }); },
+    (value: Record<string, unknown>) => { Object.assign(value.observed as object, { wfpAudit: false }); },
+    (value: Record<string, unknown>) => { Object.assign(value.observed as object, { wfp: [{ id: 5157, direction: 'outbound', destination: '2606:4700:4700::1111', port: 80, protocol: 6 }] }); },
+    (value: Record<string, unknown>) => { results(value)['net.tcp6.public'] = 'TIMEOUT'; },
+    (value: Record<string, unknown>) => { results(value)['net.tcp6.public'] = 'UNREACHABLE:ENETUNREACH'; },
+  ]) assert.notEqual(evaluateSecW01(routed(change)).length, 0, change.toString().slice(0, 90));
+});
+
 test('unreachable targets and failed host controls are inconclusive, never denials', () => {
   for (const change of [
     (value: Record<string, unknown>) => { results(value)['net.tcp6.public'] = 'UNREACHABLE:ENETUNREACH'; },
