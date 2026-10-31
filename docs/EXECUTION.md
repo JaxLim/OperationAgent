@@ -350,3 +350,26 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
   - Worker fixture 在本机仍为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`。
 
 安装后烟测由 CI 运行。
+
+## P2.3 Workbench 任务视图（2026-10-31）
+
+授权：P2.0–P2.3（`build/p2-status.json`）。用户 2026-10-31 指示完成 P2.3 后继续推进后续里程碑。执行能力不变：任务启动仍被拒绝，提示词不存储。
+
+- Renderer 状态（`state.ts`）：Express 的快照是唯一事实来源。
+  - 每个任务记录本窗口已应用的游标（`appliedSeq` 和回放得到的状态），通过契约中的 `catchUpTaskEvents` 补拉。
+  - 控制面换了新实例后，先重新读取快照，再从原游标继续补拉。
+  - 游标超前或页面不一致时，从零重来一次；第二次仍失败就显示“out of sync”并提供 Resync。
+  - 回放结果与快照不一致时显示 `STATE_MISMATCH`，不在本地自行判断。
+- 界面：
+  - 侧栏列出当前项目的已提交任务，显示状态色点和更新时间；没有任务时保留原有的门禁说明。
+  - 详情页（`TaskDetail.tsx`）显示状态、已同步事件数和事件时间线：创建事件、状态迁移（含原因和副作用）、工具结果摘要（退出码、字节数、诊断）。
+  - `INTERRUPTED` 任务提示副作用可能未知，并说明不会自动恢复，恢复需要隔离 Worker。
+  - 全部使用现有设计令牌和样式类。
+- `verify:p2`：P2.3 的完成声明要求 `TaskDetail.tsx` 和 Electron 集成测试存在，且 P2.2 已标记完成。P2 总退出仍为 NOT_RUN，需要已提交的 CI 证据。
+
+验证：`pnpm check:engineering` 八项全部退出 0（97/97）。本地 `pnpm test:integration`（Windows x64）退出 0：真实进程测试 **16/16**，原生接口测试 2/2。新增的 Electron 测试先用 Express 存储写入一个已完成任务和一个停在 RUNNING 的任务，再启动真实 Electron 窗口：
+- 点击侧栏任务行，等待游标同步完成，核对时间线内容（含工具结果、`exit 0` 和诊断信息）；
+- 停在 RUNNING 的任务被 sidecar 启动对账标为 `INTERRUPTED`，界面显示 `side effects UNKNOWN` 和不会自动恢复的提示；
+- 强杀 sidecar 后，界面在新的 Express 实例上重新同步（要求同步时间晚于重启），事件数不变。
+
+测试还保存了真实窗口截图（`artifacts/p1/win32-x64/workbench-task.png`），供目视检查。隐藏窗口不会重绘，所以截图前会短暂以不抢焦点的方式显示窗口。

@@ -1,18 +1,26 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { WORKBENCH_LIMITS } from '@operation-agent/contracts';
 import type { Project } from '@operation-agent/contracts';
 import { actions, useStore } from '../state';
 import type { Submission } from '../state';
 import { accent, relativeTime } from './format';
+import { TaskDetail } from './TaskDetail';
 import { IconAlert, IconFolder, IconLock, IconPlus, IconSend, IconShield, IconCheck, IconX } from './Icons';
 
 export interface ComposerHandle { focus(): void }
+
+let focusOnMount = false;
+/** Focuses the composer now, or when it next mounts (an open task replaces it). No animation-frame timing. */
+export function requestComposerFocus(handle: ComposerHandle | null): void {
+  if (handle) handle.focus(); else focusOnMount = true;
+}
 
 const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolean }>(function Composer({ project, disabled }, handle) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(handle, () => ({ focus: () => ref.current?.focus() }), []);
+  useEffect(() => { if (focusOnMount) { focusOnMount = false; ref.current?.focus(); } }, []);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -80,6 +88,7 @@ export const Workspace = forwardRef<ComposerHandle>(function Workspace(_props, h
   const submissions = useStore(s => s.submissions);
   const project = projects.find(item => item.id === activeId);
   const mine = submissions.filter(item => item.projectId === activeId);
+  const selected = useStore(s => s.tasks.find(task => task.id === s.selectedTaskId && task.projectId === activeId));
 
   if (!loaded) {
     return (
@@ -101,6 +110,7 @@ export const Workspace = forwardRef<ComposerHandle>(function Workspace(_props, h
       </div></div></section>
     );
   }
+  if (selected) return <TaskDetail task={selected} />;
   return (
     <section className="center">
       <div className="scroll">

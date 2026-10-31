@@ -1,6 +1,7 @@
 // Test-only entry point. Never included in Desktop or Sidecar production files.
 import { app, BrowserWindow } from 'electron';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startDesktop } from '../../apps/desktop/dist/main/host.js';
 
@@ -62,6 +63,25 @@ process.on('message', async message => {
             projects: await api.listProjects(), after: await api.getSettings() };
         })()`);
         break;
+      case 'task-ui': {
+        // Drives the real Workbench DOM: optionally clicks a task row, then waits until its committed log is synced.
+        const { taskId, click, entries, fresh } = message.input;
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const wait = async (check, ms = 15000) => { const end = Date.now() + ms;
+            while (Date.now() < end) { const found = check(); if (found) return found; await new Promise(done => setTimeout(done, 50)); }
+            throw new Error('UI_TIMEOUT ' + document.querySelector('[data-sync]')?.textContent); };
+          const id = ${JSON.stringify(taskId)}; const since = Date.now();
+          if (${JSON.stringify(Boolean(click))}) (await wait(() => document.querySelector('.task-row[data-task-id="' + id + '"]'))).click();
+          await wait(() => document.querySelector('section[data-task-id="' + id + '"] [data-sync="synced"]') &&
+            (!${JSON.stringify(Boolean(fresh))} || Number(document.querySelector('[data-synced-at]').dataset.syncedAt) > since) &&
+            document.querySelectorAll('.timeline-entry').length >= ${JSON.stringify(entries ?? 1)});
+          const detail = document.querySelector('section[data-task-id="' + id + '"]');
+          return { rows: document.querySelectorAll('.task-row[data-task-id]').length, entries: detail.querySelectorAll('.timeline-entry').length,
+            pill: detail.querySelector('.task-meta .pill').textContent, meta: detail.querySelector('[data-sync]').textContent,
+            interrupted: Boolean(detail.querySelector('.column > .tone-notice-warn')), text: detail.querySelector('.timeline').textContent };
+        })()`);
+        break;
+      }
       case 'write': value = await host.window.webContents.executeJavaScript(`window.operationAgent.writeSmokeRecords(${JSON.stringify(message.input)})`); break;
       case 'list': value = await host.window.webContents.executeJavaScript('window.operationAgent.listSmokeRecords()'); break;
       case 'csp':
@@ -85,6 +105,31 @@ process.on('message', async message => {
         await new Promise(resolve => setTimeout(resolve, 100));
         value = host.window.webContents.getURL() === original;
         break;
+      }
+      case 'new-task-shortcut':
+        // Ctrl+N from an open task must leave it and focus the request composer.
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true }));
+          const end = Date.now() + 5000;
+          while (Date.now() < end) {
+            const active = document.activeElement;
+            if (!document.querySelector('section[data-task-id]') && active?.getAttribute('aria-label') === 'Task request') return 'composer-focused';
+            await new Promise(done => setTimeout(done, 50));
+          }
+          return document.querySelector('section[data-task-id]') ? 'task-still-open' : 'composer-not-focused';
+        })()`);
+        break;
+      case 'capture': {
+        // Evidence screenshot of the real hidden window; only into the workspace artifacts directory.
+        const target = resolve(root, 'artifacts', message.input);
+        if (!target.startsWith(resolve(root, 'artifacts'))) throw new Error('CAPTURE_PATH_REJECTED');
+        mkdirSync(dirname(target), { recursive: true });
+        // A hidden window is not repainted; show it without focus long enough to paint the current DOM.
+        host.window.setSize(1360, 860); host.window.showInactive();
+        await new Promise(done => setTimeout(done, 800));
+        writeFileSync(target, (await host.window.webContents.capturePage()).toPNG());
+        host.window.hide();
+        value = target; break;
       }
       case 'close':
         await host.stop(); process.send({ id: message.id, value: 'closed' }, () => app.exit(0)); return;

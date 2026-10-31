@@ -31,3 +31,17 @@ export function accent(id: string): string {
   let hash = 0; for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return palette[hash % palette.length]!;
 }
+
+/** Display tone and label for a committed task state; purely presentational. */
+export const TASK_STATE: Record<string, { tone: 'ok' | 'warn' | 'danger' | 'muted' | 'run' | 'wait'; label: string; live?: true }> = {
+  CREATED: { tone: 'muted', label: 'Created' }, QUEUED: { tone: 'wait', label: 'Queued', live: true },
+  RUNNING: { tone: 'run', label: 'Running', live: true }, WAITING_APPROVAL: { tone: 'warn', label: 'Waiting for approval' },
+  COMPLETED: { tone: 'ok', label: 'Completed' }, FAILED: { tone: 'danger', label: 'Failed' },
+  STOPPING: { tone: 'wait', label: 'Stopping', live: true }, STOPPED: { tone: 'muted', label: 'Stopped' },
+  INTERRUPTED: { tone: 'warn', label: 'Interrupted' },
+};
+export function bytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MiB`;
+}

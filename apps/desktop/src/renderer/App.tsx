@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { actions, useStore } from './state';
 import { Sidebar } from './components/Sidebar';
-import { Workspace } from './components/Workspace';
+import { Workspace, requestComposerFocus } from './components/Workspace';
 import type { ComposerHandle } from './components/Workspace';
 import { ContextPanel } from './components/ContextPanel';
 import { DiagnosticsDialog, ProjectsDialog, SettingsDialog } from './components/Dialogs';
@@ -60,19 +60,21 @@ export function App() {
   const project = projects.find(item => item.id === settings?.activeProjectId);
   const close = useCallback(() => setDialog(null), []);
   const togglePanel = useCallback(() => { if (settings) void actions.saveSettings({ contextPanel: !settings.contextPanel }); }, [settings]);
+  // An open task replaces the composer: leave the task, then focus the composer now or as soon as it mounts again.
+  const newTask = useCallback(() => { actions.selectTask(null); requestComposerFocus(composer.current); }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey) || dialog) return;
       const key = event.key.toLowerCase();
-      if (key === 'n') { event.preventDefault(); composer.current?.focus(); }
+      if (key === 'n') { event.preventDefault(); newTask(); }
       else if (key === 'o') { event.preventDefault(); setDialog('projects'); }
       else if (key === ',') { event.preventDefault(); setDialog('settings'); }
       else if (key === '\\') { event.preventDefault(); togglePanel(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dialog, togglePanel]);
+  }, [dialog, togglePanel, newTask]);
 
   return (
     <div className={`app${rightOpen ? '' : ' no-right'}${leftOpen ? '' : ' no-left'}`}>
@@ -93,7 +95,7 @@ export function App() {
       </header>
 
       {leftOpen && <Sidebar onOpenProjects={() => setDialog('projects')} onOpenSettings={() => setDialog('settings')}
-        onOpenDiagnostics={() => setDialog('diagnostics')} onNewTask={() => composer.current?.focus()} />}
+        onOpenDiagnostics={() => setDialog('diagnostics')} onNewTask={newTask} />}
       <main className="main"><ServiceBanner /><Workspace ref={composer} /></main>
       {rightOpen && <ContextPanel />}
 

@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { root, until, environment, launchSidecar, closeDirectory, httpCall } from './sidecar-helper.mjs';
 import { CONTROL_ROUTES, CONTROL_POLICY } from '../../packages/contracts/dist/index.js';
+import { openStore } from '../../apps/server/dist/persistence/store.js';
 
 const require = createRequire(import.meta.url);
 const electron = require('../../apps/desktop/node_modules/electron');
@@ -51,7 +52,9 @@ async function fixture(t) {
   const cache = resolve(root, '.cache'); await mkdir(cache, { recursive: true });
   const directory = await mkdtemp(resolve(cache, 'electron-test-')); const hosts = [];
   t.after(async () => { for (const host of hosts) await host.close(); if (directory.startsWith(cache + sep)) await rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
-  return async () => { const host = await launch(directory); hosts.push(host); return host; };
+  const create = async () => { const host = await launch(directory); hosts.push(host); return host; };
+  create.directory = directory;
+  return create;
 }
 
 test('real Electron Main → sandboxed Preload → authenticated Express → SQLite, restart and normal exit', { timeout: 90_000 }, async t => {
@@ -178,4 +181,40 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   const again = await reopened.command('workbench');
   assert.equal(again.after.theme, 'dark'); assert.equal(again.after.stopGraceMs, 10000);
   assert.deepEqual(again.runs.runs.slice(0, 2).map(run => run.outcome), ['RUNNING', 'CLEAN']);
+});
+
+test('the Workbench lists committed tasks, replays their events and resyncs after a control-plane restart', { timeout: 90_000 }, async t => {
+  const create = await fixture(t);
+  // Seed through the Express store: one finished task with a tool result, one left RUNNING.
+  const seed = openStore(resolve(create.directory, 'database'), randomUUID());
+  const projectId = seed.addProject({ name: 'seeded', path: 'C:/OperationAgentP23/seeded' }).id;
+  const step = (taskId, to) => seed.transitionTask(taskId, to, { requestId: randomUUID() });
+  const done = seed.createTask(projectId, randomUUID()).task.id;
+  step(done, 'QUEUED'); step(done, 'RUNNING');
+  seed.recordToolSummary({ type: 'tool_output_summary', taskId: done, toolCallId: randomUUID(), attemptId: randomUUID(), stdoutBytes: 2048,
+    stderrBytes: 12, sampledBytes: 2060, truncatedBytes: 0, exitCode: 0, diagnostics: [{ severity: 'warning', summary: '1 deprecated option' }] }, randomUUID());
+  step(done, 'COMPLETED');
+  const running = seed.createTask(projectId, randomUUID()).task.id;
+  step(running, 'QUEUED'); step(running, 'RUNNING');
+  seed.close(true);
+
+  const host = await create();
+  const completed = await host.command('task-ui', { taskId: done, click: true, entries: 5 });
+  assert.equal(completed.rows, 2); assert.equal(completed.entries, 5);
+  assert.match(completed.pill, /Completed/); assert.match(completed.meta, /5 ?\/ ?5 events/); assert.equal(completed.interrupted, false);
+  assert.match(completed.text, /exit 0/); assert.match(completed.text, /1 deprecated option/);
+  // Opening the sidecar recovered the RUNNING task: INTERRUPTED with unknown side effects, never resumed.
+  const interrupted = await host.command('task-ui', { taskId: running, click: true, entries: 4 });
+  assert.equal(interrupted.entries, 4); assert.match(interrupted.pill, /Interrupted/); assert.equal(interrupted.interrupted, true);
+  assert.match(interrupted.text, /side effects UNKNOWN/);
+  await host.command('capture', `p1/${process.platform}-${process.arch}/workbench-task.png`);
+  assert.equal(await host.command('new-task-shortcut'), 'composer-focused');
+  await host.command('task-ui', { taskId: running, click: true, entries: 4 });
+
+  const before = await host.command('state');
+  process.kill(before.pid, 'SIGKILL');
+  await until(async () => { const state = await host.command('state'); return state.state === 'ready' && state.expressRunId !== before.expressRunId; }, 25_000);
+  // The new Express instance serves the same committed log; the view resumes from its cursor.
+  const after = await host.command('task-ui', { taskId: running, entries: 4, fresh: true });
+  assert.deepEqual([after.entries, after.rows], [4, 2]); assert.match(after.meta, /4 ?\/ ?4 events/);
 });
