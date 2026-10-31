@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { object, readJson } from './p0-check.ts';
+import { evaluateSecW01 } from './sec-w01-rules.ts';
 
 const MILESTONES = ['M1', 'M2', 'M3', 'M4'];
 const QUOTES = [
@@ -10,8 +11,19 @@ const QUOTES = [
   'Then proceed autonomously with M1–M4, prioritizing usable Agent functionality.',
 ];
 const PLATFORMS = ['darwin-arm64', 'linux-x64', 'win32-x64'];
-/** Committed CI evidence for a platform's SEC-W01 run; absent means NOT_RUN. */
-export interface SecW01Evidence { integration: string; report: boolean }
+/** Committed CI evidence for a platform's SEC-W01 run (integration.json + raw sec-w01.json); absent means NOT_RUN. */
+export interface SecW01Evidence { integration: unknown; report: unknown }
+
+/** Every reason this evidence cannot prove PASS: the run's own verdict, the raw report's rules, and provenance. */
+export function secW01EvidenceViolations(evidence: SecW01Evidence | undefined): string[] {
+  if (!evidence) return ['EVIDENCE_MISSING'];
+  const integration = object(evidence.integration);
+  const violations = evaluateSecW01(evidence.report);
+  if (integration.secW01 !== 'PASS') violations.push(`INTEGRATION_SEC_W01_${String(integration.secW01)}`);
+  // The raw report must come from the very run whose integration record is committed alongside it.
+  if (typeof integration.source !== 'string' || object(evidence.report).source !== integration.source) violations.push('PROVENANCE_MISMATCH');
+  return violations;
+}
 
 /** Milestone scope and the user's authorization; SEC-W01 PASS and Worker qualification need committed evidence. */
 export function validateAgentStage(value: unknown, evidence: Record<string, SecW01Evidence | undefined>): string[] {
@@ -33,7 +45,7 @@ export function validateAgentStage(value: unknown, evidence: Record<string, SecW
       const claim = String(secW01[platform]); const proof = evidence[platform];
       need(['NOT_RUN', 'FAILED', 'PASS'].includes(claim), 'AGENT_SEC_W01_MATRIX');
       // PASS only with a committed runner report whose integration row passed; nothing else can be claimed.
-      need(claim !== 'PASS' || (proof?.integration === 'PASS' && proof.report), `AGENT_SEC_W01_UNPROVEN_${platform}`);
+      if (claim === 'PASS') for (const violation of secW01EvidenceViolations(proof)) errors.push(`AGENT_SEC_W01_UNPROVEN_${platform}:${violation}`);
     }
     // The Worker gate never opens on its own: it needs SEC-W01 PASS on Windows and M1 implemented.
     need(stage.productionWorkerQualified === false || (secW01['win32-x64'] === 'PASS' && milestones.M1 === 'implemented'), 'AGENT_FALSE_QUALIFICATION');
@@ -48,8 +60,8 @@ export function checkAgent(root: string): void {
   const evidence: Record<string, SecW01Evidence | undefined> = {};
   for (const platform of PLATFORMS) {
     const integration = resolve(root, `docs/evidence/m1/${platform}/integration.json`);
-    if (existsSync(integration)) evidence[platform] = { integration: String(readJson(integration).secW01),
-      report: existsSync(resolve(root, `docs/evidence/m1/${platform}/sec-w01.json`)) };
+    const report = resolve(root, `docs/evidence/m1/${platform}/sec-w01.json`);
+    if (existsSync(integration)) evidence[platform] = { integration: readJson(integration), report: existsSync(report) ? readJson(report) : null };
   }
   const errors = validateAgentStage(stage, evidence);
   if (errors.length) throw new Error(errors.join('\n'));

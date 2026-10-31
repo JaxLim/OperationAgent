@@ -1,20 +1,20 @@
 // SEC-W01 (ADR-WIN-001): production Worker gate for Windows x64. A probe runtime plays a compromised Worker inside
 // the real AppContainer + Job created by the production launcher path. Runs only on a disposable runner;
-// elsewhere it fails as BLOCKED. Any ALLOWED or UNKNOWN outcome keeps the Worker unqualified.
+// elsewhere it fails as BLOCKED. Any ALLOWED, UNKNOWN or inconclusive outcome keeps the Worker unqualified.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { evaluateSecW01 } from '../../scripts/sec-w01-rules.ts';
 
 const root = resolve(import.meta.dirname, '../..');
 const runtime = resolve(root, '.cache/worker-fixture/probe-runtime');
 const runner = process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_OS === 'Windows' && process.platform === 'win32' && process.arch === 'x64';
-const ENV_ALLOWLIST = ['LOCALAPPDATA', 'OA_INHERITED_CHANNEL', 'SystemRoot', 'TEMP', 'TMP', 'WINDIR'];
-// The channel addon consumes the inherited-channel variable once it has taken the handle.
-const ENV_AFTER_CHANNEL = ENV_ALLOWLIST.filter(name => name !== 'OA_INHERITED_CHANNEL');
+// The checked-out commit, the same source test:integration records, so committed evidence can be correlated.
+const source = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true }).stdout?.trim() ?? null;
 
 async function host(t) {
   const child = spawn(process.execPath, [resolve(import.meta.dirname, 'express-host.mjs'), runtime], { cwd: root, windowsHide: true,
@@ -45,35 +45,12 @@ test('SEC-W01: a compromised Worker cannot reach files, credentials, network, ot
   const line = exit.stderr.split(/\r?\n/).find(entry => entry.startsWith('OA-PROBE '));
   const report = line ? JSON.parse(line.slice('OA-PROBE '.length)) : null;
   // Evidence first, so a failing run still leaves the full report for review.
-  const evidence = resolve(root, 'artifacts/p1/win32-x64'); mkdirSync(evidence, { recursive: true });
-  writeFileSync(resolve(evidence, 'sec-w01.json'), JSON.stringify({ check: 'SEC_W01_WIN32_X64', source: process.env.GITHUB_SHA ?? null,
-    finishedAt: new Date().toISOString(), baseline: started.baseline, prepared, report, observed, exit: { reason: exit.reason, cleanup: exit.cleanup } }, null, 2) + '\n');
+  const evidence = { check: 'SEC_W01_WIN32_X64', source, finishedAt: new Date().toISOString(), baseline: started.baseline, prepared, report, observed,
+    exit: { reason: exit.reason, cleanup: exit.cleanup } };
+  const directory = resolve(root, 'artifacts/p1/win32-x64'); mkdirSync(directory, { recursive: true });
+  writeFileSync(resolve(directory, 'sec-w01.json'), JSON.stringify(evidence, null, 2) + '\n');
   assert.ok(report, `probe report missing; stderr tail: ${exit.stderr.slice(-400)}`);
-  const { results, env, envAtStart } = report;
-
-  // The probe really ran inside the restricted Worker: same baseline as production, and it can use what it was granted.
-  assert.equal(started.baseline.appContainer, true); assert.equal(started.baseline.capabilityCount, 0);
-  assert.ok(started.baseline.integrityRid <= 0x1000); assert.equal(started.baseline.noChildProcessCreation, true);
-  assert.equal(results['self.read-runtime'], 'ALLOWED', 'positive control: the granted runtime is readable');
-  assert.equal(results['native.exports'], 'close,read,write', 'native boundary: only the inherited channel is exposed');
-  assert.ok(prepared.parentAddonExists, 'the parent launcher addon exists, so its denial is meaningful');
-  assert.deepEqual(envAtStart, ENV_ALLOWLIST, 'no credential, token or path variable is inherited');
-  assert.deepEqual(env, ENV_AFTER_CHANNEL, 'the channel handle number does not linger in the environment');
-
-  // Files, credentials, processes and native code: the OS must refuse every attempt.
-  const exact = Object.keys(results).filter(name => /^(file|proc)\./.test(name) || name === 'native.dlopen-parent-addon');
-  assert.ok(exact.length >= 14, `expected the full probe set, got ${exact.join(',')}`);
-  for (const name of exact) assert.equal(results[name], 'DENIED', `${name}: ${results[name]}`);
-  assert.equal(observed.siblingAlive, true, 'the sibling process survived the kill attempt');
-
-  // Network: never a connection, reply or delivered datagram. Timeouts are UNKNOWN and fail the gate.
-  const network = { 'net.tcp4.public': ['DENIED'], 'net.tcp6.public': ['DENIED'], // AppContainer loopback isolation drops the SYN: the OS itself reports ETIMEDOUT. That only counts together
-    // with zero listener hits and a host-side control that reached the same listener (asserted below).
-    'net.tcp4.loopback': ['DENIED', 'ERROR:ETIMEDOUT'], 'net.tcp6.loopback': ['DENIED', 'ERROR:ETIMEDOUT'],
-    'net.udp4.dns-public': ['DENIED'], // A local UDP send may complete while the datagram is dropped; the zero-hit check below proves nothing arrived.
-    'net.udp4.loopback': ['DENIED', 'SENT'], 'net.dns.lookup': ['DENIED', 'ERROR:ENOTFOUND', 'ERROR:EAI_FAIL'] };
-  for (const [name, accepted] of Object.entries(network)) assert.ok(accepted.includes(results[name]), `${name}: ${results[name]}`);
-  assert.deepEqual(observed.hits, { tcp4: 0, tcp6: 0, udp4: 0 }, 'no loopback listener received anything from the Worker');
-  assert.equal(prepared.controls.loopbackTcp4, 'REACHABLE', 'the loopback listener was reachable from the unrestricted host');
-  assert.equal(exit.cleanup, 'confirmed');
+  // The same rules admit committed evidence in verify:agent; any violation, including an inconclusive network
+  // outcome without a successful host control, keeps the Worker unqualified.
+  assert.deepEqual(evaluateSecW01(evidence), []);
 });

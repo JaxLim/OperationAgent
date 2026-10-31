@@ -17,11 +17,13 @@ const envAtStart = Object.keys(process.env).sort();
 const targets = JSON.parse(readFileSync(here('targets.json'), 'utf8'));
 const TIMEOUT_MS = 1500;
 
-// DENIED: the OS refused (or the target is not even visible). ALLOWED: the action succeeded. Anything else,
-// including a timeout, is reported verbatim and counts as UNKNOWN, which fails the gate (ADR-WIN-001).
-const denied = new Set(['EACCES', 'EPERM', 'ESRCH', 'ENETUNREACH', 'EHOSTUNREACH', 'EADDRNOTAVAIL']);
-const classify = error => denied.has(error?.code) || (error?.code === 'ERR_DLOPEN_FAILED' && /access is denied/i.test(error.message))
-  ? 'DENIED' : `ERROR:${error?.code ?? error?.message ?? 'UNKNOWN'}`.slice(0, 48);
+// DENIED: the OS refused (or the target is not even visible). UNREACHABLE: no route, which an unrestricted process
+// can hit too, so it proves nothing. ALLOWED: the action succeeded. Everything else, including a timeout, is
+// reported verbatim; the shared rules treat anything not explicitly accepted as inconclusive (ADR-WIN-001).
+const denied = new Set(['EACCES', 'EPERM', 'ESRCH']);
+const unreachable = new Set(['ENETUNREACH', 'EHOSTUNREACH', 'EADDRNOTAVAIL']);
+const classify = error => unreachable.has(error?.code) ? `UNREACHABLE:${error.code}`
+  : denied.has(error?.code) || (error?.code === 'ERR_DLOPEN_FAILED' && /access is denied/i.test(error.message)) ? 'DENIED' : `ERROR:${error?.code ?? error?.message ?? 'UNKNOWN'}`.slice(0, 48);
 const withTimeout = (promise, label = 'TIMEOUT') => Promise.race([promise, new Promise(done => setTimeout(() => done(label), TIMEOUT_MS))]);
 const attempt = async action => { try { return (await action()) ?? 'ALLOWED'; } catch (error) { return classify(error); } };
 

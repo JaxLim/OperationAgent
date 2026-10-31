@@ -16,13 +16,20 @@ const expressRunId = randomUUID();
 const supervisor = new FixtureSupervisor({ target: `${process.platform}-${process.arch}`, runtimeDirectory, expressRunId });
 // SEC-W01 probe fixtures: canaries, loopback listeners that count hits, a decoy process and host-side controls.
 const root = resolve(import.meta.dirname, '../..');
-const probe = { cleanup: [], hits: { tcp4: 0, tcp6: 0, udp4: 0 }, sibling: null };
+const probe = { cleanup: [], hits: { tcp4: 0, tcp6: 0, udp4: 0 }, baseline: { tcp4: 0, tcp6: 0, udp4: 0 }, sibling: null };
 const PUBLIC = { public4: { host: '1.1.1.1', port: 443, dns: '1.1.1.1' }, public6: { host: '2606:4700:4700::1111', port: 443 }, dnsName: 'example.com' };
 const settle = (promise, ms = 1500) => Promise.race([promise, new Promise(done => setTimeout(() => done('TIMEOUT'), ms))]);
 const hostTcp = (host, port) => settle(new Promise(done => {
   const socket = connect({ host, port }); socket.once('connect', () => { socket.destroy(); done('REACHABLE'); });
   socket.once('error', error => { socket.destroy(); done(`ERROR:${error.code}`); });
 }));
+// Connected UDP DNS query from the unrestricted host: REACHABLE only if a reply arrives.
+const hostUdpDns = (host, payload) => settle(new Promise(done => {
+  const socket = createSocket('udp4'); const finish = value => { try { socket.close(); } catch { /* Closed. */ } done(value); };
+  socket.once('error', error => finish(`ERROR:${error.code}`)); socket.once('message', () => finish('REACHABLE'));
+  socket.connect(53, host, error => { if (error) finish(`ERROR:${error.code}`); else socket.send(payload); });
+}));
+const DNS_QUERY = Buffer.from('abcd01000001000000000000076578616d706c6503636f6d0000010001', 'hex');
 const listen = (server, host) => new Promise((done, fail) => { server.once('error', fail); server.listen(0, host, () => done(server.address().port)); });
 async function prepareProbe() {
   const secret = randomUUID();
@@ -46,15 +53,21 @@ async function prepareProbe() {
       { label: 'runtime', path: runtimeDirectory }] };
   writeFileSync(resolve(runtimeDirectory, 'targets.json'), JSON.stringify(targets));
   // Host-side controls: what this (unrestricted) host can reach, so an unreachable target is not mistaken for a denial.
-  const [tcp4Public, tcp6Public, dns] = await Promise.all([hostTcp(PUBLIC.public4.host, PUBLIC.public4.port),
-    hostTcp(PUBLIC.public6.host, PUBLIC.public6.port), settle(lookup(PUBLIC.dnsName).then(() => 'REACHABLE', error => `ERROR:${error.code}`))]);
-  return { controls: { tcp4Public, tcp6Public, dns, loopbackTcp4: await hostTcp('127.0.0.1', loopback.tcp4) },
+  const [tcp4Public, tcp6Public, udp4Dns, dns, loopbackTcp4, loopbackTcp6] = await Promise.all([hostTcp(PUBLIC.public4.host, PUBLIC.public4.port),
+    hostTcp(PUBLIC.public6.host, PUBLIC.public6.port), hostUdpDns(PUBLIC.public4.dns, DNS_QUERY),
+    settle(lookup(PUBLIC.dnsName).then(() => 'REACHABLE', error => `ERROR:${error.code}`)), hostTcp('127.0.0.1', loopback.tcp4), hostTcp('::1', loopback.tcp6)]);
+  const sent = createSocket('udp4'); await new Promise(done => sent.send(Buffer.from('control'), loopback.udp4, '127.0.0.1', () => { sent.close(); done(); }));
+  await new Promise(done => setTimeout(done, 300));
+  const loopbackUdp4 = probe.hits.udp4 > 0 ? 'REACHABLE' : 'NOT_DELIVERED';
+  // Hits caused by the host's own controls are the baseline; only later hits can come from the Worker.
+  probe.baseline = { ...probe.hits };
+  return { controls: { tcp4Public, tcp6Public, udp4Dns, dns, loopbackTcp4, loopbackTcp6, loopbackUdp4 },
     parentAddonExists: existsSync(parentAddon), canaries: readCanaries.map(item => item.label) };
 }
 function observeProbe() {
-  probe.hits.tcp4 = Math.max(0, probe.hits.tcp4 - 1); // The host's own loopback control connected once.
   const siblingAlive = probe.sibling?.exitCode === null && probe.sibling?.signalCode === null;
-  const observed = { hits: { ...probe.hits }, siblingAlive };
+  const hits = Object.fromEntries(Object.entries(probe.hits).map(([kind, count]) => [kind, count - probe.baseline[kind]]));
+  const observed = { hits, siblingAlive };
   for (const step of probe.cleanup.splice(0)) { try { step(); } catch { /* Best-effort cleanup of test fixtures. */ } }
   rmSync(resolve(runtimeDirectory, 'targets.json'), { force: true });
   return observed;
