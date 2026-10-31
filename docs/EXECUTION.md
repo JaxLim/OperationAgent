@@ -373,3 +373,40 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
 - 强杀 sidecar 后，界面在新的 Express 实例上重新同步（要求同步时间晚于重启），事件数不变。
 
 测试还保存了真实窗口截图（`artifacts/p1/win32-x64/workbench-task.png`），供目视检查。隐藏窗口不会重绘，所以截图前会短暂以不抢焦点的方式显示窗口。
+
+## M1：SEC-W01 Windows 生产 Worker 门禁（2026-10-31，进行中）
+
+授权：用户 2026-10-31 的原话已记录在 `build/agent-status.json`，内容包括后续里程碑可自主推进、模型供应商选定 Claude、授权 M1–M4。`verify:agent`（`scripts/agent-check.ts`）校验以下几点：
+- 授权原话和供应商与记录完全一致；
+- 只有已提交的一次性 runner 证据显示 `secW01: PASS`（`docs/evidence/m1/<平台>/`）时，平台的 SEC-W01 才能标 PASS；
+- `productionWorkerQualified` 需要 Windows 的 SEC-W01 PASS，且 M1 已完成；
+- `agentReady` 还需要 M2 完成；
+- 一个平台的证据不能用于其他平台。
+
+方法：在 `tests/` 下单独构建一个仅供测试的 probe runtime（`tests/worker-fixture/probe-bootstrap.mjs`），绝不进入任何发布包。它经生产 launcher 路径在真实的 AppContainer 和 Job 中启动，扮演已被攻陷的 Worker：
+- 先尝试所有被禁止的操作，再加载受信通道；
+- 结果写成一行 `OA-PROBE`，通过有界 stderr 诊断管道上报；
+- 然后照常完成 OWIP/1 握手和两阶段停止。
+
+测试宿主准备的目标：
+- 工作区、用户目录和 TEMP 中的 canary 文件，以及仓库 `.git/config`；
+- 会计数的 127.0.0.1 TCP、::1 TCP 和 127.0.0.1 UDP 监听器；
+- 一个用于“杀进程”尝试的旁路进程；
+- 宿主侧对公网、IPv6 和 DNS 的对照连接。
+
+| SEC-W01 项目 | 覆盖 |
+|---|---|
+| 用户文件与凭据 | 读取工作区、用户目录、TEMP canary 和 `.git/config`；列出用户目录、仓库和 Users；写入工作区、用户目录、TEMP 和 runtime 自身，全部必须为 DENIED |
+| 环境与凭据泄漏 | Worker 环境变量名必须恰好是 6 项白名单，不含任何 token 或 PATH |
+| 全目标网络和回环 | 公网 TCP4/TCP6、公网 UDP DNS、本机 DNS 解析、回环 TCP4/TCP6/UDP4；监听器命中数必须为 0；超时一律视为 UNKNOWN，即失败 |
+| 子进程和危险操作 | spawn 和终止旁路进程都必须为 DENIED，旁路进程必须仍然存活；基线要求 `noChildProcessCreation`、恰好 3 个继承句柄、低完整性、零能力 |
+| 原生边界 | 通道组件只导出 `close,read,write`；加载父端 launcher 组件必须被拒（Access is denied） |
+| 启动竞态、实例复用、预算、故障回收 | 由现有 P1.4/P1.5 runner 套件覆盖：挂起状态下核验基线、SEC-17、重启预算、hang/exit 回收 |
+| 安装包 | 发布包不含 fixture 或 probe；由 P1.6 安装后烟测验证 |
+
+本地验证：
+- 未加沙箱的 dry run 中，所有探针都报 ALLOWED（回环 UDP 报 SENT，三个监听器各被命中一次，旁路进程被杀死），说明每个探针都能真实检测到“成功”。
+- 本机运行 `sec-w01.test.mjs` 时按规定报 BLOCKED。
+- `check:engineering` 九项全部退出 0（100/100）。
+
+真实结论只能来自一次性 Windows runner。在证据提交之前，`secW01` 保持 NOT_RUN，`productionWorkerQualified` 保持 false。

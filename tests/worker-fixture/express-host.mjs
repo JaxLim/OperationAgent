@@ -1,13 +1,67 @@
 // Test-only Express host for the restricted fixture: the real Express launcher/supervisor in a separate
 // pinned-Node process, so SEC-17 can kill it like a crashed Express. Never staged into the release sidecar.
 import { randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createServer, connect } from 'node:net';
+import { createSocket } from 'node:dgram';
+import { lookup } from 'node:dns/promises';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 import { FixtureSupervisor } from '../../apps/server/dist/worker/launcher.js';
 
 const runtimeDirectory = process.argv[2];
 if (!runtimeDirectory || !process.send) process.exit(2);
 const expressRunId = randomUUID();
 const supervisor = new FixtureSupervisor({ target: `${process.platform}-${process.arch}`, runtimeDirectory, expressRunId });
+// SEC-W01 probe fixtures: canaries, loopback listeners that count hits, a decoy process and host-side controls.
+const root = resolve(import.meta.dirname, '../..');
+const probe = { cleanup: [], hits: { tcp4: 0, tcp6: 0, udp4: 0 }, sibling: null };
+const PUBLIC = { public4: { host: '1.1.1.1', port: 443, dns: '1.1.1.1' }, public6: { host: '2606:4700:4700::1111', port: 443 }, dnsName: 'example.com' };
+const settle = (promise, ms = 1500) => Promise.race([promise, new Promise(done => setTimeout(() => done('TIMEOUT'), ms))]);
+const hostTcp = (host, port) => settle(new Promise(done => {
+  const socket = connect({ host, port }); socket.once('connect', () => { socket.destroy(); done('REACHABLE'); });
+  socket.once('error', error => { socket.destroy(); done(`ERROR:${error.code}`); });
+}));
+const listen = (server, host) => new Promise((done, fail) => { server.once('error', fail); server.listen(0, host, () => done(server.address().port)); });
+async function prepareProbe() {
+  const secret = randomUUID();
+  const canary = (label, directory) => {
+    const path = resolve(directory, `oa-canary-${randomUUID()}.txt`); writeFileSync(path, secret); probe.cleanup.push(() => rmSync(path, { force: true }));
+    return { label, path, secret };
+  };
+  const readCanaries = [canary('workspace', resolve(root, '.cache')), canary('profile', homedir()), canary('temp', tmpdir()),
+    { label: 'repo-git-config', path: resolve(root, '.git/config'), secret: '[core]' }];
+  const tcp4 = createServer(socket => { probe.hits.tcp4++; socket.destroy(); }); const tcp6 = createServer(socket => { probe.hits.tcp6++; socket.destroy(); });
+  const udp4 = createSocket('udp4'); udp4.on('message', () => { probe.hits.udp4++; });
+  const loopback = { tcp4: await listen(tcp4, '127.0.0.1'), tcp6: await listen(tcp6, '::1'),
+    udp4: await new Promise(done => udp4.bind(0, '127.0.0.1', () => done(udp4.address().port))) };
+  probe.cleanup.push(() => tcp4.close(), () => tcp6.close(), () => udp4.close());
+  probe.sibling = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore', windowsHide: true });
+  probe.cleanup.push(() => probe.sibling.kill());
+  const parentAddon = resolve(root, 'packages/platform-worker/native-dist/win32-x64/parent.node');
+  const targets = { ...PUBLIC, readCanaries, loopback, siblingPid: probe.sibling.pid, parentAddon,
+    listDirectories: [{ label: 'profile', path: homedir() }, { label: 'workspace', path: root }, { label: 'users', path: resolve(process.env.SystemDrive ?? 'C:', '/Users') }],
+    writeDirectories: [{ label: 'workspace', path: resolve(root, '.cache') }, { label: 'profile', path: homedir() }, { label: 'temp', path: tmpdir() },
+      { label: 'runtime', path: runtimeDirectory }] };
+  writeFileSync(resolve(runtimeDirectory, 'targets.json'), JSON.stringify(targets));
+  // Host-side controls: what this (unrestricted) host can reach, so an unreachable target is not mistaken for a denial.
+  const [tcp4Public, tcp6Public, dns] = await Promise.all([hostTcp(PUBLIC.public4.host, PUBLIC.public4.port),
+    hostTcp(PUBLIC.public6.host, PUBLIC.public6.port), settle(lookup(PUBLIC.dnsName).then(() => 'REACHABLE', error => `ERROR:${error.code}`))]);
+  return { controls: { tcp4Public, tcp6Public, dns, loopbackTcp4: await hostTcp('127.0.0.1', loopback.tcp4) },
+    parentAddonExists: existsSync(parentAddon), canaries: readCanaries.map(item => item.label) };
+}
+function observeProbe() {
+  probe.hits.tcp4 = Math.max(0, probe.hits.tcp4 - 1); // The host's own loopback control connected once.
+  const siblingAlive = probe.sibling?.exitCode === null && probe.sibling?.signalCode === null;
+  const observed = { hits: { ...probe.hits }, siblingAlive };
+  for (const step of probe.cleanup.splice(0)) { try { step(); } catch { /* Best-effort cleanup of test fixtures. */ } }
+  rmSync(resolve(runtimeDirectory, 'targets.json'), { force: true });
+  return observed;
+}
 const handlers = {
+  async 'prepare-probe'() { return prepareProbe(); },
+  async 'observe-probe'() { return observeProbe(); },
   async start() { const worker = await supervisor.start(); return { expressRunId, hostPid: process.pid, baseline: worker.baseline, workerRunId: worker.identity.workerRunId }; },
   async health() { return supervisor.worker.health(); },
   // Capture the Worker first: the supervisor may already be restarting a replacement when it exits.
@@ -27,5 +81,5 @@ process.on('message', message => {
     catch (error) { process.send({ id: message.id, error: error.message }); }
   })();
 });
-process.on('disconnect', () => { void supervisor.stop().finally(() => process.exit(0)); });
+process.on('disconnect', () => { for (const step of probe.cleanup.splice(0)) { try { step(); } catch { /* Best effort. */ } } void supervisor.stop().finally(() => process.exit(0)); });
 process.send({ kind: 'ready', pid: process.pid });

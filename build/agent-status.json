@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "phase": "AGENT",
+  "dependsOn": { "file": "build/p2-status.json" },
+  "authorizedMilestones": ["M1", "M2", "M3", "M4"],
+  "authorization": {
+    "kind": "user-message",
+    "date": "2026-10-31",
+    "quotes": [
+      "Complete P2.3, then autonomously plan and implement subsequent milestones toward a fully functional desktop Agent.",
+      "Yes, use Claude",
+      "Then proceed autonomously with M1–M4, prioritizing usable Agent functionality."
+    ],
+    "modelProvider": "anthropic-claude"
+  },
+  "milestones": { "M1": "in-progress", "M2": "not-started", "M3": "not-started", "M4": "not-started" },
+  "secW01": { "win32-x64": "NOT_RUN", "darwin-arm64": "NOT_RUN", "linux-x64": "NOT_RUN" },
+  "agentReady": false,
+  "productionWorkerQualified": false
+}
