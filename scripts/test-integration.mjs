@@ -17,12 +17,20 @@ const commands = [
   ['scripts/prepare-electron.mjs'],
   ['--test', '--test-concurrency=1', '--test-timeout=180000', 'tests/integration/sidecar.test.mjs', 'tests/integration/electron.test.mjs'],
   ...(windows ? [['scripts/build-worker-native.mjs'], ['scripts/build-worker-fixture.mjs'], ['--test', 'tests/worker-fixture/native-surface.test.mjs']] : []),
-  ...(disposableRunner ? [['--test', '--test-concurrency=1', '--test-timeout=240000', 'tests/worker-fixture/isolated-fixture.test.mjs']] : []),
+  ...(disposableRunner ? [['--test', '--test-concurrency=1', '--test-timeout=240000', 'tests/worker-fixture/isolated-fixture.test.mjs'],
+    ['--test', '--test-concurrency=1', '--test-timeout=240000', 'tests/worker-fixture/sec-w01.test.mjs']] : []),
 ];
 const workerFixture = () => {
   if (!windows) return 'NOT_RUN_NO_NATIVE_LAUNCHER';
   if (!disposableRunner) return 'BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST';
   const row = results.find(entry => entry.command.includes('isolated-fixture'));
+  return row ? (row.exitCode === 0 ? 'PASS' : 'FAILED') : 'NOT_REACHED';
+};
+// SEC-W01 is the production Worker gate; its own row decides it, never the P1 fixture result.
+const secW01 = () => {
+  if (!windows) return 'NOT_RUN_NO_NATIVE_LAUNCHER';
+  if (!disposableRunner) return 'BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST';
+  const row = results.find(entry => entry.command.includes('sec-w01'));
   return row ? (row.exitCode === 0 ? 'PASS' : 'FAILED') : 'NOT_REACHED';
 };
 const results = [];
@@ -38,6 +46,6 @@ for (const args of commands) {
   try { const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')); runtime = { node: manifest.node, abi: manifest.abi, sqlite: manifest.sqlite, lockSha256: manifest.lockSha256 }; } catch { /* Failed staging is recorded below. */ }
   writeFileSync(resolve(output, 'integration.json'), JSON.stringify({ startedAt, finishedAt: new Date().toISOString(), source, target,
     scope: ['P1.2', 'P1.3', 'P1.4', 'P1.5'], passed: results.length === commands.length && results.every(row => row.exitCode === 0),
-    runtime, results, workerFixture: workerFixture(), serviceTreeSec17: workerFixture(), installedSmoke: 'SEPARATE_STEP', agentReady: false }, null, 2) + '\n', 'utf8');
+    runtime, results, workerFixture: workerFixture(), serviceTreeSec17: workerFixture(), secW01: secW01(), installedSmoke: 'SEPARATE_STEP', agentReady: false }, null, 2) + '\n', 'utf8');
   if (result.error || result.status !== 0) process.exit(result.status ?? 1);
 }

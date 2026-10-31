@@ -21,6 +21,7 @@
     "check:p0-exit": "node scripts/p0-history.ts",
     "verify:p1": "node scripts/p1-check.ts",
     "verify:p2": "node scripts/p2-check.ts",
+    "verify:agent": "node scripts/agent-check.ts",
     "check:p1": "node scripts/run-checks.mjs",
     "check:engineering": "node scripts/run-checks.mjs --engineering-only",
     "check": "node scripts/run-checks.mjs",

@@ -9,7 +9,7 @@
 - P2.1 事件存储（PR #4）已合并：迁移 `004-task-events.sql`（`tasks` 和只追加的 `task_events`）及 Express 内 `persistence/tasks.ts`；数据库版本为 4。
 - P2.2 只读任务视图（PR #5）已合并：任务列表、快照和按游标分页的事件接口，经 Main 固定通道和 Preload 暴露。
 - P2.3 Workbench 任务视图：侧栏列出当前项目的已提交任务；详情页按游标同步并显示事件时间线；中断任务显示“副作用未知”和“不会自动恢复”；控制面重启后从游标重新同步。P2 四个阶段均已实现，P2 总退出（`p2TotalExit`）需要已提交的 CI 证据，暂为 NOT_RUN。
-- M2 第一切片（2026-10-31，独立 PR）：CredentialService + Main safeStorage Crypto Bridge（迁移 `005`，数据库版本 5）、Express Model Gateway（Claude Messages API 连接测试）、模型设置的 5 个固定 IPC 操作，以及参考 Lusion 的设计系统和 Settings › Model 分区。真实 Worker/Agent 执行仍关闭，等待 M1 SEC-W01（PR #7）；Read Adapter（SEC-08）和 Worker Agent Loop 留待 M2 后续切片。详见 `EXECUTION.md` 末节。
+- M2 第一切片（2026-10-31，独立 PR）：CredentialService + Main safeStorage Crypto Bridge（迁移 `005`，数据库版本 5）、Express Model Gateway（Claude Messages API 连接测试）、模型设置的 5 个固定 IPC 操作，以及参考 Lusion 的设计系统和 Settings › Model 分区。M1 已合并，Windows 生产 Worker 已获资格；但 Agent Loop 尚未实现，真实执行仍关闭（`agentReady=false`）。Read Adapter（SEC-08）和 Worker Agent Loop 留待 M2 后续切片。详见 `EXECUTION.md` 末节。
 - 本地开发需把 `.tools/node` 置于 PATH 前部，否则 `pnpm run` 内嵌脚本使用系统 Node 并因 `engines` 失败。
 
 ## 2. 优先级排序
