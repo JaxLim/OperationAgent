@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { WORKBENCH_LIMITS } from '@operation-agent/contracts';
 import type { Project } from '@operation-agent/contracts';
 import { actions, useStore } from '../state';
@@ -9,11 +9,18 @@ import { IconAlert, IconFolder, IconLock, IconPlus, IconSend, IconShield, IconCh
 
 export interface ComposerHandle { focus(): void }
 
+let focusOnMount = false;
+/** Focuses the composer now, or when it next mounts (an open task replaces it). No animation-frame timing. */
+export function requestComposerFocus(handle: ComposerHandle | null): void {
+  if (handle) handle.focus(); else focusOnMount = true;
+}
+
 const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolean }>(function Composer({ project, disabled }, handle) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(handle, () => ({ focus: () => ref.current?.focus() }), []);
+  useEffect(() => { if (focusOnMount) { focusOnMount = false; ref.current?.focus(); } }, []);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;

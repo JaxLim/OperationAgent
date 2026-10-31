@@ -106,6 +106,19 @@ process.on('message', async message => {
         value = host.window.webContents.getURL() === original;
         break;
       }
+      case 'new-task-shortcut':
+        // Ctrl+N from an open task must leave it and focus the request composer.
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true }));
+          const end = Date.now() + 5000;
+          while (Date.now() < end) {
+            const active = document.activeElement;
+            if (!document.querySelector('section[data-task-id]') && active?.getAttribute('aria-label') === 'Task request') return 'composer-focused';
+            await new Promise(done => setTimeout(done, 50));
+          }
+          return document.querySelector('section[data-task-id]') ? 'task-still-open' : 'composer-not-focused';
+        })()`);
+        break;
       case 'capture': {
         // Evidence screenshot of the real hidden window; only into the workspace artifacts directory.
         const target = resolve(root, 'artifacts', message.input);

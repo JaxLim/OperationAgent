@@ -208,6 +208,8 @@ test('the Workbench lists committed tasks, replays their events and resyncs afte
   assert.equal(interrupted.entries, 4); assert.match(interrupted.pill, /Interrupted/); assert.equal(interrupted.interrupted, true);
   assert.match(interrupted.text, /side effects UNKNOWN/);
   await host.command('capture', `p1/${process.platform}-${process.arch}/workbench-task.png`);
+  assert.equal(await host.command('new-task-shortcut'), 'composer-focused');
+  await host.command('task-ui', { taskId: running, click: true, entries: 4 });
 
   const before = await host.command('state');
   process.kill(before.pid, 'SIGKILL');
