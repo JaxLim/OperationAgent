@@ -8,8 +8,11 @@ export interface CryptoBridge {
   decrypt(ciphertext: string): Promise<string>;
 }
 export interface IpcCryptoBridge extends CryptoBridge {
-  /** Feeds a message from the inherited channel; returns false when it is not a reply this bridge is waiting for. */
-  receive(message: unknown): boolean;
+  /**
+   * Feeds a message from the inherited channel. `resolved` settles a waiting request; `expired` is a well-formed reply
+   * for this service tree whose request already timed out (dropped, never fatal); `foreign` is anything else.
+   */
+  receive(message: unknown): 'resolved' | 'expired' | 'foreign';
 }
 
 /** Without a Main (e.g. a store-only test) every request fails closed. */
@@ -39,12 +42,12 @@ export function createIpcCryptoBridge(identity: ServiceTreeIdentity, send: (mess
     decrypt: ciphertext => call({ operation: 'decrypt', ciphertext }),
     receive(message) {
       const parsed = CryptoBridgeResponseSchema.safeParse(message);
-      if (!parsed.success || parsed.data.mainRunId !== identity.mainRunId || parsed.data.expressRunId !== identity.expressRunId) return false;
+      if (!parsed.success || parsed.data.mainRunId !== identity.mainRunId || parsed.data.expressRunId !== identity.expressRunId) return 'foreign';
       const entry = waiting.get(parsed.data.requestId);
-      if (!entry) return false;
+      if (!entry) return 'expired';
       waiting.delete(parsed.data.requestId); clearTimeout(entry.timer);
       if (parsed.data.ok) entry.resolve(parsed.data.value); else entry.reject(new Error(parsed.data.error));
-      return true;
+      return 'resolved';
     },
   };
 }

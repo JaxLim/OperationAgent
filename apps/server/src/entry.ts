@@ -55,8 +55,8 @@ process.on('message', (message: unknown) => {
   if (!bootstrapped) {
     bootstrapped = true;
     void start(message).catch(() => { process.stderr.write('SIDECAR_START_FAILED\n'); stop(false); });
-  } else if (bridge?.receive(message)) {
-    // A Crypto Bridge reply for an outstanding request.
+  } else if (bridge && bridge.receive(message) !== 'foreign') {
+    // A Crypto Bridge reply: it settled a waiting request, or arrived after its timeout and is dropped (not a shutdown).
   } else {
     const parsed = ShutdownSchema.safeParse(message);
     if (!parsed.success || !identity || parsed.data.mainRunId !== identity.mainRunId || parsed.data.expressRunId !== identity.expressRunId) stop(false);

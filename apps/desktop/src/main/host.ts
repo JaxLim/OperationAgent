@@ -132,10 +132,11 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
     if (!parsed.success) throw new Error('VALIDATION_ERROR');
     // SEC-14: refuse before the key leaves Main when no OS-backed encryption exists. Express re-checks via the bridge.
     if (!await secureStorageAvailable(safeStorage)) throw new Error('SECURE_STORAGE_UNAVAILABLE');
-    return modelView(await supervisor.call('PUT', CONTROL_ROUTES.modelCredential, ModelSettingsSchema, parsed.data));
+    return modelView(await supervisor.call('PUT', CONTROL_ROUTES.modelCredential, ModelSettingsSchema, parsed.data, MODEL_LIMITS.credentialRequestMs));
   });
   register(IPC_CHANNELS.clearApiKey, async input => {
-    empty(input); return modelView(await supervisor.call('POST', CONTROL_ROUTES.modelCredentialClear, ModelSettingsSchema, {}));
+    empty(input);
+    return modelView(await supervisor.call('POST', CONTROL_ROUTES.modelCredentialClear, ModelSettingsSchema, {}, MODEL_LIMITS.credentialRequestMs));
   });
   register(IPC_CHANNELS.testModelConnection, async input => {
     empty(input); return supervisor.call('POST', CONTROL_ROUTES.modelTest, ModelTestResultSchema, {}, MODEL_LIMITS.testRequestMs);

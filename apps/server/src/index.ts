@@ -183,18 +183,20 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     } catch (error) { failure(res, error); }
   });
   // M2 model settings (ARCHITECTURE §6.2/§6.3). Replies carry the model choice and credential status, never key material.
+  // Bumped by every committed change to the model or key; a connection test belongs to one revision.
+  let revision = 0;
   const modelSettings = (): ModelSettings => ModelSettingsSchema.parse({ provider: MODEL_PROVIDER, model: store.getModel(), credential: credentials.status() });
   app.get(CONTROL_ROUTES.modelSettings, (_req, res) => { try { res.json(modelSettings()); } catch (error) { failure(res, error); } });
   app.put(CONTROL_ROUTES.modelSettings, (req, res) => {
     const input = ModelChoiceSchema.safeParse(req.body);
     if (!input.success) { validationError(res); return; }
-    try { store.saveModel(input.data.model); res.json(modelSettings()); } catch (error) { failure(res, error); }
+    try { store.saveModel(input.data.model); revision++; res.json(modelSettings()); } catch (error) { failure(res, error); }
   });
   app.put(CONTROL_ROUTES.modelCredential, (req, res) => {
     const input = ApiKeyInputSchema.safeParse(req.body);
     if (!input.success) { validationError(res); return; }
     // Only fixed codes are returned; the key is never part of a reply, log line or error.
-    credentials.set(input.data.apiKey).then(() => { res.json(modelSettings()); }, (error: unknown) => {
+    credentials.set(input.data.apiKey).then(() => { revision++; res.json(modelSettings()); }, (error: unknown) => {
       const code = error instanceof Error ? error.message : '';
       if (code === 'SECURE_STORAGE_UNAVAILABLE' || code === 'SERVICE_UNAVAILABLE') res.status(503).json({ error: code });
       else if (code === 'VALIDATION_ERROR') validationError(res);
@@ -203,18 +205,23 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   });
   app.post(CONTROL_ROUTES.modelCredentialClear, (req, res) => {
     if (!EmptyInputSchema.safeParse(req.body).success) { validationError(res); return; }
-    try { credentials.clear(); res.json(modelSettings()); } catch (error) { failure(res, error); }
+    credentials.clear().then(() => { revision++; res.json(modelSettings()); }, (error: unknown) => { failure(res, error); });
   });
-  // One test at a time: a second request joins the one in flight instead of sending another provider request.
-  let testing: Promise<ModelTestResult> | undefined;
+  // A second test for the same configuration joins the one in flight; any change to the model or key starts a fresh
+  // test, so a result is never reported for a configuration that no longer exists.
+  let testing: { revision: number; result: Promise<ModelTestResult> } | undefined;
   app.post(CONTROL_ROUTES.modelTest, (req, res) => {
     if (!EmptyInputSchema.safeParse(req.body).success) { validationError(res); return; }
-    testing ??= (async () => {
-      const model = store.getModel();
-      const used = await credentials.withKey(apiKey => gateway.testConnection(apiKey, model));
-      return used.ok ? used.value : ModelTestResultSchema.parse({ status: used.reason, model, httpStatus: null, latencyMs: null, checkedAt: new Date().toISOString() });
-    })().finally(() => { testing = undefined; });
-    testing.then(result => { res.json(result); }, (error: unknown) => { failure(res, error); });
+    if (testing?.revision !== revision) {
+      const current = { revision, result: (async () => {
+        const model = store.getModel();
+        const used = await credentials.withKey(apiKey => gateway.testConnection(apiKey, model));
+        return used.ok ? used.value : ModelTestResultSchema.parse({ status: used.reason, model, httpStatus: null, latencyMs: null, checkedAt: new Date().toISOString() });
+      })() };
+      testing = current;
+      void current.result.finally(() => { if (testing === current) testing = undefined; }).catch(() => {});
+    }
+    testing.result.then(result => { res.json(result); }, (error: unknown) => { failure(res, error); });
   });
   // No qualified Worker exists (ADR-WIN-001 D4): validate, then refuse before anything is scheduled or persisted.
   app.post(CONTROL_ROUTES.taskStart, (req, res) => {

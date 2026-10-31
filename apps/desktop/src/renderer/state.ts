@@ -151,6 +151,8 @@ async function poll(): Promise<void> {
 }
 export function startPolling(): void { void poll(); setInterval(() => { void poll(); }, 2_000); }
 
+/** Bumped on every model or key change; a connection test result only lands if nothing changed while it ran. */
+let modelRevision = 0;
 export const actions = {
   selectTask(taskId: string | null): void {
     set({ selectedTaskId: taskId });
@@ -206,6 +208,7 @@ export const actions = {
   async saveModelChoice(model: ClaudeModel): Promise<void> {
     const previous = state.model;
     if (!previous || previous.model === model) return;
+    modelRevision++;
     set({ model: { ...previous, model }, modelTest: { state: 'idle' } });
     try { set({ model: await api().saveModelChoice({ model }) }); }
     catch (error) { set({ model: previous }); notify('danger', `Model was not saved (${errorCode(error)}).`); }
@@ -215,18 +218,28 @@ export const actions = {
    * code on failure so the form can explain it without ever echoing the value.
    */
   async setApiKey(apiKey: string): Promise<string | null> {
-    try { set({ model: await api().setApiKey({ apiKey }), modelTest: { state: 'idle' } }); return null; }
-    catch (error) { return errorCode(error); }
+    modelRevision++; set({ modelTest: { state: 'idle' } });
+    try { set({ model: await api().setApiKey({ apiKey }) }); return null; }
+    catch (error) {
+      // A timeout leaves the outcome unknown: show what Express actually holds instead of assuming nothing was saved.
+      await actions.refreshModel();
+      return errorCode(error);
+    }
   },
   async clearApiKey(): Promise<void> {
+    modelRevision++; set({ modelTest: { state: 'idle' } });
     try { set({ model: await api().clearApiKey(), modelTest: { state: 'idle' } }); notify('ok', 'API key removed from this device.'); }
     catch (error) { notify('danger', `The key was not removed (${errorCode(error)}).`); }
   },
   async testModel(): Promise<void> {
     if (state.modelTest.state === 'running') return;
+    const revision = modelRevision;
     set({ modelTest: { state: 'running' } });
-    try { set({ modelTest: { state: 'done', result: await api().testModelConnection() } }); }
-    catch (error) { set({ modelTest: { state: 'failed', code: errorCode(error) } }); }
+    let next: AppState['modelTest'];
+    try { next = { state: 'done', result: await api().testModelConnection() }; }
+    catch (error) { next = { state: 'failed', code: errorCode(error) }; }
+    // Discard a result for a model or key that changed while the test ran.
+    if (revision === modelRevision) set({ modelTest: next });
   },
   async refreshRuns(): Promise<void> {
     try { set({ runs: (await api().listRuns()).runs, overview: await api().getOverview() }); } catch { /* The status banner reports availability. */ }

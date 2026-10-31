@@ -11,11 +11,13 @@ const MODEL_INFO: Record<ClaudeModel, { name: string; tagline: string }> = {
 };
 export function modelName(model: ClaudeModel): string { return `Claude ${MODEL_INFO[model].name}`; }
 
+// The field is cleared as soon as the key is handed over, so every message asks for it again rather than keeping it.
+const UNCONFIRMED = 'The save was not confirmed. The status above was re-read from the control plane; if the key is not shown as configured, enter it again.';
 const KEY_ERRORS: Record<string, string> = {
-  VALIDATION_ERROR: 'That does not look like an API key. Keys are 20–256 visible characters with no spaces.',
+  VALIDATION_ERROR: 'That does not look like an API key (20–256 visible characters, no spaces). Enter it again.',
   SECURE_STORAGE_UNAVAILABLE: 'Secure OS storage is unavailable, so the key was not saved. Nothing was written.',
-  SERVICE_UNAVAILABLE: 'The control plane could not reach secure storage. Nothing was written; try again.',
-  DATABASE_UNAVAILABLE: 'The local database could not store the encrypted key. Nothing was written.',
+  DATABASE_UNAVAILABLE: 'The local database could not store the encrypted key. Nothing was written; enter it again.',
+  SERVICE_UNAVAILABLE: UNCONFIRMED,
 };
 const TEST_COPY: Record<ModelTestStatus, { tone: 'ok' | 'warn' | 'danger'; title: string; detail: string }> = {
   ok: { tone: 'ok', title: 'Connected', detail: 'Claude accepted the key and the selected model answered.' },
@@ -60,12 +62,14 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
   const showForm = !configured || editing;
   useEffect(() => { if (editing) input.current?.focus(); }, [editing]);
   const save = async (): Promise<void> => {
-    if (!value || busy) return;
-    setBusy(true); setError(null);
-    const code = await actions.setApiKey(value.trim());
+    const submitted = value.trim();
+    if (!submitted || busy) return;
+    // Hand the key over and forget it at once, whatever the outcome: it never lingers in Renderer state or the DOM.
+    setValue(''); setBusy(true); setError(null);
+    const code = await actions.setApiKey(submitted);
     setBusy(false);
-    if (code) { setError(KEY_ERRORS[code] ?? `The key was not saved (${code}).`); return; }
-    setValue(''); setEditing(false);
+    if (code) { setError(KEY_ERRORS[code] ?? UNCONFIRMED); return; }
+    setEditing(false);
   };
   if (storage === 'unavailable' && !configured) {
     return (
@@ -86,7 +90,7 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
             <span className="muted small">Encrypted on this device · never shown again</span>
           </span>
           <button className="btn btn-pill btn-xs" onClick={() => { setEditing(true); setError(null); }} disabled={disabled}>Replace</button>
-          <button className="btn btn-pill btn-xs btn-quiet btn-danger-text" onClick={() => void actions.clearApiKey()} disabled={disabled}>Remove</button>
+          <button className="btn btn-pill btn-xs btn-quiet btn-danger-text" onClick={() => void actions.clearApiKey()} disabled={disabled || busy}>Remove</button>
         </div>
       )}
       {showForm && (
@@ -98,7 +102,8 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
           <button type="submit" className="btn btn-pill btn-accent" disabled={disabled || busy || value.trim().length === 0}>
             {busy ? 'Encrypting…' : 'Save key'}
           </button>
-          {configured && <button type="button" className="btn btn-pill btn-quiet" onClick={() => { setEditing(false); setValue(''); setError(null); }}>Cancel</button>}
+          {configured && <button type="button" className="btn btn-pill btn-quiet" disabled={busy}
+            onClick={() => { setEditing(false); setValue(''); setError(null); }}>Cancel</button>}
         </form>
       )}
       {error && <div className="field-error" role="alert">{error}</div>}

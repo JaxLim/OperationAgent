@@ -17,6 +17,9 @@ export const MODEL_LIMITS = Object.freeze({
   // A connection test waits this long for the provider; Main waits a little longer for Express.
   testTimeoutMs: 15_000, testRequestMs: 20_000,
   cryptoTimeoutMs: 5_000, maxCryptoPending: 4,
+  // Saving or removing a key may wait for one bridge round trip (and a save queued before it); Main waits longer
+  // than that, so a slow but successful save is not reported as failed.
+  credentialRequestMs: 12_000,
 });
 
 /**

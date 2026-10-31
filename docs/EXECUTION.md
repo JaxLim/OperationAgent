@@ -405,7 +405,7 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
   - Settings 重排为带编号的分区导航（01–05），新增 **Model** 分区，包含：供应商卡片（显示是否已配置密钥）、三张模型卡片、API Key 字段（已保存时只显示 `sk-ant-••••末4位`，可替换或移除；安全存储不可用时说明原因并禁止保存）、Test connection 按钮及各结果状态的说明。状态栏显示当前模型和密钥状态，点击可直接打开 Model 设置。
 
 验证（本地 Windows x64，工作树基于 `ee8eeed`，改动未提交）：
-- `pnpm check:engineering` 八项全部退出 0，测试从 97 增加到 **104/104**。新增 `tests/m2/model.test.ts`（7 项），覆盖：
+- `pnpm check:engineering` 八项全部退出 0，测试从 97 增加到 **106/106**。新增 `tests/m2/model.test.ts`（9 项），覆盖：
   - 契约：拒绝的密钥不出现在错误中；端点只能是固定地址或回环；视图不能携带密钥材料。
   - CredentialService：SQLite、WAL 文件的全部字节中都找不到明文。
   - SEC-14：安全存储不可用、桥原样回显明文、桥报错这三种情况都不写入任何数据，错误信息也不透传。
@@ -421,3 +421,12 @@ SQLite 新增 `002-string-length.sql`，使用确定性 `oa_utf16_length` 与 Zo
   - Worker fixture 在本机仍为 `BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST`。
 - 截图：测试从真实窗口截取的浅色和深色截图，复制到 `docs/evidence/m2/win32-x64/settings-model-{light,dark}.png` 供评审。
 - 未验证：安装后烟测（`pnpm package && pnpm test:smoke`，期望值已改为迁移 1–5）由 CI 运行；未对真实 api.anthropic.com 发起请求；macOS/Linux 的 `safeStorage` 行为未测试。本地结果不能代替 CI 证据。
+
+PR #8 评审修正（同日）：
+- 保存时立即清空输入框：不论成功还是失败，密钥都不会留在 Renderer 状态或 DOM 中。
+- 保存和移除密钥时，Main 侧超时改为 12 秒，长于 Crypto Bridge 的 5 秒超时。保存若未得到确认，界面会重新读取实际状态，不再断言“未写入”。
+- Express 收到超时后才到达、但身份合法的加密回复时，直接丢弃，不再误判为关闭消息而停止控制面。
+- CredentialService 的保存与移除按请求顺序串行执行，先发出的保存不会撤销已确认的移除。
+- 连接测试按配置版本区分：Express 只让配置相同的测试共享进行中的请求；Renderer 丢弃在模型或密钥变更前发起的测试结果。
+
+以上修正新增 2 项单元测试；本地 `check:engineering` 与 `test:integration`（17/17、2/2）均再次退出 0。

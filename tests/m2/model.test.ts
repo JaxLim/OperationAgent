@@ -92,7 +92,7 @@ test('CredentialService stores only ciphertext and a hint; the key never reaches
   const used = await credentials.withKey(async key => key === KEY);
   assert.deepEqual(used, { ok: true, value: true });
   await assert.rejects(credentials.set('not a key'), /^Error: VALIDATION_ERROR$/);
-  assert.deepEqual(credentials.clear(), { configured: false });
+  assert.deepEqual(await credentials.clear(), { configured: false });
   assert.equal(store.readCiphertext(), null);
 }));
 
@@ -113,18 +113,44 @@ test('SEC-14: without secure storage, or with a bridge that echoes plaintext, no
   assert.deepEqual(await createCredentialService(store, UNAVAILABLE_BRIDGE).withKey(async () => 'unused'), { ok: false, reason: 'credential_unavailable' });
 }));
 
+test('saves and removals apply in request order, so an acknowledged removal is never undone by an earlier save', () => withStore(async store => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>(done => { release = done; });
+  const slow = fakeBridge();
+  const credentials = createCredentialService(store, { ...slow, encrypt: async plaintext => { await gate; return slow.encrypt(plaintext); } });
+  const saving = credentials.set(KEY);
+  const clearing = credentials.clear();
+  release();
+  assert.equal((await saving).configured, true);
+  assert.deepEqual(await clearing, { configured: false });
+  assert.deepEqual(credentials.status(), { configured: false }, 'the later removal wins');
+  // A failed save does not block the queue.
+  await assert.rejects(createCredentialService(store, UNAVAILABLE_BRIDGE).set(KEY), /SECURE_STORAGE_UNAVAILABLE/);
+  const failing = createCredentialService(store, UNAVAILABLE_BRIDGE);
+  await failing.set(KEY).catch(() => {});
+  assert.deepEqual(await failing.clear(), { configured: false });
+}));
+
+test('a crypto reply that arrives after its timeout is dropped without being mistaken for anything else', async () => {
+  const sent: CryptoBridgeRequest[] = [];
+  const bridge = createIpcCryptoBridge(identity, message => { sent.push(message); return true; });
+  await assert.rejects(bridge.encrypt(KEY), /CRYPTO_FAILED/);
+  const late = { kind: 'crypto-response', ...identity, requestId: sent[0]!.requestId, ok: true, value: 'Y2lwaGVy' };
+  assert.equal(bridge.receive(late), 'expired');
+});
+
 test('the Express end of the Crypto Bridge matches replies by request id and service-tree identity, with bounds', async () => {
   const sent: CryptoBridgeRequest[] = [];
   const bridge = createIpcCryptoBridge(identity, message => { sent.push(message); return true; });
   const pending = bridge.encrypt(KEY);
   assert.equal(sent.length, 1); assert.equal(sent[0]!.operation, 'encrypt'); assert.equal(CryptoBridgeRequestSchema.safeParse(sent[0]).success, true);
   const reply = { kind: 'crypto-response', ...identity, requestId: sent[0]!.requestId, ok: true, value: 'Y2lwaGVy' };
-  assert.equal(bridge.receive({ ...reply, expressRunId: randomUUID() }), false, 'a foreign service tree is ignored');
-  assert.equal(bridge.receive({ ...reply, requestId: randomUUID() }), false, 'an unknown request id is ignored');
-  assert.equal(bridge.receive({ kind: 'shutdown', ...identity }), false);
-  assert.equal(bridge.receive(reply), true);
+  assert.equal(bridge.receive({ ...reply, expressRunId: randomUUID() }), 'foreign', 'a foreign service tree is not a crypto reply');
+  assert.equal(bridge.receive({ ...reply, requestId: randomUUID() }), 'expired', 'an unknown request id settles nothing');
+  assert.equal(bridge.receive({ kind: 'shutdown', ...identity }), 'foreign');
+  assert.equal(bridge.receive(reply), 'resolved');
   assert.equal(await pending, 'Y2lwaGVy');
-  assert.equal(bridge.receive(reply), false, 'a reply is consumed once');
+  assert.equal(bridge.receive(reply), 'expired', 'a reply is consumed once; a late duplicate is only dropped');
   const refused = bridge.decrypt('Y2lwaGVy');
   bridge.receive({ kind: 'crypto-response', ...identity, requestId: sent[1]!.requestId, ok: false, error: 'SECURE_STORAGE_UNAVAILABLE' });
   await assert.rejects(refused, /^Error: SECURE_STORAGE_UNAVAILABLE$/);
