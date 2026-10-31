@@ -21,6 +21,9 @@ const NETWORK: ReadonlyArray<{ probe: string; control: string; accepted: readonl
   { probe: 'net.udp4.loopback', control: 'loopbackUdp4', accepted: ['DENIED', 'SENT'] },
 ];
 
+/** The public resolver the probe queries; must match the test host's targets. */
+export const DNS_TARGET = '1.1.1.1';
+
 type Json = Record<string, unknown>;
 const record = (value: unknown): Json => (value && typeof value === 'object' && !Array.isArray(value) ? value as Json : {});
 
@@ -49,10 +52,18 @@ export function evaluateSecW01(evidence: unknown): string[] {
   const observed = record(root.observed);
   need(observed.siblingAlive === true, 'SIBLING_KILLED');
   need(JSON.stringify(observed.hits) === JSON.stringify({ tcp4: 0, tcp6: 0, udp4: 0 }), `LISTENER_HITS:${JSON.stringify(observed.hits)}`);
+  // A UDP send can "succeed" locally while WFP drops it. Silence then counts only with an audited outbound drop or
+  // block of exactly that datagram from the probe runtime (WFP events 5152/5157, UDP = protocol 17).
+  const wfp = Array.isArray(observed.wfp) ? observed.wfp.map(record) : [];
+  const auditedDrop = (destination: string, port: number): boolean => observed.wfpAudit === true && wfp.some(event =>
+    [5152, 5157].includes(Number(event.id)) && event.direction === 'outbound' && event.destination === destination &&
+    event.port === port && event.protocol === 17);
   for (const { probe, control, accepted } of NETWORK) {
     // Without a successful control the denial cannot be told apart from an unreachable target: inconclusive.
     need(controls[control] === 'REACHABLE', `${probe}:INCONCLUSIVE_CONTROL_${String(controls[control])}`);
-    need(accepted.includes(String(results[probe])), `${probe}:${String(results[probe])}`);
+    const outcome = String(results[probe]);
+    const proven = accepted.includes(outcome) || (probe === 'net.udp4.dns-public' && outcome === 'NO_RESPONSE' && auditedDrop(DNS_TARGET, 53));
+    need(proven, `${probe}:${outcome}`);
   }
   return violations;
 }

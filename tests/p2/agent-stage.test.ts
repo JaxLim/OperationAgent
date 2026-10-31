@@ -60,6 +60,19 @@ test('a PASS verdict without a valid raw report, or from another run, cannot qua
   assert.notEqual(validateAgentStage(qualified(), {}).length, 0);
 });
 
+test('silent UDP egress counts only with an audited WFP drop of exactly that datagram', () => {
+  const silent = (wfp: unknown[], wfpAudit = true) => withReport(value => {
+    results(value)['net.udp4.dns-public'] = 'NO_RESPONSE';
+    Object.assign(value.observed as object, { wfpAudit, wfp });
+  });
+  const drop = { id: 5152, direction: 'outbound', destination: '1.1.1.1', port: 53, protocol: 17 };
+  assert.deepEqual(evaluateSecW01(silent([drop])), []);
+  assert.deepEqual(evaluateSecW01(silent([{ ...drop, id: 5157 }])), []);
+  for (const wfp of [[], [{ ...drop, direction: 'inbound' }], [{ ...drop, port: 443 }], [{ ...drop, protocol: 6 }], [{ ...drop, destination: '8.8.8.8' }],
+    [{ ...drop, id: 5156 }]]) assert.notEqual(evaluateSecW01(silent(wfp)).length, 0, JSON.stringify(wfp));
+  assert.notEqual(evaluateSecW01(silent([drop], false)).length, 0, 'events without an enabled audit are not evidence');
+});
+
 test('unreachable targets and failed host controls are inconclusive, never denials', () => {
   for (const change of [
     (value: Record<string, unknown>) => { results(value)['net.tcp6.public'] = 'UNREACHABLE:ENETUNREACH'; },

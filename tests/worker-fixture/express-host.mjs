@@ -1,7 +1,7 @@
 // Test-only Express host for the restricted fixture: the real Express launcher/supervisor in a separate
 // pinned-Node process, so SEC-17 can kill it like a crashed Express. Never staged into the release sidecar.
 import { randomUUID } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer, connect } from 'node:net';
 import { createSocket } from 'node:dgram';
 import { lookup } from 'node:dns/promises';
@@ -31,7 +31,29 @@ const hostUdpDns = (host, payload) => settle(new Promise(done => {
 }));
 const DNS_QUERY = Buffer.from('abcd01000001000000000000076578616d706c6503636f6d0000010001', 'hex');
 const listen = (server, host) => new Promise((done, fail) => { server.once('error', fail); server.listen(0, host, () => done(server.address().port)); });
+// Windows Filtering Platform audit (disposable runner only). A packet drop (5152) or blocked connection (5157)
+// names the application, direction and destination: affirmative evidence that a datagram never left the machine.
+const system32 = tool => resolve(process.env.SystemRoot ?? 'C:\\Windows', 'System32', tool);
+const WFP_SUBCATEGORIES = ['{0CCE9225-69AE-11D9-BED3-505054503030}', '{0CCE9226-69AE-11D9-BED3-505054503030}'];
+function enableWfpAudit() {
+  if (process.env.GITHUB_ACTIONS !== 'true') return false;
+  return WFP_SUBCATEGORIES.every(id => spawnSync(system32('auditpol.exe'), ['/set', `/subcategory:${id}`, '/success:enable', '/failure:enable'],
+    { windowsHide: true }).status === 0);
+}
+function wfpEvents(since) {
+  const query = `*[System[(EventID=5152 or EventID=5157) and TimeCreated[@SystemTime>='${since}']]]`;
+  const result = spawnSync(system32('wevtutil.exe'), ['qe', 'Security', `/q:${query}`, '/f:xml', '/c:5000'],
+    { encoding: 'utf8', windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
+  const field = (event, name) => new RegExp(`<Data Name='${name}'>([^<]*)</Data>`).exec(event)?.[1] ?? '';
+  return (result.stdout ?? '').split('</Event>').filter(event => event.includes('<EventID>'))
+    .map(event => ({ id: Number(/<EventID>(\d+)<\/EventID>/.exec(event)?.[1]), application: field(event, 'Application').toLowerCase(),
+      direction: field(event, 'Direction') === '%%14593' ? 'outbound' : 'inbound', destination: field(event, 'DestAddress'),
+      port: Number(field(event, 'DestPort')), protocol: Number(field(event, 'Protocol')) }))
+    .filter(event => event.application.includes('probe-runtime'))
+    .map(({ id, direction, destination, port, protocol }) => ({ id, direction, destination, port, protocol }));
+}
 async function prepareProbe() {
+  probe.since = new Date().toISOString(); probe.wfpAudit = enableWfpAudit();
   const secret = randomUUID();
   const canary = (label, directory) => {
     const path = resolve(directory, `oa-canary-${randomUUID()}.txt`); writeFileSync(path, secret); probe.cleanup.push(() => rmSync(path, { force: true }));
@@ -64,10 +86,12 @@ async function prepareProbe() {
   return { controls: { tcp4Public, tcp6Public, udp4Dns, dns, loopbackTcp4, loopbackTcp6, loopbackUdp4 },
     parentAddonExists: existsSync(parentAddon), canaries: readCanaries.map(item => item.label) };
 }
-function observeProbe() {
+async function observeProbe() {
   const siblingAlive = probe.sibling?.exitCode === null && probe.sibling?.signalCode === null;
   const hits = Object.fromEntries(Object.entries(probe.hits).map(([kind, count]) => [kind, count - probe.baseline[kind]]));
-  const observed = { hits, siblingAlive };
+  // The audit log is written asynchronously; give it a moment before reading the probe's WFP events.
+  if (probe.wfpAudit) await new Promise(done => setTimeout(done, 2000));
+  const observed = { hits, siblingAlive, wfpAudit: probe.wfpAudit === true, wfp: probe.wfpAudit ? wfpEvents(probe.since) : [] };
   for (const step of probe.cleanup.splice(0)) { try { step(); } catch { /* Best-effort cleanup of test fixtures. */ } }
   rmSync(resolve(runtimeDirectory, 'targets.json'), { force: true });
   return observed;
