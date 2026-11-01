@@ -496,3 +496,26 @@ PR #8 评审修正（同日）：
 - `pnpm check:engineering` 九项全部退出 0（**113/113**），`verify:agent` 显示 M1 已完成、M2 进行中、Windows SEC-W01 PASS、`agentReady=false`。
 - `pnpm test:integration` 退出 0：真实进程测试 **17/17**（含模型设置经真实桥接的完整流程），原生接口测试 2/2。
 - Worker fixture 和 SEC-W01 在开发机上按规定为 BLOCKED，由 CI 一次性 runner 执行。
+
+## M2 设置扩展：语言、命名主题、供应商、网页搜索、Agent 与 MCP（2026-11-01）
+
+用户要求（原话）：“I want to these ability and Visual Design … 1.Language and theme switch 2.Providers, link to accounts and models. 3.Web search 4.sub agents and mcp.”，并在确认范围时选择“Redesign + real config”、“Also account sign-in + custom”、语言 “English, Japanese and Chinese”、主题 “Mode + named themes”。
+
+本次实现（分支 `m2-settings-expansion`）：
+- **语言**：界面支持 English / 简体中文 / 日本語 / 跟随系统。英文目录为类型源，中文和日文目录必须覆盖每个键，否则构建失败。系统语言由 Main 通过 `DesktopStatus.app.locale` 提供（Renderer 边界禁止使用 `navigator`）。错误码不翻译。
+- **主题**：颜色模式（跟随系统/浅色/深色）＋浅色、深色各自可选的 8 套命名配色（OperationAgent、Nord、Solarized、Rosé Pine、Tokyo Night、One、GitHub、Gruvbox）。主题核心色写入契约 `THEME_CANVAS`，Main 用它绘制窗口标题栏按钮；Renderer 通过 CSSOM 设置核心变量，其余变量在 CSS 中派生（不违反 `style-src 'self'`）。
+- **供应商**：OpenAI、Google Gemini、OpenRouter 使用 API Key 关联，端点固定；支持连接测试、按 key 加载模型列表（只保留通过 `ModelIdSchema` 的 ID，回复大小有上限，禁止重定向）、选择模型、设为新对话的默认供应商。Anthropic 沿用 M2 第一切片的接口。
+- **账号登录与自定义端点**：按 AGENTS.md 要求先提出 [ADR-PROV-001](adr/ADR-PROV-001.md)（**提议中，未批准**），界面显示为锁定状态，契约和 Express 中均不存在对应入口。
+- **网页搜索**：模式（默认/任意供应商/关闭，默认关闭）、默认供应商，以及 Exa / Tavily / Brave / Firecrawl 的加密 key。搜索工具需要 Agent Loop，本版本不会发出任何搜索请求。
+- **Agent 与子 Agent**：4 个内置配置（general、plan、explore、review，名称保留）和最多 16 个自定义配置（名称、描述、主/子 Agent 模式、模型、工具、指令）。只是配置；申请工具不授予任何权限。
+- **MCP**：stdio（命令＋参数）或 HTTP（HTTPS 或指向本机的 HTTP，URL 中不允许凭据，也不能保存环境变量）服务器定义，最多 16 个。本版本不启动、不连接任何 MCP 服务器（MCP Host 属于 P5）。
+- 迁移 `006-providers-agents.sql`，数据库版本 5 → 6；新增 12 个固定 IPC 操作（已加入 `scripts/import-boundaries.mjs` 白名单）。旧版本保存的设置会补齐新字段的默认值，不会丢失。
+- 设置界面改为接近全窗口的分组导航（OperationAgent / 模型 / Agent / 系统），新增供应商卡片网格、可搜索的主题与语言下拉框、Agent 分栏编辑器和 MCP 列表。
+
+授权说明：`build/agent-status.json` 记录的模型供应商仍为 `anthropic-claude`，本次没有修改该文件；新增的 API Key 型供应商以用户本次的明确选择为依据，记录在此处。是否同步更新状态文件由用户决定。
+
+本地验证（Windows x64）：
+- `pnpm typecheck`、`pnpm lint`、`check:boundaries` 通过；单元测试 **119/119**（新增 `tests/m2/settings.test.ts`：旧设置迁移、契约边界、按槽位只存密文、Agent/MCP 上限与回滚、供应商网关请求形态、重定向与格式错误时拒绝）。
+- `pnpm test:integration` 退出 0：真实进程测试 **17/17**（模型设置流程改为经 设置 › 供应商 › Anthropic 完成），原生接口测试 2/2。
+- 在真实 Electron 窗口中截图检查了 英文/浅色、中文/Nord 深色、日文/Solarized 浅色。
+- 未验证：安装包烟测（`pnpm package && pnpm test:smoke`）、CI；未对真实的 OpenAI / Google / OpenRouter 端点发起请求（网关只用本机假服务端测试）。

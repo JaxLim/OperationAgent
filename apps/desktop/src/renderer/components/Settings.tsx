@@ -1,59 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import type { WorkbenchSettings } from '@operation-agent/contracts';
+import { LANGUAGES, THEME_IDS } from '@operation-agent/contracts';
+import type { Language, ThemeId, WorkbenchSettings } from '@operation-agent/contracts';
+import { LANGUAGE_NAMES, resolveLocale } from '../i18n';
+import type { MessageKey } from '../i18n';
+import { useT } from '../locale';
+import type { Translate } from '../locale';
 import { actions, useStore } from '../state';
+import { THEME_NAMES, swatch } from '../themes';
+import type { Variant } from '../themes';
 import { Modal, Row, Segmented, Toggle, useModalClose } from './Modal';
-import { ModelSection } from './ModelSettings';
-import { IconBell, IconChart, IconCheck, IconInfo, IconLaptop, IconLock, IconPalette, IconPuzzle, IconSearch, IconShield, IconSliders, IconSparkle,
-  IconTerminal, IconWrench, IconX } from './Icons';
+import { ProvidersSection, WebSearchSection } from './Providers';
+import { AgentsSection, McpSection } from './Agents';
+import { SearchSelect } from './Select';
+import { IconBell, IconChart, IconCheck, IconCloud, IconGlobe, IconInfo, IconLaptop, IconLock, IconPalette, IconPuzzle, IconRobot, IconSearch, IconShield,
+  IconSliders, IconTerminal, IconWrench, IconX } from './Icons';
 
-export type SectionId = 'general' | 'models' | 'chat' | 'plugins' | 'usage' | 'voice' | 'advanced';
-interface Section { id: SectionId; title: string; lead: string; icon: ReactNode; keywords: string }
-const SECTIONS: readonly Section[] = [
-  { id: 'general', title: 'General & Appearance', lead: 'How this workbench looks on this device.', icon: <IconPalette size={16} />,
-    keywords: 'theme light dark system density compact comfortable panel context motion animation' },
-  { id: 'models', title: 'Models & Credentials', lead: 'The Claude model new chats use, and the key the control plane sends to Anthropic.', icon: <IconSparkle size={16} />,
-    keywords: 'claude opus sonnet haiku api key anthropic credential test connection provider' },
-  { id: 'chat', title: 'Chat & Execution', lead: 'Defaults for how requests run, stop and get approved.', icon: <IconSliders size={16} />,
-    keywords: 'stop grace period approval policy sandbox execution location computer effort reasoning mode drafts' },
-  { id: 'plugins', title: 'Plugins & Skills', lead: 'Tools from MCP servers and reusable skills.', icon: <IconPuzzle size={16} />, keywords: 'mcp server plugin skill extension tool' },
-  { id: 'usage', title: 'Usage', lead: 'Token use, provider quota and local storage — and which numbers are known.', icon: <IconChart size={16} />,
-    keywords: 'tokens quota context limit storage database records billing' },
-  { id: 'voice', title: 'Voice & Notifications', lead: 'Dictation and how the app gets your attention.', icon: <IconBell size={16} />,
-    keywords: 'voice microphone dictation notifications alerts toast sound' },
-  { id: 'advanced', title: 'Advanced & About', lead: 'Security status, diagnostics, versions and shortcuts.', icon: <IconWrench size={16} />,
-    keywords: 'security sandbox worker isolation diagnostics version about keyboard shortcuts electron sqlite' },
+export type SectionId = 'appearance' | 'chat' | 'notifications' | 'usage' | 'providers' | 'search' | 'agents' | 'mcp' | 'advanced';
+interface Section { id: SectionId; icon: ReactNode; wide?: true }
+const GROUPS: readonly { label: MessageKey; sections: readonly Section[] }[] = [
+  { label: 'nav.group.app', sections: [
+    { id: 'appearance', icon: <IconPalette size={16} /> }, { id: 'chat', icon: <IconSliders size={16} /> },
+    { id: 'notifications', icon: <IconBell size={16} /> }, { id: 'usage', icon: <IconChart size={16} /> }] },
+  { label: 'nav.group.models', sections: [{ id: 'providers', icon: <IconCloud size={16} />, wide: true }, { id: 'search', icon: <IconGlobe size={16} />, wide: true }] },
+  { label: 'nav.group.agents', sections: [{ id: 'agents', icon: <IconRobot size={16} />, wide: true }, { id: 'mcp', icon: <IconPuzzle size={16} /> }] },
+  { label: 'nav.group.system', sections: [{ id: 'advanced', icon: <IconWrench size={16} /> }] },
 ];
+const ALL = GROUPS.flatMap(group => group.sections);
+const title = (t: Translate, id: SectionId): string => t(`section.${id}.title`);
+// English keywords stay searchable in every language, so "theme" or "mcp" always finds its page.
+const ENGLISH_KEYWORDS: Readonly<Record<SectionId, string>> = {
+  appearance: 'appearance theme color mode light dark palette density language', chat: 'chat execution stop grace approval', notifications: 'voice notifications',
+  usage: 'usage tokens quota storage', providers: 'providers model api key anthropic openai google gemini openrouter', search: 'web search exa tavily brave firecrawl',
+  agents: 'agents subagent sub-agent', mcp: 'mcp server plugin skill', advanced: 'advanced about security diagnostics shortcuts',
+};
 
 function SaveIndicator() {
+  const t = useT();
   const status = useStore(s => s.saveStatus);
   return (
     <span className={`save-indicator is-${status.state}`} role="status" aria-live="polite">
-      {status.state === 'saving' && 'Saving…'}
-      {status.state === 'saved' && <><IconCheck size={13} /> Saved</>}
-      {status.state === 'failed' && <><IconX size={13} /> Not saved · <span className="mono">{status.code}</span></>}
-      {status.state === 'idle' && 'Changes save automatically'}
+      {status.state === 'saving' && t('save.saving')}
+      {status.state === 'saved' && <><IconCheck size={13} /> {t('save.saved')}</>}
+      {status.state === 'failed' && <><IconX size={13} /> {t('save.failed')} · <span className="mono">{status.code}</span></>}
+      {status.state === 'idle' && t('save.idle')}
     </span>
   );
 }
 
 function Availability({ children }: { children: ReactNode }) {
   return <span className="badge badge-soft"><IconLock size={11} /> {children}</span>;
-}
-
-const THEMES: { value: WorkbenchSettings['theme']; label: string }[] = [{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }];
-function ThemePicker({ value }: { value: WorkbenchSettings['theme'] }) {
-  return (
-    <div className="theme-cards" role="radiogroup" aria-label="Theme">
-      {THEMES.map(theme => (
-        <button key={theme.value} role="radio" aria-checked={value === theme.value} className={`theme-card${value === theme.value ? ' is-active' : ''}`}
-          onClick={() => void actions.saveSettings({ theme: theme.value })}>
-          <span className={`theme-preview theme-preview-${theme.value}`} aria-hidden="true"><span /><span /><span /></span>
-          <span className="theme-card-label">{theme.label}</span>
-        </button>
-      ))}
-    </div>
-  );
 }
 
 function useReducedMotion(): boolean {
@@ -67,143 +63,170 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-function GeneralSection({ settings }: { settings: WorkbenchSettings }) {
+function Swatch({ id, variant }: { id: ThemeId; variant: Variant }) {
+  const colors = swatch(id, variant);
+  return (
+    <span className="theme-swatch" aria-hidden="true" style={{ background: colors.bg, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${colors.text} 18%, transparent)` }}>
+      <span style={{ background: colors.surface }} /><span style={{ background: colors.accent }} />
+    </span>
+  );
+}
+
+function ThemeSelect({ variant, value, disabled }: { variant: Variant; value: ThemeId; disabled: boolean }) {
+  const t = useT();
+  const label = t(variant === 'light' ? 'appearance.lightTheme' : 'appearance.darkTheme');
+  return (
+    <div className="field">
+      <span className="field-label">{label}</span>
+      <SearchSelect label={label} value={value} disabled={disabled} searchPlaceholder={t('appearance.searchThemes')} empty={t('appearance.noThemes')}
+        options={THEME_IDS.map(id => ({ value: id, label: THEME_NAMES[id], icon: <Swatch id={id} variant={variant} />, keywords: id }))}
+        onChange={id => void actions.saveSettings(variant === 'light' ? { lightTheme: id } : { darkTheme: id })} />
+    </div>
+  );
+}
+
+const MODES = ['system', 'light', 'dark'] as const;
+function AppearanceSection({ settings }: { settings: WorkbenchSettings }) {
+  const t = useT();
   const reduced = useReducedMotion();
+  const ready = useStore(s => s.connection === 'ready');
+  const systemLocale = resolveLocale('system', useStore(s => s.desktop?.app.locale));
+  const languageLabel = (language: Language): string => language === 'system' ? t('lang.system', { name: LANGUAGE_NAMES[systemLocale] }) : LANGUAGE_NAMES[language];
   return (
     <>
-      <div className="setting-block">
-        <div className="setting-label">Theme<span className="scope-tag scope-device">This app</span></div>
-        <div className="setting-hint">System follows Windows. Light and dark also restyle the window’s caption buttons.</div>
-        <ThemePicker value={settings.theme} />
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t('appearance.colorMode')}</h3>
+        <div className="mode-theme">
+          <div className="radio-list" role="radiogroup" aria-label={t('appearance.colorMode')}>
+            {MODES.map(mode => (
+              <button key={mode} role="radio" aria-checked={settings.theme === mode} className={`radio-row${settings.theme === mode ? ' is-active' : ''}`}
+                disabled={!ready} onClick={() => void actions.saveSettings({ theme: mode })}>
+                <span className="radio-dot" /><span>{t(`mode.${mode}`)}</span>
+              </button>
+            ))}
+            <p className="setting-hint">{t('appearance.modeHint')}</p>
+          </div>
+          <div className="theme-selects">
+            <ThemeSelect variant="light" value={settings.lightTheme} disabled={!ready} />
+            <ThemeSelect variant="dark" value={settings.darkTheme} disabled={!ready} />
+          </div>
+        </div>
       </div>
-      <Row label="Density" scope="device" hint="Compact tightens rows in the sidebar, panels and settings.">
-        <Segmented value={settings.density} onChange={density => void actions.saveSettings({ density })}
-          options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} />
-      </Row>
-      <Row label="Show side panel" scope="device" hint="Files, changes, approvals, results and system status beside the chat. Toggle any time with Ctrl+\.">
-        <Toggle label="Show side panel" checked={settings.contextPanel} onChange={contextPanel => void actions.saveSettings({ contextPanel })} />
-      </Row>
-      <Row label="Motion" hint="Follows the Windows “Show animations” setting. When it is off, springs and slides are replaced by instant changes.">
-        <span className="value-text">{reduced ? 'Reduced' : 'Full'}</span>
-      </Row>
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t('appearance.layout')}</h3>
+        <Row label={t('appearance.density')} scope="device" hint={t('appearance.densityHint')}>
+          <Segmented value={settings.density} onChange={density => void actions.saveSettings({ density })}
+            options={[{ value: 'comfortable', label: t('density.comfortable') }, { value: 'compact', label: t('density.compact') }]} />
+        </Row>
+        <Row label={t('appearance.panel')} scope="device" hint={t('appearance.panelHint')}>
+          <Toggle label={t('appearance.panel')} checked={settings.contextPanel} onChange={contextPanel => void actions.saveSettings({ contextPanel })} />
+        </Row>
+        <Row label={t('appearance.motion')} hint={t('appearance.motionHint')}>
+          <span className="value-text">{t(reduced ? 'motion.reduced' : 'motion.full')}</span>
+        </Row>
+      </div>
+      <div className="settings-group">
+        <h3 className="settings-group-title">{t('appearance.localization')}</h3>
+        <Row label={t('appearance.language')} scope="device" hint={t('appearance.languageHint')}>
+          <SearchSelect label={t('appearance.language')} value={settings.language} disabled={!ready} searchPlaceholder={t('appearance.searchLanguages')}
+            empty={t('appearance.noThemes')} onChange={language => void actions.saveSettings({ language })}
+            options={LANGUAGES.map(language => ({ value: language, label: languageLabel(language), keywords: language === 'system' ? 'system auto' : language }))} />
+        </Row>
+      </div>
     </>
   );
 }
 
 function ChatSection({ settings }: { settings: WorkbenchSettings }) {
+  const t = useT();
   return (
     <>
-      <div className="settings-note"><IconInfo size={14} /><span>These are global defaults. This build has no per-chat overrides: changing the model from the composer changes the default too.</span></div>
-      <Row label="Execution location" hint="Requests would run on this computer, inside an OS sandbox. Remote and cloud execution are not supported.">
-        <span className="value-text"><IconLaptop size={14} /> This computer</span>
+      <div className="settings-note"><IconInfo size={14} /><span>{t('chat.note')}</span></div>
+      <Row label={t('chat.location')} hint={t('chat.locationHint')}>
+        <span className="value-text"><IconLaptop size={14} /> {t('composer.thisComputer')}</span>
       </Row>
-      <Row label="Stop grace period" scope="global" hint="How long a cancelled tool process gets before forced cleanup. Allowed range 5–30 s; applies once tool execution exists.">
+      <Row label={t('chat.grace')} scope="global" hint={t('chat.graceHint')}>
         <Segmented value={settings.stopGraceMs} onChange={stopGraceMs => void actions.saveSettings({ stopGraceMs })}
           options={[{ value: 5000, label: '5 s' }, { value: 10000, label: '10 s' }, { value: 30000, label: '30 s' }]} />
       </Row>
-      <Row label="Approval policy" hint="Command and write approvals arrive with tool execution. An approval never lifts the sandbox.">
-        <Availability>Not available yet</Availability>
-      </Row>
-      <Row label="Reasoning effort and work mode" hint="Chosen per request by the agent runtime, which this build doesn’t include.">
-        <Availability>Not available yet</Availability>
-      </Row>
-      <Row label="Drafts" hint="Unsent text and goals are kept per project in memory until the window closes. Prompts are never written to disk.">
-        <span className="value-text">In memory</span>
-      </Row>
-      <div className="settings-note"><IconShield size={14} /><span>Raw <span className="mono">sh -c</span>, pipes, redirection, <span className="mono">git push --force</span> and <span className="mono">git reset --hard</span> will never be grantable at task level.</span></div>
-    </>
-  );
-}
-
-function PluginsSection() {
-  return (
-    <>
-      <div className="feature-empty">
-        <span className="feature-empty-icon"><IconPuzzle size={20} /></span>
-        <strong>No plugins or skills in this build</strong>
-        <span className="muted">MCP servers — local or remote — will connect only through the control plane’s MCP Host, never directly from the agent or this window. That host isn’t part of this build, so nothing can be installed or enabled yet.</span>
-      </div>
-      <Row label="MCP servers" hint="Tools exposed by Model Context Protocol servers."><Availability>Not available</Availability></Row>
-      <Row label="Skills" hint="Reusable instructions the agent can load for a task."><Availability>Not available</Availability></Row>
+      <Row label={t('chat.approval')} hint={t('chat.approvalHint')}><Availability>{t('common.notAvailableYet')}</Availability></Row>
+      <Row label={t('chat.effort')} hint={t('chat.effortHint')}><Availability>{t('common.notAvailableYet')}</Availability></Row>
+      <Row label={t('chat.drafts')} hint={t('chat.draftsHint')}><span className="value-text">{t('chat.inMemory')}</span></Row>
+      <div className="settings-note"><IconShield size={14} /><span>{t('chat.shellNote')}</span></div>
     </>
   );
 }
 
 function UsageSection() {
+  const t = useT();
   const overview = useStore(s => s.overview);
   const ready = useStore(s => s.connection === 'ready');
+  const tiles: readonly [MessageKey, string | number][] = [
+    ['usage.projects', ready && overview ? overview.database.projects : '—'], ['usage.runs', ready && overview ? overview.database.runs : '—'],
+    ['usage.records', ready && overview ? overview.database.records : '—'], ['usage.schema', ready && overview ? `v${overview.database.version}` : '—'],
+  ];
   return (
     <>
       <div className="data-legend">
-        <span><span className="data-tag data-reported">Reported</span> measured by the control plane</span>
-        <span><span className="data-tag data-estimated">Estimated</span> approximated in this window</span>
-        <span><span className="data-tag data-unavailable">Unavailable</span> not known — never guessed</span>
+        <span><span className="data-tag data-reported">{t('data.reported')}</span> {t('usage.legendReported')}</span>
+        <span><span className="data-tag data-estimated">{t('data.estimated')}</span> {t('usage.legendEstimated')}</span>
+        <span><span className="data-tag data-unavailable">{t('data.unavailable')}</span> {t('usage.legendUnavailable')}</span>
       </div>
-      <Row label="Token usage" hint="The agent makes no model calls in this build. A connection test sends one tiny request that isn’t metered here.">
-        <span className="data-tag data-unavailable">Unavailable</span>
-      </Row>
-      <Row label="Provider quota" hint="Anthropic doesn’t report plan limits or balance to an API key. Check the Anthropic Console.">
-        <span className="data-tag data-unavailable">Unavailable</span>
-      </Row>
-      <Row label="Request size" hint="The composer meter shows characters against the 8,000-character request limit (reported) and a rough token count (estimated).">
-        <span className="data-tag data-reported">Reported</span>
-      </Row>
-      <h3 className="eyebrow section-eyebrow">Local storage <span className="data-tag data-reported">Reported</span></h3>
+      <Row label={t('usage.tokens')} hint={t('usage.tokensHint')}><span className="data-tag data-unavailable">{t('data.unavailable')}</span></Row>
+      <Row label={t('usage.quota')} hint={t('usage.quotaHint')}><span className="data-tag data-unavailable">{t('data.unavailable')}</span></Row>
+      <Row label={t('usage.size')} hint={t('usage.sizeHint')}><span className="data-tag data-reported">{t('data.reported')}</span></Row>
+      <h3 className="settings-group-title">{t('usage.storage')} <span className="data-tag data-reported">{t('data.reported')}</span></h3>
       <div className="stat-grid">
-        <div className="stat-tile"><span className="stat-tile-value">{ready && overview ? overview.database.projects : '—'}</span><span className="stat-tile-label">Projects</span></div>
-        <div className="stat-tile"><span className="stat-tile-value">{ready && overview ? overview.database.runs : '—'}</span><span className="stat-tile-label">Control-plane runs</span></div>
-        <div className="stat-tile"><span className="stat-tile-value">{ready && overview ? overview.database.records : '—'}</span><span className="stat-tile-label">Self-test records</span></div>
-        <div className="stat-tile"><span className="stat-tile-value">{ready && overview ? `v${overview.database.version}` : '—'}</span><span className="stat-tile-label">Schema</span></div>
+        {tiles.map(([label, value]) => <div key={label} className="stat-tile"><span className="stat-tile-value">{value}</span><span className="stat-tile-label">{t(label)}</span></div>)}
       </div>
     </>
   );
 }
 
-function VoiceSection() {
+function NotificationsSection() {
+  const t = useT();
   return (
     <>
-      <Row label="Voice input" hint="Dictation isn’t part of this build. The window is denied microphone access."><Availability>Not available</Availability></Row>
-      <Row label="In-app notices" hint="Short messages for saves, errors and project changes, shown at the bottom right.">
-        <span className="value-text">Always on</span>
-      </Row>
-      <Row label="System notifications" hint="Windows notifications arrive with long-running tasks, which this build can’t start."><Availability>Not available</Availability></Row>
+      <Row label={t('voice.input')} hint={t('voice.inputHint')}><Availability>{t('common.notAvailable')}</Availability></Row>
+      <Row label={t('voice.notices')} hint={t('voice.noticesHint')}><span className="value-text">{t('voice.alwaysOn')}</span></Row>
+      <Row label={t('voice.system')} hint={t('voice.systemHint')}><Availability>{t('common.notAvailable')}</Availability></Row>
     </>
   );
 }
 
 function AdvancedSection({ onOpenDiagnostics }: { onOpenDiagnostics: () => void }) {
+  const t = useT();
   const desktop = useStore(s => s.desktop);
   const overview = useStore(s => s.overview);
+  const shortcuts: readonly [string, MessageKey][] = [['Ctrl N', 'kbd.newChat'], ['Ctrl K', 'kbd.search'], ['Ctrl O', 'kbd.projects'], ['Ctrl ,', 'kbd.settings'],
+    ['Ctrl B', 'kbd.sidebar'], ['Ctrl \\', 'kbd.panel'], ['Enter', 'kbd.send'], ['Shift Enter', 'kbd.newline']];
   return (
     <>
-      <h3 className="eyebrow section-eyebrow first">Security status</h3>
+      <h3 className="settings-group-title">{t('adv.security')}</h3>
       <ul className="security-list">
-        <li><IconLock size={14} /><span><strong>Agent Worker</strong> — <span className="mono">agentReady = false</span>; task start returns <span className="mono">{overview?.worker.error ?? 'WORKER_ISOLATION_UNAVAILABLE'}</span></span></li>
-        <li><IconLock size={14} /><span><strong>High-risk tools</strong> (bash, write_file) — <span className="mono">{overview?.tools.highRisk ?? 'SANDBOX_UNAVAILABLE'}</span></span></li>
+        <li><IconLock size={14} /><span><strong>{t('adv.worker')}</strong> — <span className="mono">agentReady = false</span>; {t('adv.taskStartReturns')}{' '}
+          <span className="mono">{overview?.worker.error ?? 'WORKER_ISOLATION_UNAVAILABLE'}</span></span></li>
+        <li><IconLock size={14} /><span><strong>{t('adv.highRisk')}</strong> (bash, write_file) — <span className="mono">{overview?.tools.highRisk ?? 'SANDBOX_UNAVAILABLE'}</span></span></li>
         <li><IconLock size={14} /><span><strong>read_file / git read</strong> — <span className="mono">{overview?.tools.read ?? 'READ_ADAPTER_UNAVAILABLE'}</span></span></li>
-        <li><IconInfo size={14} /><span><strong>Worker OS isolation</strong> — {overview?.capabilities.workerIsolation ?? 'unverified'}; the restricted test fixture is never launched by this build</span></li>
+        <li><IconInfo size={14} /><span><strong>{t('adv.isolation')}</strong> — {t('adv.isolationText', { status: overview?.capabilities.workerIsolation ?? 'unverified' })}</span></li>
       </ul>
-      <div className="settings-note"><IconShield size={14} /><span>This window has no Node access and no network (CSP <span className="mono">connect-src 'none'</span>). It calls only fixed, schema-checked operations in the main process, which forwards them to the local control plane with per-request authentication.</span></div>
-      <Row label="Diagnostics" hint="Service state, control-plane run history and a database round-trip self-test.">
-        <button className="btn btn-pill btn-xs" onClick={onOpenDiagnostics}><IconTerminal size={13} /> Open diagnostics</button>
+      <div className="settings-note"><IconShield size={14} /><span>{t('adv.windowNote')}</span></div>
+      <Row label={t('adv.diagnostics')} hint={t('adv.diagnosticsHint')}>
+        <button className="btn btn-pill btn-xs" onClick={onOpenDiagnostics}><IconTerminal size={13} /> {t('adv.openDiagnostics')}</button>
       </Row>
-      <h3 className="eyebrow section-eyebrow">About</h3>
-      <p className="settings-lead"><strong>OperationAgent</strong> {desktop ? desktop.app.version : ''} · M2 build</p>
-      <p className="muted">A desktop workbench for a security-gated coding agent. This build delivers the supervised control plane, local persistence, project management and Claude model settings. Agent execution ships with the agent loop, and on each platform only after that platform’s isolation gates pass.</p>
+      <h3 className="settings-group-title">{t('adv.about')}</h3>
+      <p className="settings-lead"><strong>OperationAgent</strong> {desktop ? desktop.app.version : ''} · {t('adv.build')}</p>
+      <p className="muted">{t('adv.aboutText')}</p>
       <p className="muted small mono">Electron {desktop?.app.electron ?? '—'} · Sidecar Node {overview?.runtime.node ?? '—'} · SQLite {overview?.runtime.sqlite ?? '—'} · {desktop ? `${desktop.app.platform}-${desktop.app.arch}` : ''}</p>
-      <h3 className="eyebrow section-eyebrow">Keyboard shortcuts</h3>
-      <div className="kbd-grid">
-        <span><kbd>Ctrl N</kbd> New chat</span><span><kbd>Ctrl K</kbd> Search</span>
-        <span><kbd>Ctrl O</kbd> Projects</span><span><kbd>Ctrl ,</kbd> Settings</span>
-        <span><kbd>Ctrl B</kbd> Toggle sidebar</span><span><kbd>Ctrl \</kbd> Toggle side panel</span>
-        <span><kbd>Enter</kbd> Send</span><span><kbd>Shift Enter</kbd> New line</span>
-      </div>
+      <h3 className="settings-group-title">{t('adv.shortcuts')}</h3>
+      <div className="kbd-grid">{shortcuts.map(([keys, label]) => <span key={keys}><kbd>{keys}</kbd> {t(label)}</span>)}</div>
     </>
   );
 }
 
-export function SettingsDialog({ onClose, initialSection = 'general', onOpenDiagnostics }: { onClose: () => void; initialSection?: SectionId;
+export function SettingsDialog({ onClose, initialSection = 'appearance', onOpenDiagnostics }: { onClose: () => void; initialSection?: SectionId;
   onOpenDiagnostics: () => void }) {
+  const t = useT();
   const settings = useStore(s => s.settings);
   const [active, setActive] = useState<SectionId>(initialSection);
   const [query, setQuery] = useState('');
@@ -211,7 +234,8 @@ export function SettingsDialog({ onClose, initialSection = 'general', onOpenDiag
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => { actions.resetSaveStatus(); }, []);
   const q = query.trim().toLowerCase();
-  const visible = SECTIONS.filter(section => !q || `${section.title} ${section.keywords} ${section.lead}`.toLowerCase().includes(q));
+  const matches = (id: SectionId): boolean => !q || [title(t, id), t(`section.${id}.lead`), t(`section.${id}.keywords`), ENGLISH_KEYWORDS[id]].join(' ').toLowerCase().includes(q);
+  const visible = ALL.filter(section => matches(section.id));
   const shown = visible.find(section => section.id === active) ?? visible[0];
   useEffect(() => { body.current?.scrollTo({ top: 0 }); }, [shown?.id]);
   const focusNav = (id: SectionId): void => { nav.current?.querySelector<HTMLElement>(`[data-section="${id}"]`)?.focus(); };
@@ -223,27 +247,36 @@ export function SettingsDialog({ onClose, initialSection = 'general', onOpenDiag
     const target = visible[(next + visible.length) % visible.length]!;
     setActive(target.id); focusNav(target.id);
   };
+  const needsSettings = shown && ['appearance', 'chat', 'search'].includes(shown.id);
   return (
-    <Modal title="Settings" onClose={onClose} width="min(1080px, calc(100vw - 48px))" className="modal-settings" hideHeader
+    <Modal title={t('settings.title')} onClose={onClose} width="calc(100vw - 32px)" className="modal-settings" hideHeader
       onEscape={() => { if (!query) return false; setQuery(''); return true; }}>
       <div className="settings">
         <aside className="settings-side">
-          <h2 className="settings-heading">Settings</h2>
           <label className="settings-search">
             <IconSearch size={15} />
-            <input data-autofocus value={query} onChange={event => setQuery(event.target.value)} placeholder="Search settings" aria-label="Search settings"
+            <input data-autofocus value={query} onChange={event => setQuery(event.target.value)} placeholder={t('settings.search')} aria-label={t('settings.search')}
               onKeyDown={event => {
                 if ((event.key === 'ArrowDown' || event.key === 'Enter') && shown) { event.preventDefault(); setActive(shown.id); focusNav(shown.id); }
               }} />
           </label>
-          <nav className="settings-nav" aria-label="Settings sections" ref={nav} onKeyDown={onNavKey}>
-            {visible.map(section => (
-              <button key={section.id} className={section.id === shown?.id ? 'is-active' : ''} aria-current={section.id === shown?.id ? 'page' : undefined}
-                tabIndex={section.id === shown?.id ? 0 : -1} data-section={section.id} onClick={() => setActive(section.id)}>
-                {section.icon}<span>{section.title}</span>
-              </button>
-            ))}
-            {visible.length === 0 && <div className="settings-nav-empty">No settings match “{query.trim()}”.</div>}
+          <nav className="settings-nav" aria-label={t('settings.sections')} ref={nav} onKeyDown={onNavKey}>
+            {GROUPS.map(group => {
+              const items = group.sections.filter(section => matches(section.id));
+              if (!items.length) return null;
+              return (
+                <div key={group.label} className="settings-nav-group">
+                  <div className="settings-nav-label">{t(group.label)}</div>
+                  {items.map(section => (
+                    <button key={section.id} className={section.id === shown?.id ? 'is-active' : ''} aria-current={section.id === shown?.id ? 'page' : undefined}
+                      tabIndex={section.id === shown?.id ? 0 : -1} data-section={section.id} onClick={() => setActive(section.id)}>
+                      {section.icon}<span>{title(t, section.id)}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+            {visible.length === 0 && <div className="settings-nav-empty">{t('settings.noMatch', { query: query.trim() })}</div>}
           </nav>
         </aside>
         <div className="settings-main">
@@ -252,18 +285,20 @@ export function SettingsDialog({ onClose, initialSection = 'general', onOpenDiag
             <CloseButton />
           </div>
           {shown && (
-            <div className="settings-body" ref={body} key={shown.id} data-section={shown.id}>
+            <div className={`settings-body${shown.wide ? ' is-wide' : ''}`} ref={body} key={shown.id} data-section={shown.id}>
               <header className="settings-head">
-                <h3 className="settings-title">{shown.title}</h3>
-                <p className="settings-sub">{shown.lead}</p>
+                <h3 className="settings-title">{title(t, shown.id)}</h3>
+                <p className="settings-sub">{t(`section.${shown.id}.lead`)}</p>
               </header>
-              {!settings && shown.id !== 'models' && <div className="settings-note"><IconInfo size={14} /> Settings load from the control plane once it is connected.</div>}
-              {shown.id === 'general' && settings && <GeneralSection settings={settings} />}
-              {shown.id === 'models' && <ModelSection />}
+              {!settings && needsSettings && <div className="settings-note"><IconInfo size={14} /> {t('settings.waiting')}</div>}
+              {shown.id === 'appearance' && settings && <AppearanceSection settings={settings} />}
               {shown.id === 'chat' && settings && <ChatSection settings={settings} />}
-              {shown.id === 'plugins' && <PluginsSection />}
+              {shown.id === 'notifications' && <NotificationsSection />}
               {shown.id === 'usage' && <UsageSection />}
-              {shown.id === 'voice' && <VoiceSection />}
+              {shown.id === 'providers' && <ProvidersSection />}
+              {shown.id === 'search' && settings && <WebSearchSection settings={settings} />}
+              {shown.id === 'agents' && <AgentsSection />}
+              {shown.id === 'mcp' && <McpSection />}
               {shown.id === 'advanced' && <AdvancedSection onOpenDiagnostics={onOpenDiagnostics} />}
             </div>
           )}
@@ -274,6 +309,7 @@ export function SettingsDialog({ onClose, initialSection = 'general', onOpenDiag
 }
 
 function CloseButton() {
+  const t = useT();
   const close = useModalClose();
-  return <button className="icon-btn" onClick={close} aria-label="Close settings" title="Close (Esc)"><IconX size={17} /></button>;
+  return <button className="icon-btn" onClick={close} aria-label={t('settings.close')} title={t('settings.closeTitle')}><IconX size={17} /></button>;
 }

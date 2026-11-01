@@ -101,7 +101,8 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   const status = (): DesktopStatus => {
     const service = supervisor.snapshot();
     return DesktopStatusSchema.parse({ app: { name: 'OperationAgent', version: app.getVersion(), electron: process.versions.electron,
-      platform: process.platform, arch: process.arch, packaged: app.isPackaged },
+      platform: process.platform, arch: process.arch, packaged: app.isPackaged,
+      locale: (app.getPreferredSystemLanguages()[0] ?? app.getLocale()).replace(/[^A-Za-z0-9-]/g, '').slice(0, 35) },
       service: { state: service.state, restarts: service.restarts, expressRunId: service.expressRunId } });
   };
   register(IPC_CHANNELS.health, async input => { empty(input); return supervisor.getHealth(); });

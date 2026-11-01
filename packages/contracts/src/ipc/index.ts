@@ -37,7 +37,9 @@ export const EmptyInputSchema = z.strictObject({});
 /** Main-local view of the supervised Express service tree; it carries no business state. */
 export const DesktopStatusSchema = z.strictObject({
   app: z.strictObject({ name: z.literal('OperationAgent'), version: z.string().max(32), electron: z.string().max(32),
-    platform: z.string().max(16), arch: z.string().max(16), packaged: z.boolean() }),
+    platform: z.string().max(16), arch: z.string().max(16), packaged: z.boolean(),
+    // The operating system's preferred language (BCP 47), for the "System" interface language. Not a capability.
+    locale: z.string().max(35).regex(/^[A-Za-z0-9-]*$/) }),
   service: z.strictObject({ state: z.enum(['stopped', 'starting', 'ready', 'unavailable', 'stopping', 'budget-exhausted']),
     restarts: z.number().int().nonnegative(), expressRunId: z.uuid().nullable() }),
 });

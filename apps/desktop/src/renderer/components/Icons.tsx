@@ -65,6 +65,10 @@ export const IconMore = make(<><circle cx="6" cy="12" r="1.1" fill="currentColor
 export const IconFolderPlus = make(<><path d="M3.5 6.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" /><path d="M12 11v5" /><path d="M9.5 13.5h5" /></>);
 export const IconGauge = make(<><path d="M4.2 16.5a8.5 8.5 0 1 1 15.6 0" /><path d="m12 13 3.5-4" /><circle cx="12" cy="13.5" r="1.2" /></>);
 
+export const IconCloud = make(<path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.75 4.75 0 0 0 7 18.5z" />);
+export const IconGlobe = make(<><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17" /><path d="M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5S9.7 5.9 12 3.5z" /></>);
+export const IconRobot = make(<><rect x="5" y="8.5" width="14" height="10" rx="3" /><path d="M12 8.5V5" /><circle cx="12" cy="4" r="1" /><circle cx="9.5" cy="13.5" r="1" fill="currentColor" /><circle cx="14.5" cy="13.5" r="1" fill="currentColor" /><path d="M3 12.5v3" /><path d="M21 12.5v3" /></>);
+
 export function Spinner({ size = 14 }: { size?: number }) {
   return (
     <svg className="spinner" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
