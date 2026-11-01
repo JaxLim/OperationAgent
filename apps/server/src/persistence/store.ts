@@ -5,16 +5,19 @@ import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { ControlRunListSchema, DEFAULT_WORKBENCH_SETTINGS, ProjectInputSchema, ProjectListSchema, ProjectSchema, SmokeBatchSchema,
-  SmokeRecordsSchema, WORKBENCH_LIMITS, WorkbenchSettingsSchema } from '@operation-agent/contracts';
+  SmokeRecordsSchema, WORKBENCH_LIMITS, WorkbenchSettingsSchema, readStoredSettings } from '@operation-agent/contracts';
 import type { ControlRun, Project, SmokeBatch, SmokeRecord, WorkbenchSettings } from '@operation-agent/contracts';
 import { createTaskLog } from './tasks.js';
 import type { TaskLog } from './tasks.js';
 import { createModelStore } from './models.js';
 import type { ModelStore } from './models.js';
+import { createConfigStore } from './config.js';
+import type { ConfigStore } from './config.js';
 
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
-const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql'];
-export interface Store extends TaskLog, ModelStore {
+const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql',
+  '006-providers-agents.sql'];
+export interface Store extends TaskLog, ModelStore, ConfigStore {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;
   /** Unfinished tasks moved to INTERRUPTED when this instance opened the database. */
@@ -69,6 +72,7 @@ export function openStore(directory: string, runId: string, migrationDirectory =
     }).immediate();
     const tasks = createTaskLog(db);
     const models = createModelStore(db);
+    const config = createConfigStore(db);
     const { recoveredRuns, recoveredTasks } = db.transaction(() => {
       const interrupted = db.prepare("UPDATE control_plane_runs SET outcome = 'INTERRUPTED', ended_at = ? WHERE outcome = 'RUNNING'").run(new Date().toISOString()).changes;
       db.prepare("INSERT INTO control_plane_runs(id, started_at, outcome) VALUES (?, ?, 'RUNNING')").run(runId, new Date().toISOString());
@@ -83,14 +87,14 @@ export function openStore(directory: string, runId: string, migrationDirectory =
     const settings = (): WorkbenchSettings => {
       const row = readSettings.get();
       if (!row) return { ...DEFAULT_WORKBENCH_SETTINGS };
-      // Unknown or older shapes fall back to defaults instead of trusting stored JSON.
-      const parsed = WorkbenchSettingsSchema.safeParse(JSON.parse(row.value));
-      return parsed.success ? parsed.data : { ...DEFAULT_WORKBENCH_SETTINGS };
+      // Older shapes gain the newer fields' defaults; unknown or invalid values fall back instead of being trusted.
+      try { return readStoredSettings(JSON.parse(row.value)); } catch { return { ...DEFAULT_WORKBENCH_SETTINGS }; }
     };
     const sqliteVersion = (db.prepare('SELECT sqlite_version() AS version').get() as { version: string }).version;
     return {
       ...tasks,
       ...models,
+      ...config,
       databaseVersion: migrationNames.length,
       recoveredRuns,
       recoveredTasks,

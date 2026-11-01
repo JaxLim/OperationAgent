@@ -6,15 +6,18 @@ import type { ClaudeModel, CredentialStatus } from '@operation-agent/contracts';
 // plaintext; CredentialService encrypts through the Main Crypto Bridge before anything is written.
 
 export const CREDENTIAL_SCHEME = 'electron-safestorage-v1';
-export interface ModelStore {
-  getModel(): ClaudeModel;
-  saveModel(model: ClaudeModel): ClaudeModel;
+/** One stored credential: ciphertext and a hint only. */
+export interface CredentialStore {
   credentialStatus(): CredentialStatus;
   /** Replaces the stored ciphertext for the provider in one transaction. */
   saveCredential(ciphertext: string, hint: string | null): CredentialStatus;
   /** Ciphertext only, for a decrypt request through the bridge; null when nothing is stored. */
   readCiphertext(): string | null;
   clearCredential(): CredentialStatus;
+}
+export interface ModelStore extends CredentialStore {
+  getModel(): ClaudeModel;
+  saveModel(model: ClaudeModel): ClaudeModel;
 }
 
 export function createModelStore(db: Database.Database): ModelStore {

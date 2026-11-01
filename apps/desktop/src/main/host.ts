@@ -2,12 +2,15 @@ import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, safeStorage } f
 import type { IpcMainInvokeEvent } from 'electron';
 import { basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ApiKeyInputSchema, CONTROL_ROUTES, ControlErrorSchema, MODEL_LIMITS, ModelChoiceSchema, ModelEndpointSchema, ModelSettingsSchema,
+import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, CONTROL_ROUTES, ControlErrorSchema, LinkedProviderRefSchema, MODEL_LIMITS,
+  McpServerListSchema, McpServerRefSchema, McpServerSaveSchema, ModelChoiceSchema, ModelEndpointSchema, ModelSettingsSchema,
   ModelSettingsViewSchema, ModelTestResultSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, EmptyInputSchema,
-  IPC_CHANNELS, ProjectAddResultSchema, ProjectInputSchema, ProjectListSchema, ProjectRefSchema, ProjectSchema, SmokeBatchSchema,
-  TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
-  WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
-import type { DesktopStatus, ModelSettings, ModelSettingsView, ProjectAddResult, TaskStartResult, WorkbenchSettings } from '@operation-agent/contracts';
+  IPC_CHANNELS, ProjectAddResultSchema, ProjectInputSchema, ProjectListSchema, ProjectRefSchema, ProjectSchema, ProviderKeyInputSchema,
+  ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema, ProviderOverviewViewSchema, ProviderRefSchema, ProviderTestResultSchema,
+  SmokeBatchSchema, THEME_CANVAS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema,
+  TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
+import type { DesktopStatus, ModelSettings, ModelSettingsView, ProjectAddResult, ProviderOverview, ProviderOverviewView, TaskStartResult, ThemeId,
+  WorkbenchSettings } from '@operation-agent/contracts';
 import { SidecarSupervisor } from './sidecar.js';
 import { createCryptoBridge, secureStorageAvailable } from './crypto-bridge.js';
 
@@ -25,21 +28,32 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   const renderer = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
   const expectedUrl = pathToFileURL(renderer).href;
   Menu.setApplicationMenu(null);
-  // The Renderer draws its own 44 px headers; Windows keeps native caption buttons as an overlay on the canvas colour.
-  const chrome = (): { color: string; symbolColor: string; height: number } => nativeTheme.shouldUseDarkColors
-    ? { color: '#1c1c1e', symbolColor: '#ececef', height: 43 } : { color: '#fcfcfb', symbolColor: '#1b1b1f', height: 43 };
+  // The Renderer draws its own 44 px headers; Windows keeps native caption buttons as an overlay on the canvas colour
+  // of the saved palette (THEME_CANVAS), so named themes and the caption buttons always match.
+  let palettes: { light: ThemeId; dark: ThemeId } = { light: 'operation', dark: 'operation' };
+  const canvas = (): { bg: string; text: string } => nativeTheme.shouldUseDarkColors ? THEME_CANVAS[palettes.dark].dark : THEME_CANVAS[palettes.light].light;
+  const chrome = (): { color: string; symbolColor: string; height: number } => ({ color: canvas().bg, symbolColor: canvas().text, height: 43 });
   const window = new BrowserWindow({ show: false, width: 1360, height: 860, minWidth: 960, minHeight: 600, title: 'OperationAgent',
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#fcfcfb', autoHideMenuBar: true,
+    backgroundColor: canvas().bg, autoHideMenuBar: true,
     ...(process.platform === 'win32' ? { titleBarStyle: 'hidden' as const, titleBarOverlay: chrome() } : {}), webPreferences: {
       contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, webviewTag: false, spellcheck: false,
       preload: fileURLToPath(new URL('../preload/index.cjs', import.meta.url)),
     } });
   if (options.show ?? true) window.once('ready-to-show', () => { if (!window.isDestroyed()) window.show(); });
-  const repaintChrome = (): void => { if (process.platform === 'win32' && !window.isDestroyed()) window.setTitleBarOverlay(chrome()); };
+  const repaintChrome = (): void => {
+    if (window.isDestroyed()) return;
+    window.setBackgroundColor(canvas().bg);
+    if (process.platform === 'win32') window.setTitleBarOverlay(chrome());
+  };
   nativeTheme.on('updated', repaintChrome);
   window.once('closed', () => nativeTheme.removeListener('updated', repaintChrome));
   // The saved theme (owned by Express) also drives native chrome and dialogs.
-  const applyTheme = (theme: WorkbenchSettings['theme']): void => { nativeTheme.themeSource = theme; };
+  const applyTheme = (settings: WorkbenchSettings): void => {
+    palettes = { light: settings.lightTheme, dark: settings.darkTheme };
+    nativeTheme.themeSource = settings.theme;
+    // A palette change alone does not fire nativeTheme 'updated'.
+    repaintChrome();
+  };
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('will-attach-webview', event => event.preventDefault());
@@ -97,11 +111,11 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   register(IPC_CHANNELS.retryControlPlane, async input => { empty(input); await supervisor.restart().catch(() => {}); return status(); });
   register(IPC_CHANNELS.overview, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.overview, ControlOverviewSchema); });
   register(IPC_CHANNELS.getSettings, async input => {
-    empty(input); const settings = await supervisor.call('GET', CONTROL_ROUTES.settings, WorkbenchSettingsSchema); applyTheme(settings.theme); return settings;
+    empty(input); const settings = await supervisor.call('GET', CONTROL_ROUTES.settings, WorkbenchSettingsSchema); applyTheme(settings); return settings;
   });
   register(IPC_CHANNELS.saveSettings, async input => {
     const settings = await supervisor.call('PUT', CONTROL_ROUTES.settings, WorkbenchSettingsSchema, WorkbenchSettingsSchema.parse(input));
-    applyTheme(settings.theme); return settings;
+    applyTheme(settings); return settings;
   });
   register(IPC_CHANNELS.listProjects, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.projects, ProjectListSchema); });
   register(IPC_CHANNELS.addProject, async (input): Promise<ProjectAddResult> => {
@@ -144,6 +158,30 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   register(IPC_CHANNELS.testModelConnection, async input => {
     empty(input); return supervisor.call('POST', CONTROL_ROUTES.modelTest, ModelTestResultSchema, {}, MODEL_LIMITS.testRequestMs);
   });
+  const providersView = async (overview: ProviderOverview): Promise<ProviderOverviewView> =>
+    ProviderOverviewViewSchema.parse({ ...overview, secureStorage: await secureStorageAvailable(safeStorage) ? 'available' : 'unavailable' });
+  register(IPC_CHANNELS.getProviders, async input => { empty(input); return providersView(await supervisor.call('GET', CONTROL_ROUTES.providers, ProviderOverviewSchema)); });
+  registerSecret(IPC_CHANNELS.setProviderKey, async input => {
+    const parsed = ProviderKeyInputSchema.safeParse(input);
+    if (!parsed.success) throw new Error('VALIDATION_ERROR');
+    if (!await secureStorageAvailable(safeStorage)) throw new Error('SECURE_STORAGE_UNAVAILABLE');
+    return providersView(await supervisor.call('PUT', CONTROL_ROUTES.providerCredential, ProviderOverviewSchema, parsed.data, MODEL_LIMITS.credentialRequestMs));
+  });
+  register(IPC_CHANNELS.clearProviderKey, async input => providersView(await supervisor.call('POST', CONTROL_ROUTES.providerCredentialClear, ProviderOverviewSchema,
+    ProviderRefSchema.parse(input), MODEL_LIMITS.credentialRequestMs)));
+  register(IPC_CHANNELS.testProvider, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.providerTest, ProviderTestResultSchema, LinkedProviderRefSchema.parse(input), MODEL_LIMITS.testRequestMs));
+  register(IPC_CHANNELS.listProviderModels, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.providerModels, ProviderModelListSchema, LinkedProviderRefSchema.parse(input), MODEL_LIMITS.testRequestMs));
+  register(IPC_CHANNELS.saveProviderModel, async input =>
+    providersView(await supervisor.call('PUT', CONTROL_ROUTES.providerModel, ProviderOverviewSchema, ProviderModelChoiceSchema.parse(input))));
+  register(IPC_CHANNELS.listAgents, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.agents, AgentListSchema); });
+  register(IPC_CHANNELS.saveAgent, async input => supervisor.call('PUT', CONTROL_ROUTES.agents, AgentListSchema, AgentSaveSchema.parse(input)));
+  register(IPC_CHANNELS.removeAgent, async input => supervisor.call('POST', CONTROL_ROUTES.agentRemove, AgentListSchema, AgentRefSchema.parse(input)));
+  register(IPC_CHANNELS.listMcpServers, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.mcpServers, McpServerListSchema); });
+  register(IPC_CHANNELS.saveMcpServer, async input => supervisor.call('PUT', CONTROL_ROUTES.mcpServers, McpServerListSchema, McpServerSaveSchema.parse(input)));
+  register(IPC_CHANNELS.removeMcpServer, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.mcpServerRemove, McpServerListSchema, McpServerRefSchema.parse(input)));
   const stop = (): Promise<void> => {
     stopPromise ??= (async () => {
       stopping = true;

@@ -2,7 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { ApiKeyInputSchema, ControlHealthSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, FoundationInfoSchema, IPC_CHANNELS,
   PROTOCOL_VERSION, ProjectAddResultSchema, ProjectListSchema, ProjectRefSchema, SmokeBatchSchema, SmokeRecordsSchema,
   TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
-  WorkbenchSettingsSchema, ModelChoiceSchema, ModelSettingsViewSchema, ModelTestResultSchema } from '@operation-agent/contracts';
+  WorkbenchSettingsSchema, ModelChoiceSchema, ModelSettingsViewSchema, ModelTestResultSchema, ProviderKeyInputSchema, ProviderOverviewViewSchema,
+  ProviderRefSchema, LinkedProviderRefSchema, ProviderTestResultSchema, ProviderModelListSchema, ProviderModelChoiceSchema, AgentListSchema, AgentSaveSchema,
+  AgentRefSchema, McpServerListSchema, McpServerSaveSchema, McpServerRefSchema } from '@operation-agent/contracts';
 import type { DesktopApi } from '@operation-agent/contracts';
 
 const info = FoundationInfoSchema.parse({ protocolVersion: PROTOCOL_VERSION, component: 'preload',
@@ -36,5 +38,22 @@ const api: DesktopApi = {
   },
   clearApiKey: async () => ModelSettingsViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.clearApiKey, {})),
   testModelConnection: async () => ModelTestResultSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.testModelConnection, {})),
+  getProviders: async () => ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.getProviders, {})),
+  setProviderKey: async input => {
+    const parsed = ProviderKeyInputSchema.safeParse(input);
+    if (!parsed.success) throw new Error('VALIDATION_ERROR');
+    return ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.setProviderKey, parsed.data));
+  },
+  clearProviderKey: async input => ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.clearProviderKey, ProviderRefSchema.parse(input))),
+  testProvider: async input => ProviderTestResultSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.testProvider, LinkedProviderRefSchema.parse(input))),
+  listProviderModels: async input => ProviderModelListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listProviderModels, LinkedProviderRefSchema.parse(input))),
+  saveProviderModel: async input =>
+    ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.saveProviderModel, ProviderModelChoiceSchema.parse(input))),
+  listAgents: async () => AgentListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listAgents, {})),
+  saveAgent: async input => AgentListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.saveAgent, AgentSaveSchema.parse(input))),
+  removeAgent: async input => AgentListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.removeAgent, AgentRefSchema.parse(input))),
+  listMcpServers: async () => McpServerListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listMcpServers, {})),
+  saveMcpServer: async input => McpServerListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.saveMcpServer, McpServerSaveSchema.parse(input))),
+  removeMcpServer: async input => McpServerListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.removeMcpServer, McpServerRefSchema.parse(input))),
 };
 contextBridge.exposeInMainWorld('operationAgent', Object.freeze(api));

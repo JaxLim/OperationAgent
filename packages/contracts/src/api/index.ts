@@ -12,7 +12,11 @@ export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '
   tasks: '/v1/tasks', taskSnapshot: '/v1/tasks/snapshot', taskEvents: '/v1/tasks/events',
   // M2 model settings: fixed operations only; there is no generic provider proxy.
   modelSettings: '/v1/model/settings', modelCredential: '/v1/model/credential', modelCredentialClear: '/v1/model/credential/clear',
-  modelTest: '/v1/model/test' });
+  modelTest: '/v1/model/test',
+  // Settings expansion: linked providers, web-search keys, agent profiles and MCP server definitions (configuration only).
+  providers: '/v1/providers', providerCredential: '/v1/providers/credential', providerCredentialClear: '/v1/providers/credential/clear',
+  providerTest: '/v1/providers/test', providerModels: '/v1/providers/models', providerModel: '/v1/providers/model',
+  agents: '/v1/agents', agentRemove: '/v1/agents/remove', mcpServers: '/v1/mcp/servers', mcpServerRemove: '/v1/mcp/servers/remove' });
 export const ControlErrorSchema = z.enum(['VALIDATION_ERROR', 'AUTHENTICATION_FAILED', 'IDENTITY_MISMATCH',
   'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'RECORD_CONFLICT', 'RATE_LIMITED', 'WORKER_ISOLATION_UNAVAILABLE', 'NOT_FOUND', 'LIMIT_EXCEEDED',
   // The client's cursor is past the committed log (e.g. another database); it must refetch the snapshot.
@@ -30,7 +34,7 @@ export type SmokeRecord = z.infer<typeof SmokeRecordSchema>;
 export type SmokeRecords = z.infer<typeof SmokeRecordsSchema>;
 export const ControlHealthSchema = z.strictObject({ protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.literal(false),
-  databaseVersion: z.literal(5), recoveredRuns: z.number().int().nonnegative() });
+  databaseVersion: z.literal(6), recoveredRuns: z.number().int().nonnegative() });
 export type ControlHealth = z.infer<typeof ControlHealthSchema>;
 export const BootstrapSchema = z.strictObject({ kind: z.literal('bootstrap'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, token: z.string().regex(/^[a-f0-9]{64}$/),

@@ -20,7 +20,11 @@ const ipcOperations = ['health', 'listRecords', 'writeRecords', 'desktopStatus',
   // P2.2 read-only task views: committed snapshots and cursor pages; none creates, starts or changes a task.
   'listTasks', 'getTask', 'listTaskEvents',
   // M2 model settings: the model choice and a write-only API key; replies never carry key material.
-  'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection'];
+  'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
+  // Settings expansion: linked providers and web-search keys (fixed endpoints, write-only keys), plus agent profiles and
+  // MCP server definitions, which are stored configuration only: none runs an agent, launches a process or connects.
+  'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel',
+  'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'];
 
 export function zoneFor(filename, cwd) {
   const name = relative(cwd, filename).replaceAll('\\', '/');

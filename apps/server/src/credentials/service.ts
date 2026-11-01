@@ -1,6 +1,6 @@
 import { ApiKeySchema, credentialHint } from '@operation-agent/contracts';
 import type { CredentialStatus } from '@operation-agent/contracts';
-import type { ModelStore } from '../persistence/models.js';
+import type { CredentialStore } from '../persistence/models.js';
 import type { CryptoBridge } from './bridge.js';
 
 // ARCHITECTURE §6.3 CredentialService: decides creation, replacement, deletion and use of the provider key. Plaintext
@@ -18,7 +18,7 @@ export interface CredentialService {
   withKey<T>(use: (apiKey: string) => Promise<T>): Promise<KeyUse<T>>;
 }
 
-export function createCredentialService(store: ModelStore, bridge: CryptoBridge): CredentialService {
+export function createCredentialService(store: CredentialStore, bridge: CryptoBridge): CredentialService {
   // Saves and removals apply strictly in request order: each waits for the previous mutation to settle.
   let queue: Promise<unknown> = Promise.resolve();
   const exclusive = <T>(mutate: () => Promise<T>): Promise<T> => {

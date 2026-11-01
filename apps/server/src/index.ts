@@ -1,25 +1,34 @@
 import express from 'express';
 import type { Express, ErrorRequestHandler, Response } from 'express';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { ApiKeyInputSchema, AuthHeadersSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlHealthSchema, ControlOverviewSchema, EmptyInputSchema,
-  MODEL_PROVIDER, ModelChoiceSchema, ModelSettingsSchema, ModelTestResultSchema, PROTOCOL_VERSION,
+import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, AuthHeadersSchema, CONTROL_POLICY, CONTROL_ROUTES, CREDENTIAL_SLOTS,
+  ControlHealthSchema, ControlOverviewSchema, EmptyInputSchema, LINKED_PROVIDERS, LinkedProviderRefSchema, McpServerListSchema, McpServerRefSchema,
+  McpServerSaveSchema, MODEL_PROVIDER, ModelChoiceSchema, ProviderKeyInputSchema, ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema,
+  ProviderRefSchema, ProviderTestResultSchema, SEARCH_PROVIDERS, ModelSettingsSchema, ModelTestResultSchema, PROTOCOL_VERSION,
   ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
   TaskStartInputSchema, WorkbenchSettingsSchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
-import type { Bootstrap, AuthHeaders, ControlError, ModelSettings, ModelTestResult } from '@operation-agent/contracts';
+import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
 import { UNAVAILABLE_BRIDGE } from './credentials/bridge.js';
 import type { CryptoBridge } from './credentials/bridge.js';
 import { createCredentialService } from './credentials/service.js';
+import type { CredentialService } from './credentials/service.js';
 import { createModelGateway } from './models/gateway.js';
 import type { ModelGateway } from './models/gateway.js';
+import { createProviderGateway } from './models/providers.js';
+import type { ProviderGateway } from './models/providers.js';
 
-export interface ModelServices { bridge?: CryptoBridge; gateway?: ModelGateway }
+export interface ModelServices { bridge?: CryptoBridge; gateway?: ModelGateway; providerGateway?: ProviderGateway }
 
 export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: () => number, contact: () => void, services: ModelServices = {}): Express {
   const app = express();
   // Without a Main Crypto Bridge every key operation fails closed (SEC-14).
   const credentials = createCredentialService(store, services.bridge ?? UNAVAILABLE_BRIDGE);
   const gateway = services.gateway ?? createModelGateway({ endpoint: bootstrap.modelEndpoint });
+  // Linked providers always use their fixed official endpoints in production; only tests inject a fake gateway.
+  const providerGateway = services.providerGateway ?? createProviderGateway();
+  const slots = Object.fromEntries(CREDENTIAL_SLOTS.map(slot => [slot, createCredentialService(store.credentialStore(slot), services.bridge ?? UNAVAILABLE_BRIDGE)])) as
+    Record<CredentialSlot, CredentialService>;
   const startedAt = new Date();
   app.disable('x-powered-by');
   app.disable('etag'); app.set('trust proxy', false);
@@ -112,11 +121,17 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   const failure = (res: Response, error: unknown): void => {
     const message = error instanceof Error ? error.message : '';
     const constraint = error instanceof Error && 'code' in error && String(error.code).startsWith('SQLITE_CONSTRAINT');
-    const code: ControlError = constraint ? 'RECORD_CONFLICT' : message === 'LIMIT_EXCEEDED' ? 'LIMIT_EXCEEDED' :
+    const code: ControlError = constraint || message === 'RECORD_CONFLICT' ? 'RECORD_CONFLICT' : message === 'LIMIT_EXCEEDED' ? 'LIMIT_EXCEEDED' :
       message === 'NOT_FOUND' ? 'NOT_FOUND' : 'DATABASE_UNAVAILABLE';
     res.status({ RECORD_CONFLICT: 409, LIMIT_EXCEEDED: 409, NOT_FOUND: 404 }[code as string] ?? 503).json({ error: code });
   };
   const validationError = (res: Response): void => { res.status(400).json({ error: 'VALIDATION_ERROR' }); };
+  const keyFailure = (res: Response, error: unknown): void => {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'SECURE_STORAGE_UNAVAILABLE' || code === 'SERVICE_UNAVAILABLE') res.status(503).json({ error: code });
+    else if (code === 'VALIDATION_ERROR') validationError(res);
+    else res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
+  };
   app.get(CONTROL_ROUTES.overview, (_req, res) => {
     try {
       const counts = store.counts();
@@ -196,12 +211,7 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     const input = ApiKeyInputSchema.safeParse(req.body);
     if (!input.success) { validationError(res); return; }
     // Only fixed codes are returned; the key is never part of a reply, log line or error.
-    credentials.set(input.data.apiKey).then(() => { revision++; res.json(modelSettings()); }, (error: unknown) => {
-      const code = error instanceof Error ? error.message : '';
-      if (code === 'SECURE_STORAGE_UNAVAILABLE' || code === 'SERVICE_UNAVAILABLE') res.status(503).json({ error: code });
-      else if (code === 'VALIDATION_ERROR') validationError(res);
-      else res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
-    });
+    credentials.set(input.data.apiKey).then(() => { revision++; res.json(modelSettings()); }, (error: unknown) => { keyFailure(res, error); });
   });
   app.post(CONTROL_ROUTES.modelCredentialClear, (req, res) => {
     if (!EmptyInputSchema.safeParse(req.body).success) { validationError(res); return; }
@@ -222,6 +232,77 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
       void current.result.finally(() => { if (testing === current) testing = undefined; }).catch(() => {});
     }
     testing.result.then(result => { res.json(result); }, (error: unknown) => { failure(res, error); });
+  });
+  // Linked providers and web-search keys: the same key rules as Anthropic, one credential service (and queue) per slot.
+  const providerOverview = (): ProviderOverview => ProviderOverviewSchema.parse({
+    providers: LINKED_PROVIDERS.map(provider => ({ provider, model: store.getProviderModel(provider), credential: slots[provider].status() })),
+    search: SEARCH_PROVIDERS.map(provider => ({ provider, credential: slots[provider].status() })),
+  });
+  app.get(CONTROL_ROUTES.providers, (_req, res) => { try { res.json(providerOverview()); } catch (error) { failure(res, error); } });
+  app.put(CONTROL_ROUTES.providerCredential, (req, res) => {
+    const input = ProviderKeyInputSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    slots[input.data.provider].set(input.data.apiKey).then(() => { res.json(providerOverview()); }, (error: unknown) => { keyFailure(res, error); });
+  });
+  app.post(CONTROL_ROUTES.providerCredentialClear, (req, res) => {
+    const input = ProviderRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    slots[input.data.provider].clear().then(() => { res.json(providerOverview()); }, (error: unknown) => { failure(res, error); });
+  });
+  app.put(CONTROL_ROUTES.providerModel, (req, res) => {
+    const input = ProviderModelChoiceSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try { store.saveProviderModel(input.data.provider, input.data.model); res.json(providerOverview()); } catch (error) { failure(res, error); }
+  });
+  app.post(CONTROL_ROUTES.providerTest, (req, res) => {
+    const input = LinkedProviderRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    const { provider } = input.data;
+    const model = store.getProviderModel(provider);
+    slots[provider].withKey(apiKey => providerGateway.test(provider, apiKey, model)).then(used => {
+      res.json(used.ok ? used.value : ProviderTestResultSchema.parse({ provider, status: used.reason, model, httpStatus: null, latencyMs: null,
+        checkedAt: new Date().toISOString() }));
+    }, (error: unknown) => { failure(res, error); });
+  });
+  app.post(CONTROL_ROUTES.providerModels, (req, res) => {
+    const input = LinkedProviderRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    const { provider } = input.data;
+    slots[provider].withKey(apiKey => providerGateway.listModels(provider, apiKey)).then(used => {
+      res.json(used.ok ? used.value : ProviderModelListSchema.parse({ provider, status: used.reason, models: [], fetchedAt: new Date().toISOString() }));
+    }, (error: unknown) => { failure(res, error); });
+  });
+  // Agent profiles and MCP server definitions: stored configuration only. Nothing here runs an agent, launches a
+  // process or opens a connection; the agent loop and the MCP Host (P5) are not part of this build.
+  app.get(CONTROL_ROUTES.agents, (_req, res) => { try { res.json(AgentListSchema.parse({ agents: store.listAgents() })); } catch (error) { failure(res, error); } });
+  app.put(CONTROL_ROUTES.agents, (req, res) => {
+    const input = AgentSaveSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try { res.json(AgentListSchema.parse({ agents: store.saveAgent(input.data) })); } catch (error) { failure(res, error); }
+  });
+  app.post(CONTROL_ROUTES.agentRemove, (req, res) => {
+    const input = AgentRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try {
+      if (!store.removeAgent(input.data.id)) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
+      res.json(AgentListSchema.parse({ agents: store.listAgents() }));
+    } catch (error) { failure(res, error); }
+  });
+  app.get(CONTROL_ROUTES.mcpServers, (_req, res) => {
+    try { res.json(McpServerListSchema.parse({ servers: store.listMcpServers() })); } catch (error) { failure(res, error); }
+  });
+  app.put(CONTROL_ROUTES.mcpServers, (req, res) => {
+    const input = McpServerSaveSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try { res.json(McpServerListSchema.parse({ servers: store.saveMcpServer(input.data) })); } catch (error) { failure(res, error); }
+  });
+  app.post(CONTROL_ROUTES.mcpServerRemove, (req, res) => {
+    const input = McpServerRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try {
+      if (!store.removeMcpServer(input.data.id)) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
+      res.json(McpServerListSchema.parse({ servers: store.listMcpServers() }));
+    } catch (error) { failure(res, error); }
   });
   // No qualified Worker exists (ADR-WIN-001 D4): validate, then refuse before anything is scheduled or persisted.
   app.post(CONTROL_ROUTES.taskStart, (req, res) => {

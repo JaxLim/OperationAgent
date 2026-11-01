@@ -6,6 +6,9 @@ import { ProjectSchema } from '../api/workbench.js';
 import type { TaskEventPage, TaskEventsQuery, TaskList, TaskRef } from '../api/tasks.js';
 import type { TaskSnapshot } from '../events/task.js';
 import type { ApiKeyInput, ModelChoice, ModelSettingsView, ModelTestResult } from '../api/model.js';
+import type { LinkedProviderRef, ProviderKeyInput, ProviderModelChoice, ProviderModelList, ProviderOverviewView, ProviderRef,
+  ProviderTestResult } from '../api/providers.js';
+import type { AgentList, AgentRef, AgentSave, McpServerList, McpServerRef, McpServerSave } from '../api/agents.js';
 export { ServiceTreeIdentitySchema } from './identity.js';
 export type { ServiceTreeIdentity } from './identity.js';
 
@@ -24,6 +27,10 @@ export const IPC_CHANNELS = Object.freeze({
   listTasks: 'oa:tasks-list', getTask: 'oa:tasks-snapshot', listTaskEvents: 'oa:tasks-events',
   getModelSettings: 'oa:model-settings-get', saveModelChoice: 'oa:model-choice-save', setApiKey: 'oa:model-key-set',
   clearApiKey: 'oa:model-key-clear', testModelConnection: 'oa:model-test',
+  getProviders: 'oa:providers-get', setProviderKey: 'oa:provider-key-set', clearProviderKey: 'oa:provider-key-clear',
+  testProvider: 'oa:provider-test', listProviderModels: 'oa:provider-models', saveProviderModel: 'oa:provider-model-save',
+  listAgents: 'oa:agents-list', saveAgent: 'oa:agents-save', removeAgent: 'oa:agents-remove',
+  listMcpServers: 'oa:mcp-list', saveMcpServer: 'oa:mcp-save', removeMcpServer: 'oa:mcp-remove',
 });
 export const EmptyInputSchema = z.strictObject({});
 
@@ -67,4 +74,18 @@ export interface DesktopApi {
   setApiKey(input: ApiKeyInput): Promise<ModelSettingsView>;
   clearApiKey(): Promise<ModelSettingsView>;
   testModelConnection(): Promise<ModelTestResult>;
+  /** Linked providers and web-search keys: same key rules as Anthropic, fixed official endpoints only. */
+  getProviders(): Promise<ProviderOverviewView>;
+  setProviderKey(input: ProviderKeyInput): Promise<ProviderOverviewView>;
+  clearProviderKey(input: ProviderRef): Promise<ProviderOverviewView>;
+  testProvider(input: LinkedProviderRef): Promise<ProviderTestResult>;
+  listProviderModels(input: LinkedProviderRef): Promise<ProviderModelList>;
+  saveProviderModel(input: ProviderModelChoice): Promise<ProviderOverviewView>;
+  /** Agent profiles and MCP server definitions are stored configuration; nothing here runs, launches or connects. */
+  listAgents(): Promise<AgentList>;
+  saveAgent(input: AgentSave): Promise<AgentList>;
+  removeAgent(input: AgentRef): Promise<AgentList>;
+  listMcpServers(): Promise<McpServerList>;
+  saveMcpServer(input: McpServerSave): Promise<McpServerList>;
+  removeMcpServer(input: McpServerRef): Promise<McpServerList>;
 }
