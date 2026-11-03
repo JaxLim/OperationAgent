@@ -123,7 +123,7 @@ try {
   await step('graceful window close stops the sidecar and commits a clean run', async () => {
     await closeGracefully(first.app);
     const db = await inspect();
-    assert.deepEqual(db.migrations, [1, 2, 3, 4, 5]); assert.deepEqual(db.runs, ['CLEAN']);
+    assert.deepEqual(db.migrations, [1, 2, 3, 4, 5, 6]); assert.deepEqual(db.runs, ['CLEAN']);
     assert.equal(db.node, '24.22.1'); return db;
   });
   await step('installed sidecar writes durable workbench data through the authenticated API', async () => {
@@ -135,7 +135,8 @@ try {
     const ready = await new Promise((resolve, reject) => { child.once('message', resolve); child.once('exit', () => reject(new Error('SIDECAR_EXIT'))); child.send(bootstrap); });
     const project = await httpCall(ready.port, bootstrap, 'POST', CONTROL_ROUTES.projects, { name: 'smoke-project', path: 'C:/OperationAgentSmoke/project' });
     assert.equal(project.status, 201); assert.equal(project.authenticated, true);
-    const settings = await httpCall(ready.port, bootstrap, 'PUT', CONTROL_ROUTES.settings, { theme: 'dark', density: 'compact', contextPanel: true, stopGraceMs: 10000, activeProjectId: project.body.id });
+    const settings = await httpCall(ready.port, bootstrap, 'PUT', CONTROL_ROUTES.settings, { theme: 'dark', lightTheme: 'operation', darkTheme: 'operation', language: 'system',
+      density: 'compact', contextPanel: true, stopGraceMs: 10000, activeProjectId: project.body.id, defaultProvider: 'anthropic', webSearchMode: 'off', webSearchProvider: 'exa' });
     assert.equal(settings.status, 200);
     const record = await httpCall(ready.port, bootstrap, 'POST', CONTROL_ROUTES.records, { records: [{ id: randomUUID(), value: 'installed 持久化' }] });
     assert.equal(record.status, 201);
