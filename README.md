@@ -1,60 +1,153 @@
+**简体中文** | [English](README.en.md)
+
 # OperationAgent
 
-当前阶段：**M2 进行中**（2026-10-31）。P1 已在 Windows x64 完成真实验收（[P1 退出报告](docs/P1-EXIT-REPORT.md)）；P2.0–P2.3（契约、任务事件存储、快照和游标补拉、Workbench 任务视图）已合并。**M1 已完成：Windows x64 的生产 Worker 门禁 SEC-W01 在一次性 runner 上真实通过**，证据见 `docs/evidence/m1/win32-x64/`，由 `pnpm verify:agent` 复核。M2 第一切片提供 Claude 模型设置、经 Main safeStorage 加密的密钥存储和连接测试。**Agent Loop 尚未实现，任务执行仍关闭（`agentReady=false`）**；macOS 和 Linux 的 SEC-W01 仍为 NOT_RUN。进度与后续里程碑见 [路线图](docs/ROADMAP.md)，每次变更的验证记录见 [执行记录](docs/EXECUTION.md)。
+OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Electron 和 TypeScript 开发，目前只支持 Windows x64。
 
-规范来源：[ARCHITECTURE.md](ARCHITECTURE.md)、[AGENTS.md](AGENTS.md)，现为 `0.4.0-p0`。已按用户正式批准的 [ADR-WIN-001 r1](docs/adr/ADR-WIN-001.md) 更新，批准记录绑定决策包与规范补丁哈希。
+目标是让 Agent 在你的项目里读代码、改文件、跑命令，但始终把它当作不可信的程序：Agent 跑在由操作系统隔离的 Worker 进程里，每次调用工具都要经过控制面的校验、授权和审计；哪道安全门禁没过，对应的能力就一直关着（fail closed），绝不会退而求其次、在没有隔离的情况下运行。
 
-阶段记录：P1 见 [P1 验收](docs/P1-ACCEPTANCE.md) 与 `build/p1-status.json`；P2 授权与范围见 `build/p2-status.json`（`pnpm verify:p2`）；M1–M4 授权（模型供应商 Claude）、各平台 SEC-W01 结论和 Worker 资格见 `build/agent-status.json`（`pnpm verify:agent`，只接受已提交的原始 runner 证据）。P0 文件保持为冻结历史，不用改写旧批准记录推进阶段。
+项目分阶段推进，每个阶段都留有可以复查的验收证据。**目前处于 M2 阶段：桌面应用、控制面、持久化和模型设置已经能用，但 Agent 还不能执行任务。**
 
-已建立七个 workspace 包和 Main/Preload/Renderer 独立 TypeScript 项目。Express 使用版本化 SQL migration 和独占 SQLite 连接；Main 通过继承通道建立服务身份，以认证的回环 HTTP 代理固定 API。Windows 平台 WorkerLauncher（公开 API + AppContainer + Job + OWIP/1）只在一次性 runner 上启动受限测试 fixture；发布构建不包含 fixture，任务入口返回 `WORKER_ISOLATION_UNAVAILABLE`。证据见 `docs/evidence/p1/win32-x64/`。
+![工作台](docs/screenshots/workbench.png)
 
-## 安装与使用（Windows x64）
+## 当前状态
 
-1. 运行 `OperationAgent-0.1.0-win-x64.exe`（`pnpm package` 生成于 `dist/installers/`，或下载 CI artifact `operationagent-installer-win-x64`）。安装包为逐用户安装，无需管理员；目前**未代码签名**，SmartScreen 可能提示“未知发布者”。
-2. 从开始菜单或桌面快捷方式启动 OperationAgent。界面右上角显示控制面状态；**Status** 面板显示服务、数据库、Worker 门禁与能力矩阵。
-3. 可用功能：添加/切换/移除项目文件夹（只保存路径，不读取内容）、设置（主题、密度、上下文面板、停止宽限期）、诊断（运行历史、数据库自检、重启控制面）。提交任务会被控制面明确拒绝（`WORKER_ISOLATION_UNAVAILABLE`），不会无隔离执行。
-4. 数据位于 `%APPDATA%\OperationAgent\control-plane\control-plane.sqlite`，卸载时保留。卸载：Windows“设置 → 应用”或安装目录中的 `Uninstall OperationAgent.exe`。
+**已经能用的**
 
-- [P0 评审、选型、目录与 P1 计划](docs/P0-REVIEW.md)
-- [验收命令和阶段门禁](docs/ACCEPTANCE.md)
-- [实际执行记录](docs/EXECUTION.md)
-- [Worker 架构阻塞的处理结论](docs/adr/DEC-001-worker-isolation.md)
-- [P0 决策批准记录](docs/adr/approvals/ADR-WIN-001-r1.json) / [门禁实际运行日志](docs/adr/ADR-WIN-001-validation.json)
+- 可安装的 Windows 桌面应用（按用户安装，不需要管理员权限；暂未做代码签名）。
+- 控制面：一个独立的 Express 服务进程，由 Electron 主进程负责监管，有心跳检测，崩溃后会在限定次数内自动重启。
+- 持久化：SQLite + 版本化迁移，设置、项目和运行记录重启后都还在。
+- 项目管理：添加、切换、移除项目文件夹（只记路径，不读取文件内容）。
+- 任务基础设施：任务状态机、只追加的任务事件存储、快照与游标分页接口，以及工作台里的任务列表和事件时间线。因为执行功能还没开放，现在提交的请求都会被控制面拒绝，不会真正创建任务。
+- Claude 模型设置：可以选模型；API Key 先由操作系统加密（Electron `safeStorage`）再保存；支持测试连接。
+- 诊断：查看控制面状态、做数据库自检、看运行历史，以及每项安全能力目前的状态。
+- Windows x64 上的生产 Worker 隔离门禁（SEC-W01）已经在一次性 CI runner 上实测通过。
 
-## 开发工具
+**还没实现的**
 
-锁定 Node.js `24.22.1`、pnpm `10.34.7`；全部开发依赖精确锁定，依赖树由 `pnpm-lock.yaml` 固定。
+- Agent 推理循环（Agent Loop）：提交任务会返回 `WORKER_ISOLATION_UNAVAILABLE`，不会执行任何操作。
+- 读取项目文件（Read Adapter）、写文件与运行 Shell 的沙箱、审批流程、MCP。
+- macOS 和 Linux 的进程级验收与 SEC-W01（目前为 NOT_RUN）。
 
-已有锁定工具链时：
+界面上没实现的功能都会明确标成“不可用”，不会假装能用。
 
-```sh
-pnpm install --frozen-lockfile --ignore-scripts
-pnpm check
-pnpm check:p0-exit
+| 提交任务后被控制面拒绝 | 模型与凭据设置 |
+| --- | --- |
+| ![任务被拒绝](docs/screenshots/task-refused.png) | ![模型设置](docs/screenshots/settings-models.png) |
+
+![深色主题](docs/screenshots/dark-theme.png)
+
+## 进度
+
+| 阶段 | 内容 | 状态 |
+| --- | --- | --- |
+| P0 | 架构评审、技术选型、Windows Worker 方案（[ADR-WIN-001](docs/adr/ADR-WIN-001.md)） | 已完成 |
+| P1 | 桌面应用、控制面、持久化、Worker 启动器、安装包与安装后烟测 | 已完成（Windows x64，见 [退出报告](docs/P1-EXIT-REPORT.md)） |
+| P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体验收所需的 CI 证据还没产出 |
+| M1 | SEC-W01：Windows 生产 Worker 隔离门禁 | 已完成（Windows x64 通过） |
+| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关和模型设置已合并；设置扩展在 [PR #10](https://github.com/JaxLim/OperationAgent/pull/10) 中评审；Read Adapter 与 Agent Loop 尚未开始 |
+| M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
+| M4 | 产品化：MCP、签名与升级 | 未开始 |
+
+详细计划见 [路线图](docs/ROADMAP.md)，每次变更的验证记录见 [执行记录](docs/EXECUTION.md)。
+
+## 技术概览
+
+```mermaid
+flowchart LR
+    R[Renderer<br/>React] -->|白名单 IPC| P[Preload]
+    P --> M[Electron Main<br/>生命周期 / 监管 / 加密桥]
+    M -->|认证的回环 HTTP| E[Express 控制面<br/>规则 / 状态 / 审计]
+    E --> DB[(SQLite)]
+    E --> G[Model Gateway] --> C[Claude API]
+    E -.->|受保护管道 + JSON-RPC| W[Agent Worker<br/>AppContainer + Job]
 ```
 
-`check` / `check:p1` 包括当前工程检查和真实进程集成（含 Worker fixture 步骤；非一次性 runner 上明确记录为 BLOCKED）；`check:engineering` 只运行工程检查，明确不代表进程验收。`check:p0-exit` 在固定历史提交上重放原 P0 检查并核对当前冻结证据。
+- **桌面端**：Electron 45、React 19、TypeScript 5.9、Vite。Renderer 只管界面，碰不到 Node、文件系统和密钥；Preload 只暴露一组固定的白名单接口。
+- **控制面**：Express 5，跑在独立的官方 Node.js 24 进程里（不用 Electron 自带的 Node），也是唯一能读写数据库的进程。主进程先通过继承的通道确认服务身份，再经 HMAC 认证的回环 HTTP 转发 API 请求。
+- **持久化**：better-sqlite3（SQLite 3.53），5 个版本化 SQL 迁移；任务状态和事件在同一事务中提交。
+- **契约**：`packages/contracts` 用 zod 定义 API、IPC、事件和错误码，单元测试确保未知字段和非法的状态迁移都会被拒绝。
+- **Worker 隔离（Windows）**：控制面内的原生 WorkerLauncher 以 AppContainer + Job Object 启动 Worker，通过单条受保护的继承管道通信（OWIP/1 分帧 + JSON-RPC 2.0）。
+- **凭据**：API Key 的加解密都经过主进程的 `safeStorage` 加密桥，只有控制面在请求 Anthropic 时才会用到，Worker 和界面都拿不到明文。
+- **工程**：pnpm workspace（3 个应用 + 4 个共享包），工具链和依赖都锁定到精确版本并校验哈希；用 electron-builder 打 NSIS 安装包；GitHub Actions 在三个平台上跑工程检查，在 Windows 上额外跑真实进程验收、安装包构建和安装后冒烟测试。
 
-构建安装包并执行安装后烟测（Windows x64；`check:p1` 中的原生 fixture 构建另需 VS 2022 C++ 生成工具）：
-
-```sh
-pnpm package     # build、官方 Node staging、Electron 校验、NSIS 安装包 → dist/installers/
-pnpm test:smoke  # 静默安装到 .cache、启动/关闭/重启/强杀恢复、已安装 sidecar 套件、静默卸载
+```
+apps/
+  desktop/       Electron 主进程、Preload、React 界面
+  server/        Express 控制面、SQL 迁移、模型网关、凭据
+  agent-worker/  Agent Worker（目前只有受限测试 fixture）
+packages/
+  contracts/             共享的 zod 契约
+  platform-supervision/  进程监管
+  platform-worker/       Windows 原生 Worker 启动器
+  worker-transport/      OWIP/1 分帧与会话
+scripts/         构建、打包、阶段检查脚本
+tests/           单元、集成、Worker fixture 与安装后测试
+docs/            路线图、验收标准、执行记录、ADR 与证据
 ```
 
-P1.4～P1.7 的退出证据见 [P1 退出报告](docs/P1-EXIT-REPORT.md)。完整 SEC-W01 最迟相应平台进入 P3 执行链验证前通过；任何失败或未知均不得授予生产 Worker 权限。
+完整的架构约束见 [ARCHITECTURE.md](ARCHITECTURE.md)，开发规范见 [AGENTS.md](AGENTS.md)。
 
-Windows x64 真实链路验收及开发启动：
+## 安装使用（Windows x64）
 
-```sh
-pnpm test:integration  # build、官方 Node staging、Electron 校验与真实进程测试
-pnpm desktop          # 使用已有 staging 启动开发版 Workbench
+1. 获取安装包 `OperationAgent-0.1.0-win-x64.exe`：按下文用 `package` 命令自行构建，或在 [Actions](https://github.com/JaxLim/OperationAgent/actions) 里 `main` 分支最近一次 “P1 control plane checks” 运行中下载 `operationagent-installer-win-x64` 产物（需要登录 GitHub）。
+2. 运行安装包。安装包没有签名，Windows SmartScreen 可能会提示“未知发布者”。
+3. 从开始菜单或桌面快捷方式打开 OperationAgent，添加一个项目文件夹，然后在“Settings → Models & Credentials”里填入 Anthropic API Key，再测试一下连接。
+4. 数据保存在 `%APPDATA%\OperationAgent\control-plane\control-plane.sqlite`，卸载后仍会保留。卸载请到 Windows“设置 → 应用”。
+
+## 从源码运行（Windows x64）
+
+需要准备：Windows 10/11 x64、Git，以及任意较新版本的 Node.js（只用来跑一次引导脚本）。
+
+在 PowerShell 中执行：
+
+```powershell
+git clone https://github.com/JaxLim/OperationAgent.git
+cd OperationAgent
+
+# 1. 下载并校验锁定版本的 Node.js 24.22.1 和 pnpm 10.34.7，放到 .tools/（不做全局安装）
+node scripts/bootstrap-windows.mjs
+
+# 2. 让当前终端优先使用锁定的 Node（否则会因 engines 版本限制而失败）
+$env:Path = "$PWD\.tools\node;$env:Path"
+
+# 3. 安装依赖
+node .tools/pnpm/bin/pnpm.cjs install --frozen-lockfile --ignore-scripts
+
+# 4. 构建，准备控制面运行时和 Electron
+node .tools/pnpm/bin/pnpm.cjs build
+node .tools/pnpm/bin/pnpm.cjs stage:sidecar
+node .tools/pnpm/bin/pnpm.cjs prepare:electron
+
+# 5. 启动桌面应用
+node .tools/pnpm/bin/pnpm.cjs desktop
 ```
 
-测试数据仅写工作区 `.cache`，日志写 `artifacts/p1/win32-x64/`；正常应用数据由 Express 写入 Electron `userData/control-plane/control-plane.sqlite`。不接受 Renderer 提供数据库路径。`stage:sidecar` 的 `manifest.json` 绑定实际 Node/ABI、生产闭包和 native 文件哈希。CI 保留三平台工程门禁；本轮真实 Electron/Sidecar 验收目标为 Windows x64，macOS/Linux 的进程验收明确为 NOT_RUN。
+开发版的数据在 `%APPDATA%\@operation-agent\desktop\control-plane\`。以后每开一个新终端，先重复第 2 步；改完代码后重新运行 `build` 和 `desktop` 就行。
 
-Windows x64 可用现有 Node 运行 `node scripts/bootstrap-windows.mjs`，将校验过哈希的 Node/pnpm 下载到本仓库 `.tools/`。已有下载仅在哈希一致时复用，哈希不符拒绝覆盖。之后用 `.tools/node/node.exe .tools/pnpm/bin/pnpm.cjs ...` 调用。所有包缓存均配置在工作区内，不需要全局安装。
+### 检查与测试
 
-CI 在各平台先选定锁定的 Node；Windows 运行完整 `bootstrap-windows.mjs`，为真实进程验收准备独立 Node，macOS/Linux 使用 `--pnpm-only` 安装并校验 pnpm。版本与 SRI 统一读取 `build/runtime-lock.json`，不使用另一个包管理器自安装当前包管理器。
+以下命令都通过 `node .tools/pnpm/bin/pnpm.cjs <命令>` 运行：
 
-生产支持状态：Windows x64 的生产 Worker 隔离（SEC-W01）已由一次性 runner 证据验证（`build/agent-status.json`），其余平台为 NOT_RUN。所有平台的 `ui/read/gitRead/highRisk` 仍为 **unverified**：只读工具需 SEC-08，Git 只读需 SEC-22，高危工具需该平台 P3b。依赖和工具链检查通过不改变这些状态。
+| 命令 | 作用 |
+| --- | --- |
+| `check:engineering` | 类型检查、lint、模块边界检查、单元测试、构建和各阶段状态校验，不启动真实进程 |
+| `check` | 在上面的基础上，再加上真实的 Electron / 控制面进程集成测试。构建原生 Worker fixture 需要 Visual Studio 2022 C++ 生成工具；受限 fixture 只在一次性 CI runner 上运行，在本机跑会记为 BLOCKED |
+| `test` | 只运行单元测试 |
+| `test:integration` | 构建并运行真实进程集成测试 |
+| `package` | 构建 NSIS 安装包，输出到 `dist/installers/` |
+| `test:smoke` | 静默安装到 `.cache`，检查启动、重启和强制结束后能否恢复，最后静默卸载 |
+| `verify:agent` | 根据已提交的 runner 证据核对 M1–M4 和各平台的 SEC-W01 状态 |
+
+## 文档
+
+以下文档均为中文。
+
+- [ARCHITECTURE.md](ARCHITECTURE.md)：目标架构、信任边界、进程职责与验收标准
+- [AGENTS.md](AGENTS.md)：开发规范
+- [docs/ROADMAP.md](docs/ROADMAP.md)：路线图
+- [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)：验收命令与阶段门禁
+- [docs/EXECUTION.md](docs/EXECUTION.md)：每次改动的执行和验证记录
+- [docs/P1-EXIT-REPORT.md](docs/P1-EXIT-REPORT.md)：P1 退出报告
+- [docs/adr/](docs/adr/)：架构决策与批准记录
+- 证据：`docs/evidence/`（P1、M1 的 runner 证据与 M2 截图）；阶段状态文件：`build/*-status.json`
