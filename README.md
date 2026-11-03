@@ -2,34 +2,34 @@
 
 # OperationAgent
 
-OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Electron 和 TypeScript 构建，目前面向 Windows x64。
+OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Electron 和 TypeScript 开发，目前只支持 Windows x64。
 
-它的目标是让 Agent 在你的项目里读代码、改文件、运行命令，同时始终把 Agent 当作不可信的程序对待：Agent 运行在操作系统级隔离的 Worker 进程中，所有工具调用都要经过控制面的校验、授权和审计；任何一道安全门禁没有通过，对应能力就保持关闭（fail closed），绝不退回到无隔离执行。
+目标是让 Agent 在你的项目里读代码、改文件、跑命令，但始终把它当作不可信的程序：Agent 跑在由操作系统隔离的 Worker 进程里，每次调用工具都要经过控制面的校验、授权和审计；哪道安全门禁没过，对应的能力就一直关着（fail closed），绝不会退而求其次、在没有隔离的情况下运行。
 
-项目按阶段推进，每个阶段都有可复核的验收证据。**当前处于 M2 阶段：桌面应用、控制面、持久化和模型设置已经可用，但 Agent 还不能执行任务。**
+项目分阶段推进，每个阶段都留有可以复查的验收证据。**目前处于 M2 阶段：桌面应用、控制面、持久化和模型设置已经能用，但 Agent 还不能执行任务。**
 
 ![工作台](docs/screenshots/workbench.png)
 
 ## 当前状态
 
-**已经可用**
+**已经能用的**
 
-- 可安装的 Windows 桌面应用（逐用户安装，无需管理员权限；尚未代码签名）。
-- 控制面：独立的 Express 服务进程，由 Electron 主进程监管，带心跳检测和有限次数的自动重启。
-- 持久化：SQLite 加版本化迁移，设置、项目和运行记录在重启后保留。
-- 项目管理：添加、切换、移除项目文件夹（只保存路径，不读取文件内容）。
-- 任务基础设施：任务状态机、只追加的任务事件存储、快照与游标分页接口，以及工作台中的任务列表和事件时间线。由于执行尚未开放，目前提交的请求会被控制面拒绝，不会创建任务。
-- Claude 模型设置：选择模型；API Key 经操作系统加密（Electron `safeStorage`）后存储；支持连接测试。
-- 诊断：控制面状态、数据库自检、运行历史，以及每项安全能力的当前状态。
-- Windows x64 的生产 Worker 隔离门禁（SEC-W01）已在一次性 CI runner 上真实通过。
+- 可安装的 Windows 桌面应用（按用户安装，不需要管理员权限；暂未做代码签名）。
+- 控制面：一个独立的 Express 服务进程，由 Electron 主进程负责监管，有心跳检测，崩溃后会在限定次数内自动重启。
+- 持久化：SQLite + 版本化迁移，设置、项目和运行记录重启后都还在。
+- 项目管理：添加、切换、移除项目文件夹（只记路径，不读取文件内容）。
+- 任务基础设施：任务状态机、只追加的任务事件存储、快照与游标分页接口，以及工作台里的任务列表和事件时间线。因为执行功能还没开放，现在提交的请求都会被控制面拒绝，不会真正创建任务。
+- Claude 模型设置：可以选模型；API Key 先由操作系统加密（Electron `safeStorage`）再保存；支持测试连接。
+- 诊断：查看控制面状态、做数据库自检、看运行历史，以及每项安全能力目前的状态。
+- Windows x64 上的生产 Worker 隔离门禁（SEC-W01）已经在一次性 CI runner 上实测通过。
 
-**尚未实现**
+**还没实现的**
 
-- Agent 推理循环（Agent Loop）：提交任务返回 `WORKER_ISOLATION_UNAVAILABLE`，不会执行任何操作。
+- Agent 推理循环（Agent Loop）：提交任务会返回 `WORKER_ISOLATION_UNAVAILABLE`，不会执行任何操作。
 - 读取项目文件（Read Adapter）、写文件与运行 Shell 的沙箱、审批流程、MCP。
 - macOS 和 Linux 的进程级验收与 SEC-W01（目前为 NOT_RUN）。
 
-界面中未实现的功能都明确标为“不可用”，不会显示虚假的可执行状态。
+界面上没实现的功能都会明确标成“不可用”，不会假装能用。
 
 | 提交任务后被控制面拒绝 | 模型与凭据设置 |
 | --- | --- |
@@ -43,7 +43,7 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 | --- | --- | --- |
 | P0 | 架构评审、技术选型、Windows Worker 方案（[ADR-WIN-001](docs/adr/ADR-WIN-001.md)） | 已完成 |
 | P1 | 桌面应用、控制面、持久化、Worker 启动器、安装包与安装后烟测 | 已完成（Windows x64，见 [退出报告](docs/P1-EXIT-REPORT.md)） |
-| P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体退出所需的 CI 证据尚未产出 |
+| P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体验收所需的 CI 证据还没产出 |
 | M1 | SEC-W01：Windows 生产 Worker 隔离门禁 | 已完成（Windows x64 通过） |
 | M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关和模型设置已合并；设置扩展在 [PR #10](https://github.com/JaxLim/OperationAgent/pull/10) 中评审；Read Adapter 与 Agent Loop 尚未开始 |
 | M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
@@ -63,13 +63,13 @@ flowchart LR
     E -.->|受保护管道 + JSON-RPC| W[Agent Worker<br/>AppContainer + Job]
 ```
 
-- **桌面端**：Electron 45、React 19、TypeScript 5.9、Vite。Renderer 只负责界面，不能访问 Node、文件系统或密钥；Preload 只暴露固定的白名单接口。
-- **控制面**：Express 5，运行在独立的官方 Node.js 24 进程中（不使用 Electron 自带的 Node），是数据库的唯一读写方。主进程通过继承的通道建立服务身份，再通过 HMAC 认证的回环 HTTP 转发 API。
+- **桌面端**：Electron 45、React 19、TypeScript 5.9、Vite。Renderer 只管界面，碰不到 Node、文件系统和密钥；Preload 只暴露一组固定的白名单接口。
+- **控制面**：Express 5，跑在独立的官方 Node.js 24 进程里（不用 Electron 自带的 Node），也是唯一能读写数据库的进程。主进程先通过继承的通道确认服务身份，再经 HMAC 认证的回环 HTTP 转发 API 请求。
 - **持久化**：better-sqlite3（SQLite 3.53），5 个版本化 SQL 迁移；任务状态和事件在同一事务中提交。
-- **契约**：`packages/contracts` 用 zod 定义 API、IPC、事件和错误码，由单元测试覆盖未知字段和非法状态迁移的拒绝。
+- **契约**：`packages/contracts` 用 zod 定义 API、IPC、事件和错误码，单元测试确保未知字段和非法的状态迁移都会被拒绝。
 - **Worker 隔离（Windows）**：控制面内的原生 WorkerLauncher 以 AppContainer + Job Object 启动 Worker，通过单条受保护的继承管道通信（OWIP/1 分帧 + JSON-RPC 2.0）。
-- **凭据**：API Key 经主进程的 `safeStorage` 加密桥加解密，只有控制面在请求 Anthropic 时使用，Worker 和界面都拿不到明文。
-- **工程**：pnpm workspace（3 个应用 + 4 个共享包），工具链和依赖全部精确锁定并校验哈希；electron-builder 生成 NSIS 安装包；GitHub Actions 在三个平台运行工程检查，在 Windows 上运行真实进程验收、安装包构建和安装后烟测。
+- **凭据**：API Key 的加解密都经过主进程的 `safeStorage` 加密桥，只有控制面在请求 Anthropic 时才会用到，Worker 和界面都拿不到明文。
+- **工程**：pnpm workspace（3 个应用 + 4 个共享包），工具链和依赖都锁定到精确版本并校验哈希；用 electron-builder 打 NSIS 安装包；GitHub Actions 在三个平台上跑工程检查，在 Windows 上额外跑真实进程验收、安装包构建和安装后冒烟测试。
 
 ```
 apps/
@@ -86,18 +86,18 @@ tests/           单元、集成、Worker fixture 与安装后测试
 docs/            路线图、验收标准、执行记录、ADR 与证据
 ```
 
-完整的架构约束见 [ARCHITECTURE.md](ARCHITECTURE.md)，开发守则见 [AGENTS.md](AGENTS.md)。
+完整的架构约束见 [ARCHITECTURE.md](ARCHITECTURE.md)，开发规范见 [AGENTS.md](AGENTS.md)。
 
 ## 安装使用（Windows x64）
 
 1. 获取安装包 `OperationAgent-0.1.0-win-x64.exe`：按下文用 `package` 命令自行构建，或在 [Actions](https://github.com/JaxLim/OperationAgent/actions) 里 `main` 分支最近一次 “P1 control plane checks” 运行中下载 `operationagent-installer-win-x64` 产物（需要登录 GitHub）。
-2. 运行安装包。安装包未签名，Windows SmartScreen 可能提示“未知发布者”。
-3. 从开始菜单或桌面快捷方式启动 OperationAgent，添加一个项目文件夹，然后在“设置 → Models & Credentials”中填写 Anthropic API Key 并测试连接。
-4. 数据保存在 `%APPDATA%\OperationAgent\control-plane\control-plane.sqlite`，卸载时保留。卸载方式：Windows“设置 → 应用”。
+2. 运行安装包。安装包没有签名，Windows SmartScreen 可能会提示“未知发布者”。
+3. 从开始菜单或桌面快捷方式打开 OperationAgent，添加一个项目文件夹，然后在“Settings → Models & Credentials”里填入 Anthropic API Key，再测试一下连接。
+4. 数据保存在 `%APPDATA%\OperationAgent\control-plane\control-plane.sqlite`，卸载后仍会保留。卸载请到 Windows“设置 → 应用”。
 
 ## 从源码运行（Windows x64）
 
-需要：Windows 10/11 x64、Git、任意较新版本的 Node.js（只用于运行一次引导脚本）。
+需要准备：Windows 10/11 x64、Git，以及任意较新版本的 Node.js（只用来跑一次引导脚本）。
 
 在 PowerShell 中执行：
 
@@ -123,7 +123,7 @@ node .tools/pnpm/bin/pnpm.cjs prepare:electron
 node .tools/pnpm/bin/pnpm.cjs desktop
 ```
 
-开发版的数据位于 `%APPDATA%\@operation-agent\desktop\control-plane\`。以后打开新终端时，重复第 2 步，修改代码后重新运行 `build` 和 `desktop` 即可。
+开发版的数据在 `%APPDATA%\@operation-agent\desktop\control-plane\`。以后每开一个新终端，先重复第 2 步；改完代码后重新运行 `build` 和 `desktop` 就行。
 
 ### 检查与测试
 
@@ -132,11 +132,11 @@ node .tools/pnpm/bin/pnpm.cjs desktop
 | 命令 | 作用 |
 | --- | --- |
 | `check:engineering` | 类型检查、lint、模块边界检查、单元测试、构建和各阶段状态校验，不启动真实进程 |
-| `check` | 在上面的基础上加上真实的 Electron / 控制面进程集成测试。原生 Worker fixture 的构建需要 Visual Studio 2022 C++ 生成工具；受限 fixture 只在一次性 CI runner 上运行，在本机会记录为 BLOCKED |
+| `check` | 在上面的基础上，再加上真实的 Electron / 控制面进程集成测试。构建原生 Worker fixture 需要 Visual Studio 2022 C++ 生成工具；受限 fixture 只在一次性 CI runner 上运行，在本机跑会记为 BLOCKED |
 | `test` | 只运行单元测试 |
 | `test:integration` | 构建并运行真实进程集成测试 |
 | `package` | 构建 NSIS 安装包，输出到 `dist/installers/` |
-| `test:smoke` | 静默安装到 `.cache`，验证启动、重启和强杀后恢复，然后静默卸载 |
+| `test:smoke` | 静默安装到 `.cache`，检查启动、重启和强制结束后能否恢复，最后静默卸载 |
 | `verify:agent` | 根据已提交的 runner 证据核对 M1–M4 和各平台的 SEC-W01 状态 |
 
 ## 文档
@@ -144,10 +144,10 @@ node .tools/pnpm/bin/pnpm.cjs desktop
 以下文档均为中文。
 
 - [ARCHITECTURE.md](ARCHITECTURE.md)：目标架构、信任边界、进程职责与验收标准
-- [AGENTS.md](AGENTS.md)：开发守则
+- [AGENTS.md](AGENTS.md)：开发规范
 - [docs/ROADMAP.md](docs/ROADMAP.md)：路线图
 - [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)：验收命令与阶段门禁
-- [docs/EXECUTION.md](docs/EXECUTION.md)：每次变更的执行与验证记录
+- [docs/EXECUTION.md](docs/EXECUTION.md)：每次改动的执行和验证记录
 - [docs/P1-EXIT-REPORT.md](docs/P1-EXIT-REPORT.md)：P1 退出报告
 - [docs/adr/](docs/adr/)：架构决策与批准记录
 - 证据：`docs/evidence/`（P1、M1 的 runner 证据与 M2 截图）；阶段状态文件：`build/*-status.json`
