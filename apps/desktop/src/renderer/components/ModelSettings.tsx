@@ -1,59 +1,74 @@
 import { useEffect, useRef, useState } from 'react';
 import { CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL } from '@operation-agent/contracts';
-import type { ClaudeModel, ModelTestResult, ModelTestStatus } from '@operation-agent/contracts';
+import type { ClaudeModel, CredentialStatus, ModelProvider, ModelTestStatus } from '@operation-agent/contracts';
+import type { MessageKey } from '../i18n';
+import { useT } from '../locale';
 import { actions, useStore } from '../state';
-import { IconAlert, IconCheck, IconLock, IconRetry, IconShield, IconSparkle, IconX } from './Icons';
+import { IconAlert, IconCheck, IconLock, IconRetry, IconShield, IconX } from './Icons';
 import { Modal } from './Modal';
 
-export const MODEL_INFO: Record<ClaudeModel, { name: string; tagline: string }> = {
-  'claude-sonnet-5-5': { name: 'Sonnet 5.5', tagline: 'Balanced speed and depth for everyday coding' },
-  'claude-opus-5-5': { name: 'Opus 5.5', tagline: 'Most capable, for long and difficult changes' },
-  'claude-haiku-5-5': { name: 'Haiku 5.5', tagline: 'Fastest replies for quick questions' },
+export const MODEL_INFO: Record<ClaudeModel, { name: string; tagline: MessageKey }> = {
+  'claude-sonnet-5-5': { name: 'Sonnet 5.5', tagline: 'model.sonnet' },
+  'claude-opus-5-5': { name: 'Opus 5.5', tagline: 'model.opus' },
+  'claude-haiku-5-5': { name: 'Haiku 5.5', tagline: 'model.haiku' },
 };
 export function modelName(model: ClaudeModel): string { return `Claude ${MODEL_INFO[model].name}`; }
-
-// The field is cleared as soon as the key is handed over, so every message asks for it again rather than keeping it.
-const UNCONFIRMED = 'The save was not confirmed. The status above was re-read from the control plane; if the key is not shown as configured, enter it again.';
-const KEY_ERRORS: Record<string, string> = {
-  VALIDATION_ERROR: 'That does not look like an API key (20–256 visible characters, no spaces). Enter it again.',
-  SECURE_STORAGE_UNAVAILABLE: 'Secure OS storage is unavailable, so the key was not saved. Nothing was written.',
-  DATABASE_UNAVAILABLE: 'The local database could not store the encrypted key. Nothing was written; enter it again.',
-  SERVICE_UNAVAILABLE: UNCONFIRMED,
-};
-const TEST_COPY: Record<ModelTestStatus, { tone: 'ok' | 'warn' | 'danger'; title: string; detail: string }> = {
-  ok: { tone: 'ok', title: 'Connected', detail: 'Claude accepted the key and the selected model answered.' },
-  auth_failed: { tone: 'danger', title: 'Key rejected', detail: 'Anthropic did not accept this key. Check it in the Console and replace it.' },
-  rate_limited: { tone: 'warn', title: 'Rate limited', detail: 'The key works but is being throttled right now. Try again shortly.' },
-  model_unavailable: { tone: 'warn', title: 'Model unavailable', detail: 'This key cannot use the selected model. Pick another model or check access.' },
-  provider_error: { tone: 'warn', title: 'Provider error', detail: 'Anthropic returned an error. The service may be overloaded; try again later.' },
-  unreachable: { tone: 'danger', title: 'Unreachable', detail: 'api.anthropic.com could not be reached from this device (network, proxy or timeout).' },
-  not_configured: { tone: 'warn', title: 'No API key', detail: 'Add an API key first.' },
-  credential_unavailable: { tone: 'danger', title: 'Stored key unreadable', detail: 'The saved key could not be decrypted on this account. Replace it.' },
+export const PROVIDER_NAMES: Readonly<Record<ModelProvider, string>> = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google Gemini', openrouter: 'OpenRouter' };
+export const PROVIDER_HOSTS: Readonly<Record<ModelProvider, string>> = {
+  anthropic: 'api.anthropic.com', openai: 'api.openai.com', google: 'generativelanguage.googleapis.com', openrouter: 'openrouter.ai',
 };
 
-function TestResult({ result }: { result: ModelTestResult }) {
-  const copy = TEST_COPY[result.status];
-  const facts = [result.httpStatus ? `HTTP ${result.httpStatus}` : null, result.latencyMs !== null ? `${result.latencyMs} ms` : null,
-    MODEL_INFO[result.model].name].filter(Boolean).join(' · ');
+/** A plain monogram tile: providers are told apart by name, never by imitating their logos. */
+export function ProviderMark({ label, tone, size = 'md' }: { label: string; tone: string; size?: 'md' | 'lg' }) {
+  return <span className={`provider-tile provider-tile-${size} tile-${tone}`} aria-hidden="true">{label}</span>;
+}
+
+const KEY_ERRORS: Record<string, MessageKey> = {
+  VALIDATION_ERROR: 'key.validation', SECURE_STORAGE_UNAVAILABLE: 'key.secureUnavailable', DATABASE_UNAVAILABLE: 'key.database',
+};
+const TEST_TONE: Record<ModelTestStatus, 'ok' | 'warn' | 'danger'> = {
+  ok: 'ok', auth_failed: 'danger', rate_limited: 'warn', model_unavailable: 'warn', provider_error: 'warn', unreachable: 'danger',
+  not_configured: 'warn', credential_unavailable: 'danger',
+};
+
+/** A normalised test outcome. Facts are what Express measured; no provider text is ever shown because none arrives. */
+export function TestResult({ status, provider, httpStatus, latencyMs, model }: { status: ModelTestStatus; provider: ModelProvider; httpStatus: number | null;
+  latencyMs: number | null; model: string | null }) {
+  const t = useT();
+  const tone = TEST_TONE[status];
+  const vars = { provider: PROVIDER_NAMES[provider], host: PROVIDER_HOSTS[provider] };
+  const facts = [httpStatus ? `HTTP ${httpStatus}` : null, latencyMs !== null ? `${latencyMs} ms` : null, model].filter(Boolean).join(' · ');
   return (
-    <div className={`test-result tone-result-${copy.tone}`} role="status" data-test-status={result.status}>
-      <span className="test-result-icon">{copy.tone === 'ok' ? <IconCheck size={14} /> : copy.tone === 'warn' ? <IconAlert size={14} /> : <IconX size={14} />}</span>
+    <div className={`test-result tone-result-${tone}`} role="status" data-test-status={status}>
+      <span className="test-result-icon">{tone === 'ok' ? <IconCheck size={14} /> : tone === 'warn' ? <IconAlert size={14} /> : <IconX size={14} />}</span>
       <span className="test-result-body">
-        <strong>{copy.title}</strong>
-        <span>{copy.detail}</span>
-        <span className="test-result-facts mono">{facts}</span>
+        <strong>{t(`test.${status}.title`)}</strong>
+        <span>{t(`test.${status}.detail`, vars)}</span>
+        {facts && <span className="test-result-facts mono">{facts}</span>}
       </span>
+    </div>
+  );
+}
+export function TestFailed({ code }: { code: string }) {
+  const t = useT();
+  return (
+    <div className="test-result tone-result-danger" role="status" data-test-status="failed">
+      <span className="test-result-icon"><IconX size={14} /></span>
+      <span className="test-result-body"><strong>{t('test.couldNotRun')}</strong><span className="mono">{code}</span></span>
     </div>
   );
 }
 
 /**
  * The key form never shows a stored key and never keeps a typed one: the input is cleared as soon as Main has it,
- * and the component state disappears with the dialog.
+ * and the component state disappears with the view.
  */
-function ApiKeyField({ disabled }: { disabled: boolean }) {
-  const credential = useStore(s => s.model?.credential ?? null);
-  const storage = useStore(s => s.model?.secureStorage ?? 'unavailable');
+export function KeyField({ provider, credential, secureStorage, disabled, placeholder, mask, onSave, onClear }: {
+  provider: string; credential: CredentialStatus | null; secureStorage: 'available' | 'unavailable'; disabled: boolean; placeholder: string;
+  /** Shown before the hint of a stored key, e.g. "sk-ant-". */
+  mask: string; onSave: (apiKey: string) => Promise<string | null>; onClear: () => Promise<void>;
+}) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
@@ -68,17 +83,16 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
     if (!submitted || busy) return;
     // Hand the key over and forget it at once, whatever the outcome: it never lingers in Renderer state or the DOM.
     setValue(''); setBusy(true); setError(null);
-    const code = await actions.setApiKey(submitted);
+    const code = await onSave(submitted);
     setBusy(false);
-    if (code) { setError(KEY_ERRORS[code] ?? UNCONFIRMED); return; }
+    if (code) { setError(t(KEY_ERRORS[code] ?? 'key.unconfirmed')); return; }
     setEditing(false);
   };
-  if (storage === 'unavailable' && !configured) {
+  if (secureStorage === 'unavailable' && !configured) {
     return (
       <div className="key-blocked" role="alert">
         <IconLock size={15} />
-        <span><strong>Secure storage unavailable.</strong> OperationAgent stores keys only through the operating system’s protected storage
-          (Windows DPAPI via Electron safeStorage) and will not fall back to anything weaker. No key can be saved on this account right now.</span>
+        <span><strong>{t('key.blockedTitle')}</strong> {t('key.blockedText')}</span>
       </div>
     );
   }
@@ -88,40 +102,42 @@ function ApiKeyField({ disabled }: { disabled: boolean }) {
         <div className="key-saved" data-key-state="configured">
           <span className="key-saved-glyph"><IconLock size={14} /></span>
           <span className="key-saved-text">
-            <span className="mono key-mask" aria-label="Stored key, masked">sk-ant-••••••••••••{credential.hint ?? '••••'}</span>
-            <span className="muted small">Encrypted on this device · never shown again</span>
+            <span className="mono key-mask" aria-label={t('key.storedMask')}>{mask}••••••••••••{credential.hint ?? '••••'}</span>
+            <span className="muted small">{t('key.encryptedNote')}</span>
           </span>
-          <button className="btn btn-pill btn-xs" onClick={() => { setEditing(true); setError(null); }} disabled={disabled}>Replace</button>
-          <button className="btn btn-pill btn-xs btn-quiet btn-danger-text" onClick={() => setConfirmRemove(true)} disabled={disabled || busy}>Remove</button>
+          <button className="btn btn-pill btn-xs" onClick={() => { setEditing(true); setError(null); }} disabled={disabled}>{t('key.replace')}</button>
+          <button className="btn btn-pill btn-xs btn-quiet btn-danger-text" onClick={() => setConfirmRemove(true)} disabled={disabled || busy}>{t('common.remove')}</button>
         </div>
       )}
       {showForm && (
         <form className="key-form" data-key-state={configured ? 'replacing' : 'empty'} onSubmit={event => { event.preventDefault(); void save(); }}>
           <div className={`key-input${error ? ' has-error' : ''}`}>
-            <input ref={input} type="password" aria-label="Anthropic API key" placeholder="sk-ant-…" value={value} autoComplete="off" spellCheck={false}
+            <input ref={input} type="password" aria-label={t('key.label', { provider })} placeholder={placeholder} value={value} autoComplete="off" spellCheck={false}
               disabled={disabled || busy} onChange={event => { setValue(event.target.value); setError(null); }} />
           </div>
           <button type="submit" className="btn btn-pill btn-accent" disabled={disabled || busy || value.trim().length === 0}>
-            {busy ? 'Encrypting…' : 'Save key'}
+            {busy ? t('key.encrypting') : t('key.save')}
           </button>
           {configured && <button type="button" className="btn btn-pill btn-quiet" disabled={busy}
-            onClick={() => { setEditing(false); setValue(''); setError(null); }}>Cancel</button>}
+            onClick={() => { setEditing(false); setValue(''); setError(null); }}>{t('common.cancel')}</button>}
         </form>
       )}
       {error && <div className="field-error" role="alert">{error}</div>}
       {confirmRemove && (
-        <Modal title="Remove the API key?" onClose={() => setConfirmRemove(false)} width={440} footer={<>
-          <button className="btn btn-quiet" onClick={() => setConfirmRemove(false)}>Cancel</button>
-          <button className="btn btn-danger" data-autofocus onClick={() => { void actions.clearApiKey(); setConfirmRemove(false); }}>Remove key</button>
+        <Modal title={t('key.removeTitle', { provider })} onClose={() => setConfirmRemove(false)} width={440} footer={<>
+          <button className="btn btn-quiet" onClick={() => setConfirmRemove(false)}>{t('common.cancel')}</button>
+          <button className="btn btn-danger" data-autofocus onClick={() => { void onClear(); setConfirmRemove(false); }}>{t('key.removeConfirm')}</button>
         </>}>
-          <p className="muted">The encrypted key is deleted from this device. Connection tests stop working until you add a key again.</p>
+          <p className="muted">{t('key.removeText')}</p>
         </Modal>
       )}
     </div>
   );
 }
 
-export function ModelSection() {
+/** Anthropic keeps its own fixed model list and the M2 slice-1 operations. */
+export function AnthropicDetail() {
+  const t = useT();
   const model = useStore(s => s.model);
   const test = useStore(s => s.modelTest);
   const ready = useStore(s => s.connection === 'ready');
@@ -130,54 +146,38 @@ export function ModelSection() {
   const configured = model?.credential.configured === true;
   const disabled = !ready || !model;
   return (
-    <div className="model-section">
-      <div className="provider-card">
-        <span className="provider-mark" aria-hidden="true"><IconSparkle size={18} /></span>
-        <span className="provider-text">
-          <span className="eyebrow">Provider</span>
-          <strong>Anthropic Claude</strong>
-          <span className="muted small">Messages API · api.anthropic.com</span>
-        </span>
-        <span className={`pill ${configured ? 'tone-ok' : 'tone-muted'}`} data-credential={configured ? 'configured' : 'missing'}>
-          <span className="dot" />{configured ? 'Key configured' : 'No key'}
-        </span>
-      </div>
-
-      <h3 className="eyebrow section-eyebrow">Model</h3>
-      <div className="model-options" role="radiogroup" aria-label="Claude model">
+    <>
+      <h3 className="settings-group-title">{t('providers.model')}</h3>
+      <div className="model-options" role="radiogroup" aria-label={t('providers.model')}>
         {CLAUDE_MODELS.map(id => (
           <button key={id} role="radio" aria-checked={id === chosen} className={`model-option${id === chosen ? ' is-active' : ''}`} disabled={disabled}
             data-model={id} onClick={() => void actions.saveModelChoice(id)}>
             <span className="model-option-head">
               <span className="model-option-name">{MODEL_INFO[id].name}</span>
-              {id === DEFAULT_CLAUDE_MODEL && <span className="model-option-badge">Default</span>}
+              {id === DEFAULT_CLAUDE_MODEL && <span className="model-option-badge">{t('common.default')}</span>}
               <span className="model-option-check"><IconCheck size={13} /></span>
             </span>
-            <span className="model-option-tagline">{MODEL_INFO[id].tagline}</span>
+            <span className="model-option-tagline">{t(MODEL_INFO[id].tagline)}</span>
             <span className="model-option-id mono">{id}</span>
           </button>
         ))}
       </div>
 
-      <h3 className="eyebrow section-eyebrow">API key</h3>
-      <ApiKeyField disabled={disabled} />
+      <h3 className="settings-group-title">{t('providers.apiKey')}</h3>
+      <KeyField provider="Anthropic" credential={model?.credential ?? null} secureStorage={model?.secureStorage ?? 'unavailable'} disabled={disabled}
+        placeholder="sk-ant-…" mask="sk-ant-" onSave={apiKey => actions.setApiKey(apiKey)} onClear={() => actions.clearApiKey()} />
 
       <div className="test-row">
         <button className="btn btn-pill" onClick={() => void actions.testModel()} disabled={disabled || !configured || test.state === 'running'} data-action="test-connection">
-          {test.state === 'running' ? <><IconRetry size={13} className="spinner" /> Testing…</> : 'Test connection'}
+          {test.state === 'running' ? <><IconRetry size={13} className="spinner" /> {t('test.testing')}</> : t('test.button')}
         </button>
-        <span className="muted small">Sends one tiny request (1 output token) to verify the key and model.</span>
+        <span className="muted small">{t('test.hint')}</span>
       </div>
-      {test.state === 'done' && <TestResult result={test.result} />}
-      {test.state === 'failed' && (
-        <div className="test-result tone-result-danger" role="status" data-test-status="failed">
-          <span className="test-result-icon"><IconX size={14} /></span>
-          <span className="test-result-body"><strong>Test could not run</strong><span className="mono">{test.code}</span></span>
-        </div>
-      )}
+      {test.state === 'done' && <TestResult status={test.result.status} provider="anthropic" httpStatus={test.result.httpStatus} latencyMs={test.result.latencyMs}
+        model={MODEL_INFO[test.result.model].name} />}
+      {test.state === 'failed' && <TestFailed code={test.code} />}
 
-      <div className="settings-note"><IconShield size={14} /> <span>The key is encrypted by the operating system before it is stored and is used only by the local
-        control plane for requests to Anthropic. The agent worker never receives it. Agent execution is not enabled in this build yet.</span></div>
-    </div>
+      <div className="settings-note"><IconShield size={14} /> <span>{t('key.note', { provider: 'Anthropic' })}</span></div>
+    </>
   );
 }

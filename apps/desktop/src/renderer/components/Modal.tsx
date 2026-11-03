@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { IconX } from './Icons';
+import { useT } from '../locale';
 
 /** Matches the CSS exit animation (.modal-backdrop[data-state="closing"]); reduced motion closes at once. */
 const EXIT_MS = 200;
@@ -22,6 +23,7 @@ export function Modal({ title, onClose, children, width = 560, footer, className
   const latest = useRef(onClose);
   const escape = useRef(onEscape);
   useEffect(() => { latest.current = onClose; escape.current = onEscape; }, [onClose, onEscape]);
+  const t = useT();
   const requestClose = useCallback(() => setClosing(true), []);
   useEffect(() => {
     if (!closing) return;
@@ -59,7 +61,7 @@ export function Modal({ title, onClose, children, width = 560, footer, className
           {!hideHeader && (
             <header className="modal-head">
               <h2>{title}</h2>
-              <button className="icon-btn" onClick={requestClose} aria-label="Close"><IconX size={16} /></button>
+              <button className="icon-btn" onClick={requestClose} aria-label={t('common.close')}><IconX size={16} /></button>
             </header>
           )}
           <div className="modal-body">{children}</div>
@@ -71,12 +73,12 @@ export function Modal({ title, onClose, children, width = 560, footer, className
 }
 
 export type Scope = 'global' | 'device';
-const SCOPE_LABEL: Record<Scope, string> = { global: 'Default for all chats', device: 'This app' };
 export function Row({ label, hint, children, scope, id }: { label: string; hint?: ReactNode; children: ReactNode; scope?: Scope; id?: string }) {
+  const t = useT();
   return (
     <div className="setting-row" id={id}>
       <div className="setting-text">
-        <div className="setting-label">{label}{scope && <span className={`scope-tag scope-${scope}`}>{SCOPE_LABEL[scope]}</span>}</div>
+        <div className="setting-label">{label}{scope && <span className={`scope-tag scope-${scope}`}>{t(scope === 'global' ? 'scope.global' : 'scope.device')}</span>}</div>
         {hint && <div className="setting-hint">{hint}</div>}
       </div>
       <div className="setting-control">{children}</div>

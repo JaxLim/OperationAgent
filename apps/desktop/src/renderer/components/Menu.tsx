@@ -32,8 +32,10 @@ export function Popover({ label, role = 'menu', placement = 'bottom-start', clas
     // Fit the panel to the room between its trigger and the window edge; long lists scroll inside it.
     const box = anchor.current?.getBoundingClientRect();
     if (root && box) root.style.maxHeight = `${Math.max(120, (placement.startsWith('top') ? box.top : window.innerHeight - box.bottom) - 16)}px`;
-    const first = root?.querySelector<HTMLElement>('[aria-checked="true"]') ?? root?.querySelector<HTMLElement>(`${ITEMS}, input, button`);
+    const first = root?.querySelector<HTMLElement>('[data-autofocus]') ?? root?.querySelector<HTMLElement>('[aria-checked="true"]')
+      ?? root?.querySelector<HTMLElement>(`${ITEMS}, input, button`);
     first?.focus();
+    root?.querySelector<HTMLElement>('[aria-checked="true"]')?.scrollIntoView({ block: 'nearest' });
     const outside = (event: MouseEvent): void => { if (!anchor.current?.contains(event.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', outside);
     return () => document.removeEventListener('mousedown', outside);

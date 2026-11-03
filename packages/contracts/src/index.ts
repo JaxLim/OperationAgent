@@ -7,5 +7,7 @@ export * from './api/index.js';
 export * from './api/workbench.js';
 export * from './api/tasks.js';
 export * from './api/model.js';
+export * from './api/providers.js';
+export * from './api/agents.js';
 export * from './events/tool-output.js';
 export * from './events/task.js';

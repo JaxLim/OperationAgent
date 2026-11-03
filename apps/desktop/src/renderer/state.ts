@@ -1,7 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import { catchUpTaskEvents } from '@operation-agent/contracts';
-import type { ClaudeModel, ControlOverview, ControlRun, DesktopApi, DesktopStatus, ModelSettingsView, ModelTestResult, Project, TaskEvent, TaskSnapshot, TaskState,
+import type { Agent, AgentSave, ClaudeModel, ControlOverview, ControlRun, CredentialSlot, DesktopApi, DesktopStatus, LinkedProvider, McpServer, McpServerSave,
+  ModelSettingsView, ModelTestResult, Project, ProviderModelList, ProviderOverviewView, ProviderTestResult, TaskEvent, TaskSnapshot, TaskState,
   WorkbenchSettings } from '@operation-agent/contracts';
+import { resolveLocale, translate } from './i18n';
+import type { MessageKey, Vars } from './i18n';
 
 declare global { interface Window { readonly operationAgent: DesktopApi } }
 
@@ -42,12 +45,17 @@ export interface AppState {
   /** Model choice and credential status as Express reports them; never key material. */
   model: ModelSettingsView | null;
   modelTest: { state: 'idle' | 'running' } | { state: 'done'; result: ModelTestResult } | { state: 'failed'; code: string };
+  /** Linked providers and web-search keys as Express reports them: model choice and "configured", never key material. */
+  providers: ProviderOverviewView | null;
+  /** Stored agent profiles and MCP server definitions; null until first loaded. */
+  agents: Agent[] | null;
+  mcpServers: McpServer[] | null;
   saveStatus: SaveStatus;
 }
 
 let state: AppState = { connection: 'connecting', desktop: null, overview: null, settings: null, projects: [], runs: [],
   submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' },
-  saveStatus: { state: 'idle' } };
+  providers: null, agents: null, mcpServers: null, saveStatus: { state: 'idle' } };
 const listeners = new Set<() => void>();
 function set(next: Partial<AppState>): void { state = { ...state, ...next }; for (const listener of listeners) listener(); }
 export const store = {
@@ -64,6 +72,10 @@ export function errorCode(error: unknown): string {
   const match = error instanceof Error ? /([A-Z][A-Z_]{3,})\s*$/.exec(error.message) : null;
   return match?.[1] ?? 'CONTROL_PLANE_REQUEST_FAILED';
 }
+/** Translates outside React (notices) in the language the settings currently ask for. */
+export function tr(key: MessageKey, vars?: Vars): string {
+  return translate(resolveLocale(state.settings?.language ?? 'system', state.desktop?.app.locale), key, vars);
+}
 export function composePrompt(prompt: string, goal: string | null): string { return goal ? `${prompt}\n\nGoal: ${goal}` : prompt; }
 let noticeId = 0;
 export function notify(tone: Notice['tone'], text: string): void {
@@ -73,15 +85,15 @@ export function notify(tone: Notice['tone'], text: string): void {
 }
 
 async function loadDomain(): Promise<void> {
-  const [settings, projects, runs, overview, model] = await Promise.all([api().getSettings(), api().listProjects(), api().listRuns(), api().getOverview(),
-    api().getModelSettings()]);
+  const [settings, projects, runs, overview, model, providers] = await Promise.all([api().getSettings(), api().listProjects(), api().listRuns(),
+    api().getOverview(), api().getModelSettings(), api().getProviders()]);
   let active = settings;
   // Keep the remembered project valid; otherwise fall back to the first registered one.
   if (!projects.projects.some(project => project.id === settings.activeProjectId)) {
     const fallback = projects.projects[0]?.id ?? null;
     if (fallback !== settings.activeProjectId) active = await api().saveSettings({ ...settings, activeProjectId: fallback });
   }
-  set({ settings: active, projects: projects.projects, runs: runs.runs, overview, model, loaded: true });
+  set({ settings: active, projects: projects.projects, runs: runs.runs, overview, model, providers, loaded: true });
 }
 
 const EMPTY_VIEW: TaskView = { events: [], appliedSeq: 0, replayed: null, sync: 'syncing', error: null, syncedAt: 0 };
@@ -169,7 +181,7 @@ export const actions = {
   },
   async retry(): Promise<void> {
     set({ connection: 'restarting' });
-    try { set({ desktop: await api().retryControlPlane() }); } catch { notify('danger', 'Restart failed. The control plane is still unavailable.'); }
+    try { set({ desktop: await api().retryControlPlane() }); } catch { notify('danger', tr('notice.restartFailed')); }
     await poll();
   },
   async saveSettings(patch: Partial<WorkbenchSettings>): Promise<void> {
@@ -179,7 +191,7 @@ export const actions = {
     try { set({ settings: await api().saveSettings(next), saveStatus: { state: 'saved' } }); }
     catch (error) {
       const code = errorCode(error);
-      set({ settings: previous, saveStatus: { state: 'failed', code } }); notify('danger', `Settings were not saved (${code}).`);
+      set({ settings: previous, saveStatus: { state: 'failed', code } }); notify('danger', tr('notice.settingsNotSaved', { code }));
     }
   },
   resetSaveStatus(): void { if (state.saveStatus.state !== 'saving') set({ saveStatus: { state: 'idle' } }); },
@@ -190,10 +202,10 @@ export const actions = {
       if (result.status === 'cancelled') return;
       set({ projects: (await api().listProjects()).projects });
       await actions.saveSettings({ activeProjectId: result.project.id });
-      notify('ok', `Added ${result.project.name}. Only the folder path is stored; nothing inside it is read.`);
+      notify('ok', tr('notice.projectAdded', { name: result.project.name }));
     } catch (error) {
       const code = errorCode(error);
-      notify('danger', code === 'RECORD_CONFLICT' ? 'That folder is already registered.' : code === 'LIMIT_EXCEEDED' ? 'Project limit reached (50).' : `Could not add the project (${code}).`);
+      notify('danger', code === 'RECORD_CONFLICT' ? tr('notice.folderRegistered') : code === 'LIMIT_EXCEEDED' ? tr('notice.projectLimit') : tr('notice.projectNotAdded', { code }));
     }
   },
   async removeProject(id: string): Promise<void> {
@@ -202,7 +214,7 @@ export const actions = {
       set({ projects: list.projects, submissions: state.submissions.filter(item => item.projectId !== id) });
       set({ settings: await api().getSettings() });
       if (state.settings && !state.settings.activeProjectId && list.projects[0]) await actions.selectProject(list.projects[0].id);
-    } catch (error) { notify('danger', `Could not remove the project (${errorCode(error)}).`); }
+    } catch (error) { notify('danger', tr('notice.projectNotRemoved', { code: errorCode(error) })); }
   },
   /** A goal travels inside the prompt text the control plane receives; it is kept apart here only to display it. */
   async submitTask(projectId: string, prompt: string, goal: string | null = null): Promise<void> {
@@ -223,7 +235,7 @@ export const actions = {
     try { set({ model: await api().saveModelChoice({ model }), saveStatus: { state: 'saved' } }); }
     catch (error) {
       const code = errorCode(error);
-      set({ model: previous, saveStatus: { state: 'failed', code } }); notify('danger', `Model was not saved (${code}).`);
+      set({ model: previous, saveStatus: { state: 'failed', code } }); notify('danger', tr('notice.modelNotSaved', { code }));
     }
   },
   /**
@@ -241,8 +253,8 @@ export const actions = {
   },
   async clearApiKey(): Promise<void> {
     modelRevision++; set({ modelTest: { state: 'idle' } });
-    try { set({ model: await api().clearApiKey(), modelTest: { state: 'idle' } }); notify('ok', 'API key removed from this device.'); }
-    catch (error) { notify('danger', `The key was not removed (${errorCode(error)}).`); }
+    try { set({ model: await api().clearApiKey(), modelTest: { state: 'idle' } }); notify('ok', tr('notice.keyRemoved')); }
+    catch (error) { notify('danger', tr('notice.keyNotRemoved', { code: errorCode(error) })); }
   },
   async testModel(): Promise<void> {
     if (state.modelTest.state === 'running') return;
@@ -253,6 +265,49 @@ export const actions = {
     catch (error) { next = { state: 'failed', code: errorCode(error) }; }
     // Discard a result for a model or key that changed while the test ran.
     if (revision === modelRevision) set({ modelTest: next });
+  },
+  async refreshProviders(): Promise<void> {
+    try { set({ providers: await api().getProviders() }); } catch { /* The status banner reports availability. */ }
+  },
+  /** Like setApiKey: the key crosses once and is not kept; a failure returns its fixed code. */
+  async setProviderKey(provider: CredentialSlot, apiKey: string): Promise<string | null> {
+    try { set({ providers: await api().setProviderKey({ provider, apiKey }) }); return null; }
+    catch (error) { await actions.refreshProviders(); return errorCode(error); }
+  },
+  async clearProviderKey(provider: CredentialSlot): Promise<void> {
+    try { set({ providers: await api().clearProviderKey({ provider }) }); notify('ok', tr('notice.keyRemoved')); }
+    catch (error) { notify('danger', tr('notice.keyNotRemoved', { code: errorCode(error) })); }
+  },
+  async saveProviderModel(provider: LinkedProvider, model: string): Promise<void> {
+    set({ saveStatus: { state: 'saving' } });
+    try { set({ providers: await api().saveProviderModel({ provider, model }), saveStatus: { state: 'saved' } }); }
+    catch (error) {
+      const code = errorCode(error);
+      set({ saveStatus: { state: 'failed', code } }); notify('danger', tr('notice.modelNotSaved', { code }));
+    }
+  },
+  /** Results stay with the caller: they describe one provider at one moment and are not shared state. */
+  testProvider: (provider: LinkedProvider): Promise<ProviderTestResult> => api().testProvider({ provider }),
+  listProviderModels: (provider: LinkedProvider): Promise<ProviderModelList> => api().listProviderModels({ provider }),
+  async refreshAgents(): Promise<void> {
+    try { set({ agents: (await api().listAgents()).agents }); } catch { /* The status banner reports availability. */ }
+  },
+  async saveAgent(input: AgentSave): Promise<string | null> {
+    try { set({ agents: (await api().saveAgent(input)).agents }); return null; } catch (error) { return errorCode(error); }
+  },
+  async removeAgent(id: string): Promise<void> {
+    try { set({ agents: (await api().removeAgent({ id })).agents }); notify('ok', tr('notice.removed')); }
+    catch (error) { notify('danger', tr('notice.notRemoved', { code: errorCode(error) })); }
+  },
+  async refreshMcp(): Promise<void> {
+    try { set({ mcpServers: (await api().listMcpServers()).servers }); } catch { /* The status banner reports availability. */ }
+  },
+  async saveMcpServer(input: McpServerSave): Promise<string | null> {
+    try { set({ mcpServers: (await api().saveMcpServer(input)).servers }); return null; } catch (error) { return errorCode(error); }
+  },
+  async removeMcpServer(id: string): Promise<void> {
+    try { set({ mcpServers: (await api().removeMcpServer({ id })).servers }); notify('ok', tr('notice.removed')); }
+    catch (error) { notify('danger', tr('notice.notRemoved', { code: errorCode(error) })); }
   },
   async refreshRuns(): Promise<void> {
     try { set({ runs: (await api().listRuns()).runs, overview: await api().getOverview() }); } catch { /* The status banner reports availability. */ }

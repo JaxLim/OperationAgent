@@ -122,7 +122,7 @@ process.on('message', async message => {
         break;
       case 'model-test': value = await host.window.webContents.executeJavaScript('window.operationAgent.testModelConnection()'); break;
       case 'model-ui':
-        // Drives the real Settings → Model DOM: types a key, saves it, then runs Test connection.
+        // Drives the real Settings → Providers → Anthropic DOM: types a key, saves it, then runs Test connection.
         value = await host.window.webContents.executeJavaScript(`(async () => {
           const key = ${JSON.stringify(message.input.key)};
           const wait = async (check, ms = 15000) => { const end = Date.now() + ms;
@@ -130,7 +130,8 @@ process.on('message', async message => {
             throw new Error('UI_TIMEOUT ' + (document.querySelector('.modal')?.textContent ?? 'no dialog')); };
           await wait(() => document.querySelector('.app[data-loaded="true"]'));
           window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));
-          (await wait(() => document.querySelector('.settings-nav button[data-section="models"]'))).click();
+          (await wait(() => document.querySelector('.settings-nav button[data-section="providers"]'))).click();
+          (await wait(() => document.querySelector('[data-provider="anthropic"]'))).click();
           const input = await wait(() => { const found = document.querySelector('input[aria-label="Anthropic API key"]'); return found && !found.disabled ? found : null; });
           const emptyState = document.querySelector('.key-form')?.dataset.keyState;
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, key);
