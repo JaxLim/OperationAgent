@@ -308,7 +308,7 @@ test('SEC-08 Windows: list_directory is bounded, never follows links, never ente
       assert.ok(paths.includes('src/deep') && paths.includes('src/deep/code.ts'));
       for (const hidden of ['.git/config', '.ssh/id_rsa', 'node_modules/pkg', 'linked/secret.txt']) assert.ok(!paths.includes(hidden), hidden);
       assert.ok(!JSON.stringify(deep).includes(SECRET));
-      assert.deepEqual(await router.listDirectory({ projectId, args: { path: 'src', depth: 2 } }), { status: 'ok', path: 'src', truncated: false,
+      assert.deepEqual(await router.listDirectory({ projectId, args: { path: 'src', depth: 2 } }), { status: 'ok', path: 'src', truncated: false, unlisted: [],
         entries: [{ path: 'src/deep', type: 'directory', size: null }, { path: 'src/deep/code.ts', type: 'file', size: 26 }] });
       const launched = router.adapter.snapshot().launched;
       for (const [path, code] of [['.git', 'SENSITIVE_PATH'], ['x/.ssh', 'SENSITIVE_PATH'], ['..\\outside', 'OUTSIDE_WORKSPACE'],
@@ -328,5 +328,48 @@ test('SEC-08 Windows: list_directory is bounded, never follows links, never ente
       assert.ok(audit.some(entry => entry.decision === 'allowed' && entry.path === 'many' && entry.bytes === READ_FILE_LIMITS.maxEntries));
       assert.ok(audit.some(entry => entry.decision === 'refused' && entry.code === 'SENSITIVE_PATH' && entry.path === '.git'));
       assert.deepEqual(router.adapter.snapshot().activePids, []);
+    });
+  });
+
+test('SEC-08 Windows: list_directory reads a directory only while it is pinned; a swapped subdirectory never leaks names',
+  { skip: !WINDOWS && 'win32-x64 only' }, async t => {
+    await withFixture(async ({ root, outside, store, projectId }) => {
+      const router = createToolRouter({ store, adapter: createReadAdapter({ maxConcurrent: 4 }) });
+      // A directory holding only a junction cannot be pinned, so it is reported as unlisted and never read.
+      mkdirSync(resolve(root, 'onlylinks')); symlinkSync(outside, resolve(root, 'onlylinks', 'away'), 'junction');
+      const linksOnly = await router.listDirectory({ projectId, args: { path: 'onlylinks' } });
+      assert.deepEqual(linksOnly, { status: 'ok', path: 'onlylinks', entries: [], truncated: false, unlisted: ['onlylinks'] });
+      const nested = await router.listDirectory({ projectId, args: { path: '.', depth: 2 } });
+      assert.ok(nested.status === 'ok' && nested.unlisted.includes('onlylinks') && !nested.entries.some(entry => entry.path.startsWith('onlylinks/')));
+      // Outside entries carry a canary in their names; no listing may ever return one.
+      for (let index = 0; index < 5; index++) mkdirSync(resolve(outside, `${SECRET}-${index}`, 'deeper'), { recursive: true });
+      mkdirSync(resolve(root, 'swap', 'inner'), { recursive: true }); writeFileSync(resolve(root, 'swap', 'inner', 'plain.txt'), 'x');
+      let running = true; let swaps = 0;
+      const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+      const retry = async (step: () => void): Promise<void> => {
+        for (;;) { try { step(); return; } catch (error) { if (!(error instanceof Error && 'code' in error && ['EPERM', 'EBUSY', 'EACCES'].includes(String(error.code)))) throw error; await tick(); } }
+      };
+      const swapper = (async () => {
+        while (running) {
+          await retry(() => renameSync(resolve(root, 'swap'), resolve(root, 'swap-real')));
+          symlinkSync(outside, resolve(root, 'swap'), 'junction');
+          await tick();
+          await retry(() => rmSync(resolve(root, 'swap')));
+          await retry(() => renameSync(resolve(root, 'swap-real'), resolve(root, 'swap')));
+          swaps++; await tick();
+        }
+      })();
+      const outcomes = new Map<string, number>();
+      for (let round = 0; round < 30; round++) {
+        const results = await Promise.all(Array.from({ length: 4 }, () => router.listDirectory({ projectId, args: { path: '.', depth: 3 } })));
+        for (const result of results) {
+          assert.ok(!JSON.stringify(result).includes(SECRET), 'a name from outside the workspace was listed');
+          const key = result.status === 'ok' ? 'ok' : result.code;
+          outcomes.set(key, (outcomes.get(key) ?? 0) + 1);
+        }
+      }
+      running = false; await swapper;
+      t.diagnostic(`swaps=${swaps} outcomes=${JSON.stringify(Object.fromEntries(outcomes))}`);
+      assert.ok(swaps > 5);
     });
   });

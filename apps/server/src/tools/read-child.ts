@@ -134,51 +134,117 @@ function verifyChain(root: string, rootStats: BigIntStats, segments: readonly st
 }
 
 type Entry = { segments: string[]; type: 'file' | 'directory' | 'link' | 'other'; size: number | null };
+/** A directory to read: its absolute path, its segments below the listed directory, and every component from the root down. */
+type Pending = { path: string; segments: string[]; chain: { path: string; identity: Identity }[] };
+
+const MAX_PIN_CANDIDATES = 16;
+const MAX_UNLISTED = 100;
+const byName = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
+
+function readNames(path: string): string[] {
+  try { return readdirSync(path).sort(byName); }
+  catch (error) {
+    const code = errorCode(error);
+    if (code === 'EACCES' || code === 'EPERM' || code === 'ERR_ACCESS_DENIED') throw new Refused('ACCESS_DENIED');
+    throw new Refused('CHANGED_DURING_READ');
+  }
+}
+
+/** Root and every component down to the directory still have their recorded identities, and none has become a link. */
+function verifyPending(root: string, rootStats: BigIntStats, directory: Pending): void {
+  const again = stat(root);
+  if (!again || again.isSymbolicLink() || !equal(identityOf(again), identityOf(rootStats))) throw new Refused('CHANGED_DURING_READ');
+  for (const component of directory.chain) {
+    const now = stat(component.path);
+    if (!now || now.isSymbolicLink() || !now.isDirectory() || !equal(identityOf(now), component.identity)) throw new Refused('CHANGED_DURING_READ');
+  }
+}
+
+/**
+ * Pins a directory: on Windows a directory cannot be renamed, and neither can any of its ancestors, while a handle is
+ * open on anything inside it. One non-link entry is opened and its handle's identity checked against the path, so once
+ * the chain is re-verified the directory and everything above it are fixed for as long as the handle stays open.
+ */
+function pin(directory: Pending): { fd: number; path: string; identity: Identity } | 'empty' | null {
+  const names = readNames(directory.path);
+  if (!names.length) return 'empty';
+  const candidates: { name: string; directory: boolean }[] = [];
+  for (const name of names) {
+    if (!validSegment(name)) continue;
+    const stats = stat(join(directory.path, name));
+    if (stats && !stats.isSymbolicLink() && (stats.isDirectory() || stats.isFile())) candidates.push({ name, directory: stats.isDirectory() });
+    if (candidates.length >= MAX_PIN_CANDIDATES * 4) break;
+  }
+  // Directories first: opening one never blocks on another process's file lock.
+  candidates.sort((left, right) => Number(right.directory) - Number(left.directory));
+  for (const candidate of candidates.slice(0, MAX_PIN_CANDIDATES)) {
+    const path = join(directory.path, candidate.name);
+    let fd: number;
+    try { fd = openSync(path, 'r'); } catch { continue; }
+    try {
+      const opened = identityOf(fstatSync(fd, { bigint: true }));
+      const now = stat(path);
+      if (now && !now.isSymbolicLink() && equal(identityOf(now), opened)) return { fd, path, identity: opened };
+    } catch { /* fall through to close */ }
+    closeSync(fd);
+  }
+  return null;
+}
 
 /**
  * Breadth-first, names sorted, at most `depth` levels and `maxEntries` entries. Links are reported and never followed;
- * `.git`, `node_modules` and the sensitive directories Express names are reported but never entered. Each directory's
- * identity is checked immediately before and after it is read, so a directory swapped for a junction mid-listing aborts.
+ * `.git`, `node_modules` and the sensitive directories Express names are reported but never entered.
+ *
+ * Every directory is read only while pinned (see `pin`) and after its whole chain from the root has been re-verified,
+ * then verified again before its entries are accepted. A directory swapped for a junction before it is pinned fails
+ * verification; after it is pinned it cannot be swapped. A non-empty directory that cannot be pinned (only links or
+ * locked entries) is never read: it is reported as unlisted.
  */
 function list(root: string, request: Extract<Request, { op: 'list' }>): void {
   const rootStats = stat(root);
   if (!rootStats || rootStats.isSymbolicLink() || !rootStats.isDirectory()) throw new Refused('WORKSPACE_UNAVAILABLE');
   const checked = request.segments.length ? walk(root, request.segments, 'directory') : { path: root, chain: [] as Identity[] };
-  const base = request.segments.length ? stat(checked.path) : rootStats;
-  if (!base || base.isSymbolicLink()) throw new Refused('CHANGED_DURING_READ');
+  let prefix = root;
+  const baseChain = request.segments.map((segment, index) => { prefix = join(prefix, segment); return { path: prefix, identity: checked.chain[index]! }; });
   const skip = new Set(['.git', 'node_modules', ...request.skip]);
   const entries: Entry[] = [];
+  const unlisted: string[][] = [];
   let truncated = false;
-  let level: { segments: string[]; path: string; identity: Identity }[] = [{ segments: [], path: checked.path, identity: identityOf(base) }];
+  let level: Pending[] = [{ path: checked.path, segments: [], chain: baseChain }];
   for (let depth = 1; depth <= request.depth && level.length && !truncated; depth++) {
-    const next: typeof level = [];
+    const next: Pending[] = [];
     for (const directory of level) {
-      let names: string[];
-      try { names = readdirSync(directory.path).sort((left, right) => (left < right ? -1 : left > right ? 1 : 0)); }
-      catch (error) {
-        const code = errorCode(error);
-        if (code === 'EACCES' || code === 'EPERM' || code === 'ERR_ACCESS_DENIED') throw new Refused('ACCESS_DENIED');
-        throw new Refused('CHANGED_DURING_READ');
-      }
-      const after = stat(directory.path);
-      if (!after || after.isSymbolicLink() || !equal(identityOf(after), directory.identity)) throw new Refused('CHANGED_DURING_READ');
-      for (const name of names) {
-        if (entries.length >= request.maxEntries) { truncated = true; break; }
-        if (!validSegment(name)) continue;
-        const path = join(directory.path, name);
-        const stats = stat(path);
-        if (!stats) continue;
-        const segments = [...directory.segments, name];
-        const type = stats.isSymbolicLink() ? 'link' : stats.isDirectory() ? 'directory' : stats.isFile() ? 'file' : 'other';
-        entries.push({ segments, type, size: type === 'file' ? Number(stats.size) : null });
-        if (type === 'directory' && depth < request.depth && !skip.has(name.toLowerCase())) next.push({ segments, path, identity: identityOf(stats) });
-      }
+      const pinned = pin(directory);
+      if (pinned === 'empty') continue;
+      if (pinned === null) { if (unlisted.length < MAX_UNLISTED) unlisted.push(directory.segments); continue; }
+      try {
+        verifyPending(root, rootStats, directory);
+        const names = readNames(directory.path);
+        const found: Entry[] = []; const children: Pending[] = [];
+        for (const name of names) {
+          if (entries.length + found.length >= request.maxEntries) { truncated = true; break; }
+          if (!validSegment(name)) continue;
+          const path = join(directory.path, name);
+          const stats = stat(path);
+          if (!stats) continue;
+          const segments = [...directory.segments, name];
+          const type = stats.isSymbolicLink() ? 'link' : stats.isDirectory() ? 'directory' : stats.isFile() ? 'file' : 'other';
+          found.push({ segments, type, size: type === 'file' ? Number(stats.size) : null });
+          if (type === 'directory' && depth < request.depth && !skip.has(name.toLowerCase())) {
+            children.push({ path, segments, chain: [...directory.chain, { path, identity: identityOf(stats) }] });
+          }
+        }
+        // Accept this directory's entries only if the pin and the whole chain are still exactly as verified.
+        const still = stat(pinned.path);
+        if (!still || still.isSymbolicLink() || !equal(identityOf(still), pinned.identity)) throw new Refused('CHANGED_DURING_READ');
+        verifyPending(root, rootStats, directory);
+        entries.push(...found); next.push(...children);
+      } finally { closeSync(pinned.fd); }
       if (truncated) break;
     }
     level = next;
   }
-  if (request.segments.length) verifyChain(root, rootStats, request.segments, checked.chain, 'directory');
-  reply({ status: 'listed', entries, truncated });
+  reply({ status: 'listed', entries, truncated, unlisted });
 }
 
 function run(root: string, raw: string): void {

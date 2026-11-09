@@ -68,7 +68,9 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
         if (joined.length > READ_FILE_LIMITS.maxPathChars) continue;
         entries.push({ path: joined, type: entry.type, size: entry.size });
       }
-      return finish({ status: 'ok', path, entries, truncated: outcome.truncated });
+      const unlisted = outcome.unlisted.map(segments => [...requested.segments, ...segments].join('/') || '.')
+        .filter(item => item.length <= READ_FILE_LIMITS.maxPathChars);
+      return finish({ status: 'ok', path, entries, truncated: outcome.truncated, unlisted });
     },
     async readFile(call) {
       const started = Date.now();

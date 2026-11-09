@@ -17,7 +17,7 @@ const MAX_STDERR_BYTES = 8_192;
 type Rejected = { status: 'refused'; code: ReadRefusalCode } | { status: 'failed'; code: ReadFailureCode; retryable: boolean };
 export type AdapterOutcome = { status: 'ok'; content: Buffer; size: number; truncated: boolean } | Rejected;
 export interface ListedEntry { segments: string[]; type: 'file' | 'directory' | 'link' | 'other'; size: number | null }
-export type ListOutcome = { status: 'listed'; entries: ListedEntry[]; truncated: boolean } | Rejected;
+export type ListOutcome = { status: 'listed'; entries: ListedEntry[]; truncated: boolean; unlisted: string[][] } | Rejected;
 export interface ListRequest { depth: number; maxEntries: number; skip: readonly string[] }
 
 export interface ReadAdapterOptions {
@@ -154,8 +154,8 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
       return guarded(() => launch<ListOutcome>(root, { op: 'list', segments, depth: request.depth, maxEntries: request.maxEntries,
         skip: [...request.skip] }, value => {
         if (value.status !== 'listed' || value.entries.length > request.maxEntries ||
-          value.entries.some(entry => entry.segments.length > request.depth)) return MALFORMED;
-        return { status: 'listed', entries: value.entries, truncated: value.truncated };
+          value.entries.some(entry => entry.segments.length > request.depth) || value.unlisted.some(segments => segments.length >= request.depth)) return MALFORMED;
+        return { status: 'listed', entries: value.entries, truncated: value.truncated, unlisted: value.unlisted };
       }));
     },
     snapshot: () => ({ available, active, queued: queue.length, launched, killed, activePids: [...pids] }),

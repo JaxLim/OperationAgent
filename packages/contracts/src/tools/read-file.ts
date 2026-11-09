@@ -66,7 +66,9 @@ export const DirectoryEntrySchema = z.strictObject({
 export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>;
 export const ListDirectoryResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('ok'), path: z.string().max(READ_FILE_LIMITS.maxPathChars),
-    entries: z.array(DirectoryEntrySchema).max(READ_FILE_LIMITS.maxEntries), truncated: z.boolean() }),
+    entries: z.array(DirectoryEntrySchema).max(READ_FILE_LIMITS.maxEntries), truncated: z.boolean(),
+    /** Directories whose contents were not read because they could not be pinned (they hold only links or locked entries). */
+    unlisted: z.array(z.string().max(READ_FILE_LIMITS.maxPathChars)).max(100) }),
   z.strictObject({ status: z.literal('refused'), code: ReadRefusalCodeSchema }),
   z.strictObject({ status: z.literal('failed'), code: ReadFailureCodeSchema, retryable: z.boolean() }),
 ]);
@@ -92,7 +94,9 @@ export const ReadChildReplySchema = z.discriminatedUnion('status', [
     // Child-relative segments of each entry below the listed directory; Express rebuilds and re-checks the paths.
     entries: z.array(z.strictObject({ segments: SegmentsSchema.min(1), type: DirectoryEntrySchema.shape.type,
       size: DirectoryEntrySchema.shape.size })).max(READ_FILE_LIMITS.maxEntries),
-    truncated: z.boolean() }),
+    truncated: z.boolean(),
+    // Directories (child-relative segments; empty is the listed directory itself) that could not be pinned and were not read.
+    unlisted: z.array(SegmentsSchema).max(100) }),
   z.strictObject({ v: z.literal(READ_CHILD_PROTOCOL), status: z.literal('refused'), code: ReadRefusalCodeSchema }),
 ]);
 export type ReadChildReply = z.infer<typeof ReadChildReplySchema>;
