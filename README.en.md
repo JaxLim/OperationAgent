@@ -49,7 +49,7 @@ Anything not implemented is labelled as unavailable in the interface; the app ne
 | P1 | Desktop app, control plane, persistence, worker launcher, installer and installed-app smoke test | Done (Windows x64, see the [exit report](docs/P1-EXIT-REPORT.md)) |
 | P2.0–P2.3 | Task contracts and state machine, task event store, snapshots and cursor catch-up, workbench task views | Implemented; the CI evidence for the overall P2 exit is not produced yet |
 | M1 | SEC-W01: the Windows production worker-isolation gate | Done (passes on Windows x64) |
-| M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop | In progress: credentials, model gateway, multi-provider settings, agent and MCP configuration, and interface languages are merged; Read Adapter, SEC-08 tests, streaming model turns, list_directory, the agent loop and the task runner implemented (Windows x64); the production worker runtime and live task view are not wired in yet |
+| M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop | In progress: credentials, model gateway, multi-provider settings, agent and MCP configuration, and interface languages are merged; Read Adapter, SEC-08 tests, streaming model turns, list_directory, the agent loop, the task runner and the isolated production worker runtime implemented (Windows x64, installed app); the live conversation view is not wired in yet |
 | M3 | File writes and shell: sandbox, approvals, command normalization, stop semantics | Not started |
 | M4 | Productization: MCP, signing and updates | Not started |
 

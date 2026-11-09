@@ -17,8 +17,8 @@ export default [
       setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly', TextDecoder: 'readonly' } },
   },
   {
-    // The trusted fixture bootstrap is the only Worker-side code with Node globals (ADR-WIN-001 narrow exception).
-    files: ['apps/agent-worker/bootstrap/fixture-bootstrap.mjs'],
+    // The trusted fixture and agent bootstraps are the only Worker-side code with Node globals (ADR-WIN-001 narrow exception).
+    files: ['apps/agent-worker/bootstrap/fixture-bootstrap.mjs', 'apps/agent-worker/bootstrap/agent-bootstrap.mjs'],
     languageOptions: { globals: { Buffer: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', process: 'readonly', URL: 'readonly' } },
   },
   {

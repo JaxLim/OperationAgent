@@ -591,3 +591,19 @@ PR #13 评审修正（同日）：
 本地验证（Windows x64）：
 - `pnpm check:engineering` 九项全部退出 0，单元测试 **147/147**。新增 `tests/m2/agent-loop.test.ts`（5 项，同一进程内的真实 Worker 运行时 ↔ 真实 Express 会话，经内存双工通道传输 OWIP 帧）：完整只读任务（列目录、读文件、敏感文件被拒、任务未授予的工具不执行、Express 构建全部工具结果并按序配对、事件与消息落盘、数据库中没有文件内容和密钥）；Worker 伪造的任务/轮次/工具调用全部被拒或跳过；停止中止流式回合并确认为 STOPPED；Worker 丢失后任务 INTERRUPTED 且不再接受新任务；未提供 `agent` 能力的运行时握手失败。`tests/m2/agent-store.test.ts`（3 项）：迁移 009 的元数据事件、重建后的触发器、消息只追加与上限、实时增量的游标/缺口/保留。
 - 未验证：生产 AppContainer 中运行 Agent 运行时（下一切片，CI 一次性 runner）；安装包烟测（期望迁移 1–9）；真实 api.anthropic.com。
+
+## M2 第六切片：生产 Agent Worker 运行时与隔离启动（2026-11-09）
+
+授权：同上。本切片让**安装后的应用**能在 Windows x64 上真正启动隔离的 Agent Worker 并执行任务；对话界面（实时流式文本、停止按钮、消息视图）在下一切片。
+
+- **原生启动器**：`parent.node` 新增 `launchWorker`，与 `launchFixture` 共用同一条公开 API 隔离路径（AppContainer + Job + HANDLE_LIST、恢复执行前核验令牌基线、单一继承管道、确认清理并删除 profile、恢复运行时 ACL）。唯一区别：不要求一次性 runner（P1 fixture 仍要求）、profile 名称前缀为 `OperationAgent.Worker.`、运行时文件集不同。运行时目录不完整时在创建 profile 之前即拒绝（`WORKER_RUNTIME_INCOMPLETE`），本机测试据此验证而不创建 profile。
+- **运行时打包**：`stage-sidecar` 在 Windows x64 上生成独立的最小 Worker 目录（独立的锁定 `node.exe`、打包后的受信 bootstrap、子端 `channel.node`、`package.json`，恰好四个文件），并把 `parent.node` 放到 Express 加载它的位置；全部写入阶段清单的哈希。Main 启动时逐文件复核哈希，Worker 目录要么完整（恰好四个文件）要么不存在。`pnpm package` 与集成测试在打包前先构建原生组件。
+- **ADR-WIN-001 §3**：只有已打包的应用会把 Worker 运行时交给 Express（`launchWorkers: app.isPackaged`），开发构建和本机集成测试从不创建 AppContainer profile 或修改 ACL；没有运行时的 Express 不创建 Task Runner，任务启动照旧返回 `WORKER_ISOLATION_UNAVAILABLE`。
+- **Express**：`AgentWorkerSupervisor` 按需（第一次启动任务时）通过原生启动器启动 Worker，会话经 `createAgentSession` 绑定 Task Runner，复用 P1 已验证的 `FixtureWorker` 生命周期（握手、心跳、退出监视、两阶段停止、确认清理；新增可选会话工厂，P1 行为不变）。Worker 退出时其任务转为 INTERRUPTED；清理未确认则此后拒绝一切启动；连续失败受重启预算限制；每次启动使用新的 Worker 身份。Task Runner 先检查廉价前置条件（提示、项目、密钥、忙碌），再按需启动 Worker，不会为必然被拒的请求启动隔离进程。
+- **任务启动路由**：有 Task Runner 时创建并运行任务（201，返回任务快照），否则 503；拒绝原因明确为 `WORKER_ISOLATION_UNAVAILABLE`、`MODEL_NOT_CONFIGURED`、`AGENT_BUSY`。认证请求 ID 同时作为任务创建 ID，重放请求不会创建第二个任务。界面接受后直接打开该任务。
+- **概览如实反映**：`agentReady` 与 Worker 状态来自 supervisor（未暂存运行时 / 清理未确认 / 预算耗尽 / 已关闭，或 idle/starting/ready 与启动次数），不再写死。
+- **一次性 runner 端到端测试** `tests/worker-fixture/agent-runtime.test.mjs`：用生产启动器在真实 AppContainer 中运行生产 Agent 运行时，对本机假 Messages API 执行列目录 + 读文件 + 回答的完整任务，核对 Express 读取的文件内容交给了模型、数据库中无文件内容与密钥、停止后清理确认。结果写入 `integration.json` 的 `agentRuntime`。
+
+本地验证（Windows x64）：
+- `pnpm check:engineering` 九项全部退出 0，单元测试 **150/150**。新增 `tests/m2/agent-worker.test.ts`（3 项，经 `FixtureWorker` 真实生命周期代码、进程内载体代替原生启动）：首个任务按需启动、后续复用、随控制面停止；任务中 Worker 死亡则任务 INTERRUPTED、下一个任务使用新的 Worker；清理未确认后拒绝一切启动。原生接口测试新增 `launchWorker` 参数与运行时完整性在创建 profile 前即拒绝的用例。
+- 生产 AppContainer 中的端到端运行只在一次性 runner 上执行（本机按规定为 BLOCKED）；`build/agent-status.json` 未修改，`agentReady` 的构建记录仍为 false，待 CI 证据提交后另行记录。

@@ -6,7 +6,7 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, Au
   McpServerSaveSchema, MODEL_PROVIDER, ModelChoiceSchema, ProviderKeyInputSchema, ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema,
   ProviderRefSchema, ProviderTestResultSchema, SEARCH_PROVIDERS, ModelSettingsSchema, ModelTestResultSchema, PROTOCOL_VERSION,
   ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
-  TaskStartInputSchema, WorkbenchSettingsSchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
+  TaskStartInputSchema, TaskStartResultSchema, WorkbenchSettingsSchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
 import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
 import { UNAVAILABLE_BRIDGE } from './credentials/bridge.js';
@@ -17,8 +17,13 @@ import { createModelGateway } from './models/gateway.js';
 import type { ModelGateway } from './models/gateway.js';
 import { createProviderGateway } from './models/providers.js';
 import type { ProviderGateway } from './models/providers.js';
+import type { TaskRunner } from './agent/runner.js';
+import type { AgentWorkerSnapshot } from './agent/supervisor.js';
 
-export interface ModelServices { bridge?: CryptoBridge; gateway?: ModelGateway; providerGateway?: ProviderGateway }
+export interface ModelServices { bridge?: CryptoBridge; gateway?: ModelGateway; providerGateway?: ProviderGateway;
+  /** Present only when a qualified Worker runtime exists; without it task starts are refused (ADR-WIN-001 D4). */
+  runner?: TaskRunner;
+  workers?: { snapshot(): AgentWorkerSnapshot } }
 
 export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: () => number, contact: () => void, services: ModelServices = {}): Express {
   const app = express();
@@ -30,6 +35,16 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   const slots = Object.fromEntries(CREDENTIAL_SLOTS.map(slot => [slot, createCredentialService(store.credentialStore(slot), services.bridge ?? UNAVAILABLE_BRIDGE)])) as
     Record<CredentialSlot, CredentialService>;
   const startedAt = new Date();
+  const workerView = () => {
+    const snapshot = services.workers?.snapshot();
+    if (!snapshot) return { state: 'unavailable' as const, error: 'WORKER_ISOLATION_UNAVAILABLE' as const, reason: 'WORKER_RUNTIME_NOT_STAGED' as const,
+      fixtureLaunch: 'disabled-in-release' as const };
+    if (snapshot.state === 'unavailable') return { state: 'unavailable' as const, error: 'WORKER_ISOLATION_UNAVAILABLE' as const,
+      reason: snapshot.lastError === 'CLEANUP_UNCONFIRMED' ? 'CLEANUP_UNCONFIRMED' as const : snapshot.lastError === 'RESTART_BUDGET_EXHAUSTED'
+        ? 'RESTART_BUDGET_EXHAUSTED' as const : 'SHUT_DOWN' as const, fixtureLaunch: 'disabled-in-release' as const };
+    return { state: snapshot.state, launches: snapshot.launches, fixtureLaunch: 'disabled-in-release' as const };
+  };
+  const agentReady = (): boolean => workerView().state !== 'unavailable';
   app.disable('x-powered-by');
   app.disable('etag'); app.set('trust proxy', false);
   const seen = new Map<string, number>();
@@ -102,7 +117,7 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   });
   const health = (_req: unknown, res: Response): void => {
     res.json(ControlHealthSchema.parse({ protocolVersion: PROTOCOL_VERSION, mainRunId: bootstrap.mainRunId,
-      expressRunId: bootstrap.expressRunId, controlPlaneReady: true, agentReady: false,
+      expressRunId: bootstrap.expressRunId, controlPlaneReady: true, agentReady: agentReady(),
       databaseVersion: store.databaseVersion, recoveredRuns: store.recoveredRuns }));
   };
   app.get(CONTROL_ROUTES.health, health);
@@ -136,10 +151,10 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     try {
       const counts = store.counts();
       res.json(ControlOverviewSchema.parse({ protocolVersion: PROTOCOL_VERSION, mainRunId: bootstrap.mainRunId, expressRunId: bootstrap.expressRunId,
-        controlPlaneReady: true, agentReady: false, startedAt: startedAt.toISOString(), uptimeMs: Date.now() - startedAt.getTime(),
+        controlPlaneReady: true, agentReady: agentReady(), startedAt: startedAt.toISOString(), uptimeMs: Date.now() - startedAt.getTime(),
         runtime: { node: process.versions.node, abi: process.versions.modules, sqlite: store.sqliteVersion, platform: process.platform, arch: process.arch },
         database: { version: store.databaseVersion, recoveredRuns: store.recoveredRuns, ...counts },
-        worker: { state: 'unavailable', error: 'WORKER_ISOLATION_UNAVAILABLE', reason: 'AGENT_LOOP_NOT_IMPLEMENTED', fixtureLaunch: 'disabled-in-release' },
+        worker: workerView(),
         tools: { read: 'READ_ADAPTER_UNAVAILABLE', highRisk: 'SANDBOX_UNAVAILABLE' },
         capabilities: { ui: 'unverified', read: 'unavailable', gitRead: 'unavailable', highRisk: 'unavailable', workerIsolation: 'unverified' } }));
     } catch (error) { failure(res, error); }
@@ -304,11 +319,23 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
       res.json(McpServerListSchema.parse({ servers: store.listMcpServers() }));
     } catch (error) { failure(res, error); }
   });
-  // No qualified Worker exists (ADR-WIN-001 D4): validate, then refuse before anything is scheduled or persisted.
+  // Without a Task Runner (no qualified Worker runtime, ADR-WIN-001 D4) a start is refused before anything is scheduled
+  // or persisted. With one, the runner checks every precondition and creates the task only when it can run it. The
+  // authenticated request id doubles as the task-creation id, so a replayed request never creates a second task.
   app.post(CONTROL_ROUTES.taskStart, (req, res) => {
     const input = TaskStartInputSchema.safeParse(req.body);
     if (!input.success) { validationError(res); return; }
-    res.status(503).json({ error: 'WORKER_ISOLATION_UNAVAILABLE' });
+    const runner = services.runner;
+    if (!runner) { res.status(503).json({ error: 'WORKER_ISOLATION_UNAVAILABLE' }); return; }
+    const requestId = String(req.headers['x-oa-request-id']);
+    void runner.start(input.data.projectId, input.data.prompt, requestId).then(task => res.status(201).json(TaskStartResultSchema.parse({ accepted: true, task })),
+      (error: unknown) => {
+        const code = error instanceof Error ? error.message : '';
+        if (code === 'WORKER_ISOLATION_UNAVAILABLE') res.status(503).json({ error: code });
+        else if (code === 'MODEL_NOT_CONFIGURED' || code === 'AGENT_BUSY') res.status(409).json({ error: code });
+        else if (code === 'VALIDATION_ERROR') validationError(res);
+        else failure(res, error);
+      });
   });
   app.use((_req, res) => { res.status(404).json({ error: 'NOT_FOUND' }); });
   const fail: ErrorRequestHandler = (_error, _req, res, next) => { void next; res.status(400).json({ error: 'VALIDATION_ERROR' }); };

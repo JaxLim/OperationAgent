@@ -10,7 +10,9 @@ import { verifyStagedRuntime } from './staged-runtime.js';
 interface Instance { child: ChildProcess; bootstrap: Bootstrap; exited: Promise<void>; ready?: SidecarReady; accepted: boolean }
 /** Serves Crypto Bridge requests arriving on one instance's inherited channel; null means no attributable reply. */
 export type CryptoHandler = (identity: ServiceTreeIdentity, message: unknown) => Promise<CryptoBridgeResponse | null>;
-export interface SupervisorOptions { cryptoHandler?: CryptoHandler; modelEndpoint?: Bootstrap['modelEndpoint'] }
+export interface SupervisorOptions { cryptoHandler?: CryptoHandler; modelEndpoint?: Bootstrap['modelEndpoint'];
+  /** Packaged builds only: hand the verified Worker runtime to Express. Development and test builds never launch a Worker. */
+  launchWorkers?: boolean }
 export class SidecarSupervisor {
   private readonly mainRunId = randomUUID();
   private active: Instance | undefined;
@@ -41,7 +43,8 @@ export class SidecarSupervisor {
     if (!this.wanted || this.active) throw new Error('SERVICE_UNAVAILABLE');
     const bootstrap = BootstrapSchema.parse({ kind: 'bootstrap', protocolVersion: PROTOCOL_VERSION, mainRunId: this.mainRunId,
       expressRunId: randomUUID(), parentPid: process.pid, token: randomBytes(32).toString('hex'), dataDirectory: this.dataDirectory,
-      ...(this.options.modelEndpoint ? { modelEndpoint: this.options.modelEndpoint } : {}) });
+      ...(this.options.modelEndpoint ? { modelEndpoint: this.options.modelEndpoint } : {}),
+      ...(this.options.launchWorkers && runtime.worker && process.platform === 'win32' && process.arch === 'x64' ? { agentRuntime: runtime.worker } : {}) });
     // spawn avoids Electron's fork shim and ELECTRON_RUN_AS_NODE. No PATH, NODE_OPTIONS or user argv are inherited.
     const env: NodeJS.ProcessEnv = {};
     for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'TMPDIR', 'LANG']) if (process.env[key]) env[key] = process.env[key];

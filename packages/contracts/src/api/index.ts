@@ -33,14 +33,17 @@ export type SmokeBatch = z.infer<typeof SmokeBatchSchema>;
 export type SmokeRecord = z.infer<typeof SmokeRecordSchema>;
 export type SmokeRecords = z.infer<typeof SmokeRecordsSchema>;
 export const ControlHealthSchema = z.strictObject({ protocolVersion: z.literal(PROTOCOL_VERSION),
-  ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.literal(false),
+  ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.boolean(),
   databaseVersion: z.literal(9), recoveredRuns: z.number().int().nonnegative() });
 export type ControlHealth = z.infer<typeof ControlHealthSchema>;
 export const BootstrapSchema = z.strictObject({ kind: z.literal('bootstrap'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, token: z.string().regex(/^[a-f0-9]{64}$/),
   dataDirectory: z.string().min(1).max(4096), parentPid: z.number().int().positive(),
   // Absent in production (the fixed Anthropic endpoint applies); tests may point Express at a loopback fake provider.
-  modelEndpoint: ModelEndpointSchema.optional() });
+  modelEndpoint: ModelEndpointSchema.optional(),
+  // The verified isolated agent runtime directory. Main sets it only in a packaged Windows x64 build whose staged Worker
+  // passed the integrity check; without it Express has no Worker to launch and task starts fail closed.
+  agentRuntime: z.string().min(4).max(1024).regex(/^[A-Za-z]:\\\P{Cc}*$/u).optional() });
 export type Bootstrap = z.infer<typeof BootstrapSchema>;
 export const SidecarReadySchema = z.strictObject({ kind: z.literal('ready'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, pid: z.number().int().positive(), parentPid: z.number().int().positive(),

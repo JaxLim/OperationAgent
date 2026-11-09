@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { PROTOCOL_VERSION } from '@operation-agent/contracts';
 import type { FixtureFault, RpcRequest, RpcResponse, WorkerIdentity } from '@operation-agent/contracts';
 import { OWIP_POLICY, RpcSession } from '@operation-agent/worker-transport';
-import type { TransportClock } from '@operation-agent/worker-transport';
+import type { ByteTransport, TransportClock } from '@operation-agent/worker-transport';
 import { launchIsolatedFixture } from '@operation-agent/platform-worker/parent';
 import type { FixtureBaseline, LaunchedFixture } from '@operation-agent/platform-worker/parent';
 import { RestartBudget, SUPERVISION_POLICY, stopInTwoPhases } from '@operation-agent/platform-supervision';
@@ -14,10 +14,15 @@ import type { TwoPhaseReport } from '@operation-agent/platform-supervision';
 export const clock: TransportClock = { schedule(milliseconds, callback) { const timer = setTimeout(callback, milliseconds); return () => clearTimeout(timer); } };
 const READ_BYTES = 65_536; const READ_DEADLINE_MS = 30_000; const WAIT_SLICE_MS = 30_000;
 
+/** Builds the Express end of the session on the launched carrier; the default is the P1 health/shutdown session. */
+export type SessionFactory = (transport: ByteTransport, identity: WorkerIdentity, onClose: (error: Error) => void) =>
+  { session: RpcSession; handshake(challenge: string): Promise<void> };
 export interface FixtureLaunchOptions {
   target: string; runtimeDirectory: string; expressRunId: string;
   /** Defaults to the native public-API launcher; in-process transport tests substitute a pipe pair. */
   launcher?: typeof launchIsolatedFixture;
+  /** The agent runtime binds its session to the Task Runner; omitted, the P1 fixture session is used. */
+  session?: SessionFactory;
 }
 export type FixtureState = 'starting' | 'ready' | 'stopping' | 'stopped' | 'failed';
 export interface FixtureExit { readonly reason: string; readonly exitCode: number | null; readonly cleanup: 'confirmed' | 'unconfirmed';
@@ -37,19 +42,19 @@ export class FixtureWorker {
   /** Settles once the process exit and native cleanup were observed or declared unconfirmed. */
   readonly closed: Promise<FixtureExit> = new Promise(resolve => { this.finish = resolve; });
   private session: RpcSession | undefined;
-  private constructor(private readonly native: LaunchedFixture, expressRunId: string) {
+  private constructor(private readonly native: LaunchedFixture, expressRunId: string, private readonly factory?: SessionFactory) {
     this.identity = { expressRunId, workerRunId: randomUUID() };
   }
   get baseline(): FixtureBaseline { return this.native.baseline; }
 
   static async launch(options: FixtureLaunchOptions): Promise<FixtureWorker> {
     const native = await (options.launcher ?? launchIsolatedFixture)(options.target, options.runtimeDirectory);
-    const worker = new FixtureWorker(native, options.expressRunId);
+    const worker = new FixtureWorker(native, options.expressRunId, options.session);
     return worker.start();
   }
 
   private async start(): Promise<FixtureWorker> {
-    const session = new RpcSession({ identity: this.identity, role: 'express', clock, transport: {
+    const transport: ByteTransport = {
       write: async frame => {
         const count = await this.native.write(Buffer.from(frame.buffer, frame.byteOffset, frame.byteLength), OWIP_POLICY.requestMs);
         if (count !== frame.length) throw new Error('OWIP_SHORT_WRITE');
@@ -57,12 +62,20 @@ export class FixtureWorker {
       // Session teardown must not kill the Worker: during a graceful stop it is already exiting by itself.
       // Termination happens only through fail() or the forced phase of stop(), both of which call terminate().
       close: () => {},
-    }, onClose: error => { if (this.state !== 'stopping' && this.state !== 'stopped') this.fail(error.message); } });
+    };
+    const onClose = (error: Error): void => { if (this.state !== 'stopping' && this.state !== 'stopped') this.fail(error.message); };
+    let session: RpcSession;
+    let handshake: (challenge: string) => Promise<unknown>;
+    if (this.factory) ({ session, handshake } = this.factory(transport, this.identity, onClose));
+    else {
+      session = new RpcSession({ identity: this.identity, role: 'express', clock, transport, onClose });
+      handshake = challenge => session.startHandshake(challenge, randomUUID());
+    }
     this.session = session;
     void this.readLoop(session);
     void this.watchExit();
     try {
-      await session.startHandshake(randomBytes(32).toString('hex'), randomUUID());
+      await handshake(randomBytes(32).toString('hex'));
       if (this.state !== 'starting') throw new Error(this.failure ?? 'RPC_CLOSED');
       session.startHeartbeat(randomUUID);
       this.state = 'ready';

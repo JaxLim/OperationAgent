@@ -204,8 +204,8 @@ function AdvancedSection({ onOpenDiagnostics }: { onOpenDiagnostics: () => void 
     <>
       <h3 className="settings-group-title">{t('adv.security')}</h3>
       <ul className="security-list">
-        <li><IconLock size={14} /><span><strong>{t('adv.worker')}</strong> — <span className="mono">agentReady = false</span>; {t('adv.taskStartReturns')}{' '}
-          <span className="mono">{overview?.worker.error ?? 'WORKER_ISOLATION_UNAVAILABLE'}</span></span></li>
+        <li><IconLock size={14} /><span><strong>{t('adv.worker')}</strong> — <span className="mono">agentReady = {String(overview?.agentReady ?? false)}</span>
+          {overview?.worker.state === 'unavailable' || !overview ? <>; {t('adv.taskStartReturns')}{' '}<span className="mono">WORKER_ISOLATION_UNAVAILABLE</span></> : null}</span></li>
         <li><IconLock size={14} /><span><strong>{t('adv.highRisk')}</strong> (bash, write_file) — <span className="mono">{overview?.tools.highRisk ?? 'SANDBOX_UNAVAILABLE'}</span></span></li>
         <li><IconLock size={14} /><span><strong>read_file / git read</strong> — <span className="mono">{overview?.tools.read ?? 'READ_ADAPTER_UNAVAILABLE'}</span></span></li>
         <li><IconInfo size={14} /><span><strong>{t('adv.isolation')}</strong> — {t('adv.isolationText', { status: overview?.capabilities.workerIsolation ?? 'unverified' })}</span></li>

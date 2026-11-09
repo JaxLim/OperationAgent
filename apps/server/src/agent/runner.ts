@@ -30,6 +30,8 @@ export interface TaskRunnerOptions {
   model: () => ClaudeModel;
   live: LiveFeed;
   stopGraceMs: () => number;
+  /** Launches and attaches a qualified Worker on demand; absent or rejecting, starts fail closed. */
+  ensureWorker?: () => Promise<void>;
 }
 export type RunnerReply = { kind: string; [key: string]: unknown } | null;
 
@@ -104,9 +106,12 @@ export class TaskRunner {
     if (!prompt.trim() || prompt.length > AGENT_RUN_LIMITS.maxPromptChars) throw new Error('VALIDATION_ERROR');
     const project = this.options.store.getProject(projectId);
     if (!project) throw new Error('NOT_FOUND');
+    // Cheap preconditions first: an isolated Worker is never launched for a start that would be refused anyway.
+    if (!this.options.credentials.status().configured) throw new Error('MODEL_NOT_CONFIGURED');
+    if (this.busy) throw new Error('AGENT_BUSY');
+    if (!this.link && this.options.ensureWorker) await this.options.ensureWorker().catch(() => undefined);
     const link = this.link;
     if (!link) throw new Error('WORKER_ISOLATION_UNAVAILABLE');
-    if (!this.options.credentials.status().configured) throw new Error('MODEL_NOT_CONFIGURED');
     if (this.busy) throw new Error('AGENT_BUSY');
     const created = this.options.store.createTask(projectId, requestId);
     // A repeated request id returns the committed task without starting it again.

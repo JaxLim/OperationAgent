@@ -209,6 +209,8 @@ export const zhCN: Readonly<Record<MessageKey, string>> = {
   'panel.transport': '传输',
   'panel.worker': 'Agent Worker',
   'panel.blockedBy': '阻塞原因',
+  'panel.workerState': 'Worker',
+  'panel.launches': '已启动 {count} 次',
   'panel.taskStart': '任务启动',
   'panel.fixture': 'Fixture 启动',
   'panel.capabilities': '能力 · {platform}',

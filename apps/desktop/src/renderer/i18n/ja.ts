@@ -209,6 +209,8 @@ export const ja: Readonly<Record<MessageKey, string>> = {
   'panel.transport': 'トランスポート',
   'panel.worker': 'エージェント Worker',
   'panel.blockedBy': 'ブロック要因',
+  'panel.workerState': 'Worker',
+  'panel.launches': '起動 {count} 回',
   'panel.taskStart': 'タスクの開始',
   'panel.fixture': 'Fixture の起動',
   'panel.capabilities': '機能 · {platform}',

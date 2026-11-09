@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TaskSnapshotSchema } from '../events/task.js';
 import { PROTOCOL_VERSION } from '../version/index.js';
 import { ServiceTreeIdentitySchema } from '../ipc/identity.js';
 import { ModelProviderSchema, SearchProviderSchema } from './providers.js';
@@ -81,8 +82,12 @@ export type ControlRunList = z.infer<typeof ControlRunListSchema>;
 
 export const TaskStartInputSchema = z.strictObject({ projectId: z.uuid(), prompt: z.string().trim().min(1).max(WORKBENCH_LIMITS.maxPromptChars) });
 export type TaskStartInput = z.infer<typeof TaskStartInputSchema>;
-/** P1 has no qualified Worker: every task start is refused before any execution is scheduled. */
-export const TaskStartResultSchema = z.strictObject({ accepted: z.literal(false), error: z.literal('WORKER_ISOLATION_UNAVAILABLE') });
+/** A start either creates and runs a task, or is refused before anything is scheduled, with the reason. */
+export const TaskStartRefusalSchema = z.enum(['WORKER_ISOLATION_UNAVAILABLE', 'MODEL_NOT_CONFIGURED', 'AGENT_BUSY']);
+export const TaskStartResultSchema = z.discriminatedUnion('accepted', [
+  z.strictObject({ accepted: z.literal(true), task: TaskSnapshotSchema }),
+  z.strictObject({ accepted: z.literal(false), error: TaskStartRefusalSchema }),
+]);
 export type TaskStartResult = z.infer<typeof TaskStartResultSchema>;
 
 export const CapabilityStatusSchema = z.enum(['unverified', 'unavailable']);
@@ -91,15 +96,22 @@ export const CapabilityMatrixSchema = z.strictObject({ ui: CapabilityStatusSchem
 export type CapabilityMatrix = z.infer<typeof CapabilityMatrixSchema>;
 export const ControlOverviewSchema = z.strictObject({
   protocolVersion: z.literal(PROTOCOL_VERSION), ...ServiceTreeIdentitySchema.shape,
-  controlPlaneReady: z.literal(true), agentReady: z.literal(false),
+  controlPlaneReady: z.literal(true),
+  /** True only while an isolated Worker runtime is staged and its supervisor has not failed closed. */
+  agentReady: z.boolean(),
   startedAt: z.iso.datetime(), uptimeMs: z.number().int().nonnegative(),
   runtime: z.strictObject({ node: z.string().max(32), abi: z.string().max(8), sqlite: z.string().max(32), platform: z.string().max(16), arch: z.string().max(16) }),
   database: z.strictObject({ version: z.literal(9), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
     runs: z.number().int().nonnegative(), records: z.number().int().nonnegative() }),
-  worker: z.strictObject({ state: z.literal('unavailable'), error: z.literal('WORKER_ISOLATION_UNAVAILABLE'),
-    // No agent loop ships in this build, so no task can run on any platform; per-platform Worker qualification
-    // (SEC-W01) is a build record (build/agent-status.json), not something the control plane claims at runtime.
-    reason: z.literal('AGENT_LOOP_NOT_IMPLEMENTED'), fixtureLaunch: z.literal('disabled-in-release') }),
+  // Per-platform Worker qualification (SEC-W01) is a build record (build/agent-status.json); at runtime the control plane
+  // reports only whether this installation has an isolated Worker runtime and what its supervisor is doing.
+  worker: z.discriminatedUnion('state', [
+    z.strictObject({ state: z.literal('unavailable'), error: z.literal('WORKER_ISOLATION_UNAVAILABLE'),
+      reason: z.enum(['WORKER_RUNTIME_NOT_STAGED', 'CLEANUP_UNCONFIRMED', 'RESTART_BUDGET_EXHAUSTED', 'SHUT_DOWN']),
+      fixtureLaunch: z.literal('disabled-in-release') }),
+    z.strictObject({ state: z.enum(['idle', 'starting', 'ready']), launches: z.number().int().nonnegative(),
+      fixtureLaunch: z.literal('disabled-in-release') }),
+  ]),
   tools: z.strictObject({ read: z.literal('READ_ADAPTER_UNAVAILABLE'), highRisk: z.literal('SANDBOX_UNAVAILABLE') }),
   capabilities: CapabilityMatrixSchema,
 });
