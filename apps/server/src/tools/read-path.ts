@@ -80,3 +80,25 @@ export function normalizeWindowsRoot(input: string): RootDecision {
   }
   return { ok: true, root: `${input[0]!.toUpperCase()}:\\${parts.join('\\')}` };
 }
+
+/** True when a path lies strictly inside a sensitive directory (the directory entry itself may be listed, not entered). */
+export function insideSensitiveDirectory(segments: readonly string[]): boolean {
+  const lower = segments.map(segment => segment.toLowerCase());
+  return SENSITIVE_DIRECTORIES.some(directory => {
+    const parts = directory.split('/');
+    for (let index = 0; index + parts.length < lower.length; index++) {
+      if (parts.every((part, offset) => lower[index + offset] === part)) return true;
+    }
+    return false;
+  });
+}
+
+/** Single-segment sensitive directories the Read Adapter child must never descend into while listing. */
+export const LIST_SKIP_DIRECTORIES: readonly string[] = Object.freeze(SENSITIVE_DIRECTORIES.filter(directory => !directory.includes('/')));
+
+/** A directory to list: "", "." or "./" is the workspace root; anything else follows the read_file path rules. */
+export function normalizeListPath(input: string): PathDecision {
+  if (typeof input !== 'string') return { ok: false, code: 'INVALID_PATH' };
+  if (/^[.]?[\\/]?$/.test(input)) return { ok: true, segments: [], path: '.' };
+  return normalizeReadPath(input);
+}

@@ -14,10 +14,11 @@ export const READ_CHILD_SCRIPT = fileURLToPath(new URL('./read-child.js', import
 const EXIT_CONFIRM_MS = 2_000;
 const MAX_STDERR_BYTES = 8_192;
 
-export type AdapterOutcome =
-  | { status: 'ok'; content: Buffer; size: number; truncated: boolean }
-  | { status: 'refused'; code: ReadRefusalCode }
-  | { status: 'failed'; code: ReadFailureCode; retryable: boolean };
+type Rejected = { status: 'refused'; code: ReadRefusalCode } | { status: 'failed'; code: ReadFailureCode; retryable: boolean };
+export type AdapterOutcome = { status: 'ok'; content: Buffer; size: number; truncated: boolean } | Rejected;
+export interface ListedEntry { segments: string[]; type: 'file' | 'directory' | 'link' | 'other'; size: number | null }
+export type ListOutcome = { status: 'listed'; entries: ListedEntry[]; truncated: boolean } | Rejected;
+export interface ListRequest { depth: number; maxEntries: number; skip: readonly string[] }
 
 export interface ReadAdapterOptions {
   /** Defaults to this process's runtime, which must be official Node (never Electron). */
@@ -31,6 +32,8 @@ export interface ReadAdapterOptions {
 export interface ReadAdapterSnapshot { available: boolean; active: number; queued: number; launched: number; killed: number; activePids: number[] }
 export interface ReadAdapter {
   read(root: string, segments: readonly string[], maxBytes: number): Promise<AdapterOutcome>;
+  /** Lists a directory below the root; an empty segment list is the root itself. */
+  list(root: string, segments: readonly string[], request: ListRequest): Promise<ListOutcome>;
   snapshot(): ReadAdapterSnapshot;
 }
 
@@ -72,7 +75,9 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
   };
   const release = (): void => { active--; queue.shift()?.(); };
 
-  function launch(root: string, segments: readonly string[], maxBytes: number): Promise<AdapterOutcome> {
+  type ChildReply = Exclude<ReturnType<typeof ReadChildReplySchema.parse>, { status: 'refused' }>;
+  /** One child, one request line, one validated reply; `accept` turns a non-refusal reply into the caller's outcome. */
+  function launch<T>(root: string, request: Record<string, unknown>, accept: (reply: ChildReply) => T | Rejected): Promise<T | Rejected> {
     return new Promise(resolve => {
       let child: ReturnType<typeof spawn>;
       try {
@@ -121,22 +126,37 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
         if (!parsed.success) { resolve({ status: 'failed', code: 'ADAPTER_FAILED', retryable: false }); return; }
         const value = parsed.data;
         if (value.status === 'refused') { resolve({ status: 'refused', code: value.code }); return; }
-        const content = Buffer.from(value.content, 'base64');
-        if (content.length > maxBytes) { resolve({ status: 'failed', code: 'ADAPTER_FAILED', retryable: false }); return; }
-        resolve({ status: 'ok', content, size: value.size, truncated: value.truncated });
+        resolve(accept(value));
       });
-      child.stdin!.end(JSON.stringify({ v: READ_CHILD_PROTOCOL, segments, maxBytes }) + '\n');
+      child.stdin!.end(JSON.stringify({ v: READ_CHILD_PROTOCOL, ...request }) + '\n');
     });
   }
 
-  return {
-    async read(root, segments, maxBytes) {
+  const MALFORMED: Rejected = { status: 'failed', code: 'ADAPTER_FAILED', retryable: false };
+  async function guarded<T>(run: () => Promise<T | Rejected>): Promise<T | Rejected> {
+    if (!available) return { status: 'failed', code: 'READ_ADAPTER_UNAVAILABLE', retryable: false };
+    if (!(await acquire())) return { status: 'failed', code: 'BUSY', retryable: true };
+    try {
       if (!available) return { status: 'failed', code: 'READ_ADAPTER_UNAVAILABLE', retryable: false };
-      if (!(await acquire())) return { status: 'failed', code: 'BUSY', retryable: true };
-      try {
-        if (!available) return { status: 'failed', code: 'READ_ADAPTER_UNAVAILABLE', retryable: false };
-        return await launch(root, segments, maxBytes);
-      } finally { release(); }
+      return await run();
+    } finally { release(); }
+  }
+
+  return {
+    read(root, segments, maxBytes) {
+      return guarded(() => launch<AdapterOutcome>(root, { op: 'read', segments, maxBytes }, value => {
+        if (value.status !== 'ok') return MALFORMED;
+        const content = Buffer.from(value.content, 'base64');
+        return content.length > maxBytes ? MALFORMED : { status: 'ok', content, size: value.size, truncated: value.truncated };
+      }));
+    },
+    list(root, segments, request) {
+      return guarded(() => launch<ListOutcome>(root, { op: 'list', segments, depth: request.depth, maxEntries: request.maxEntries,
+        skip: [...request.skip] }, value => {
+        if (value.status !== 'listed' || value.entries.length > request.maxEntries ||
+          value.entries.some(entry => entry.segments.length > request.depth)) return MALFORMED;
+        return { status: 'listed', entries: value.entries, truncated: value.truncated };
+      }));
     },
     snapshot: () => ({ available, active, queued: queue.length, launched, killed, activePids: [...pids] }),
   };
