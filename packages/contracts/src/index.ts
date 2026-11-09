@@ -11,3 +11,4 @@ export * from './api/providers.js';
 export * from './api/agents.js';
 export * from './events/tool-output.js';
 export * from './events/task.js';
+export * from './tools/read-file.js';

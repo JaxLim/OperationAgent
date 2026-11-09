@@ -519,3 +519,40 @@ PR #8 评审修正（同日）：
 - `pnpm test:integration` 退出 0：真实进程测试 **17/17**（模型设置流程改为经 设置 › 供应商 › Anthropic 完成），原生接口测试 2/2。
 - 在真实 Electron 窗口中截图检查了 英文/浅色、中文/Nord 深色、日文/Solarized 浅色。
 - 未验证：安装包烟测（`pnpm package && pnpm test:smoke`）、CI；未对真实的 OpenAI / Google / OpenRouter 端点发起请求（网关只用本机假服务端测试）。
+
+## M2 第三切片：Read Adapter 与 SEC-08 Read Gate（Windows x64，2026-11-09）
+
+授权：`build/agent-status.json` 记录的 M1–M4 授权；用户本轮原话 “Please take charge of designing and developing this program … You have complete creative freedom and do not need to consult me.”。本切片只交付只读通道本身，**不接入 Agent Loop、不新增 IPC/HTTP 入口、不改变 `agentReady=false`**；应用内仍没有任何路径会读取项目文件。`build/*-status.json` 未修改，三平台 `read` 能力仍为 `unverified`，直到 CI 产生 SEC-08 证据。
+
+设计（对应 ARCHITECTURE §5.1/§5.2、AGENTS §5）：
+- **执行链路**：`ToolRouter.readFile` → 参数 Schema 校验 → 平台门禁（只有 `win32-x64` 有 Read Gate 测试，其余平台返回 `READ_ADAPTER_UNAVAILABLE` 且不启动任何进程）→ 路径策略 → Read Adapter 子进程 → 结果 Schema 校验 → 审计。路由只决定路线，Express 自身从不打开工作区文件。
+- **Read Adapter 子进程**（`apps/server/src/tools/read-child.ts`）：每次读取一个短命进程，由 Express 用官方 Node 运行时以固定 argv 启动：`--permission --allow-fs-read=<项目根>`、`--max-old-space-size=64`、`--disallow-code-generation-from-strings`，`shell: false`，不继承 execArgv。Node 权限模型使该进程只能读项目根之下，不能写文件、创建子进程、启动 worker 线程或加载原生模块。程序只依赖 Node 内置模块，因此权限授予不必覆盖 `node_modules`。
+- **环境变量**：子进程环境只有 `SystemRoot`/`WINDIR`；Windows 进程启动器会自动补齐的 `PATH`、`USERPROFILE`、`TEMP` 等显式置空，`NODE_OPTIONS` 等任何 Express 环境变量都不会传入。
+- **路径策略**（Express，纯字符串，无 I/O，`read-path.ts`）：拒绝 `..`、绝对路径、盘符、UNC、`\?\`/`\.\`、NTFS 备用数据流（任何 `:`）、设备名（`nul.txt`、`COM1` 等）、8.3 短名（`~1`）、结尾的点或空格、控制字符；敏感路径按目录（`.git`、`.ssh`、`.aws`、`.kube`、`.config/gcloud` 等）、文件名（`.npmrc`、`.netrc`、`.git-credentials`、`credentials`、`terraform.tfstate` 等）、扩展名（`.pem`、`.key`、`.pfx`、`.kdbx` 等）、私钥前缀（`id_rsa*` 等）和 `.env*`（`.env.example` 等模板除外）拒绝，大小写不敏感。项目根必须是盘符绝对路径且不是盘符根目录。
+- **符号链接与竞态**（子进程内）：逐级 `lstat`，任何符号链接或 junction 拒绝（`LINK_REJECTED`）；目标必须是普通文件且只有一个链接（硬链接拒绝，`MULTIPLE_LINKS`）；打开后用句柄的 `(dev, ino)` 与检查时的身份比对，并对整条路径重新逐级核验，任一处不一致即 `CHANGED_DURING_READ`。项目根本身是链接时也拒绝。
+- **内容**：默认最多 64 KiB，上限 256 KiB；截断时不切断 UTF-8 字符；含 NUL 或不是合法 UTF-8 的文件按 `BINARY_FILE` 拒绝。结果带 `sha256`、实际字节数、文件大小和截断标志。
+- **Express 侧启动器**（`read-adapter.ts`，Express 中唯一允许 `node:child_process` 的模块）：并发上限 4、排队上限 32（超出返回 `BUSY`）；stdout 上限约 350 KiB，stderr 上限 8 KiB 且直接丢弃；回复必须恰好一行并通过 `ReadChildReplySchema`；默认 5 秒超时（注册时只接受 1–30 秒），超时强杀，并且**只有观察到子进程退出后读取才算结束**；2 秒内确认不了退出则返回 `CLEANUP_UNCONFIRMED`，适配器自我停用（fail closed）直到控制面重启。运行时不是官方 Node（例如 Electron）时同样停用。
+- **审计**：迁移 `007-tool-audit.sql`（数据库版本 6 → 7），每个决定（允许、拒绝、失败）写一行：工具、项目/任务/调用 ID、规范化相对路径、决定、错误码、字节数、耗时。不保存文件内容、内容哈希或项目根；表上限 10,000 行，超出在同一事务内删除最旧行。
+- **导入边界 lint**：`tools/` 下除子进程程序外禁止 `node:fs`；子进程程序只能导入 `node:fs`/`node:path`，不能导入任何相对模块或 contracts；任何 Express 模块都不能导入子进程程序（防止退化为进程内读取）。
+
+与路线图的差异（如实说明）：ROADMAP 表中 M2 一行曾建议 Read Adapter 使用 AppContainer。本切片按 ARCHITECTURE §5.2 的 Read Gate 要求实现轻量隔离（短命进程 + Node 权限模型 + 最小环境 + 路径/链接/身份校验），**不是** AppContainer 级的 OS 沙箱；它不承诺抵抗已获得同一用户权限的任意恶意代码（§5.2 原文允许）。改用 AppContainer 运行读取子进程是可选的后续加固，需要单独测试。
+
+本地验证（Windows x64）：
+- `pnpm check:engineering` 全部退出 0，单元测试 **129/129**。新增 `tests/m2/read-gate.test.ts`（10 项），所有触及文件系统的用例都在真实、独立的子进程中运行生产程序：
+  - 路径策略：穿越、绝对路径、设备名、数据流、短名、敏感路径全部拒绝，且策略拒绝不会启动任何子进程；
+  - 正常读取、按字符边界截断、256 KiB 上限、二进制与非 UTF-8 拒绝、不存在/非文件/未知项目/项目目录已删除（均为明确的拒绝码）；
+  - junction 指向外部目录 → `LINK_REJECTED`；硬链接到外部文件 → `MULTIPLE_LINKS`；文件符号链接在本机需要开发者模式，无法创建时记录诊断（junction 与硬链接用例均已运行）；
+  - 竞态：后台循环把目录与指向外部的 junction 来回替换（本次 4,202 次替换），同时并发读取 160 次，从未返回外部内容；身份复核实际触发 27 次 `CHANGED_DURING_READ`；
+  - 权限：以生产参数和环境运行的探针读取外部文件、写文件、创建进程、启动 worker 全部 `ERR_ACCESS_DENIED`；父进程设置的 `NODE_OPTIONS` 和含 canary 的变量都没有传入；
+  - 超时：挂起的子进程在截止时间被杀死，PID 确认已不存在；超大输出、多行回复、额外字段、超出请求大小、非零退出全部 `ADAPTER_FAILED`；并发与排队上限返回 `BUSY`；
+  - 审计：拒绝与允许都有记录，数据库文件字节中找不到任何文件内容。
+- 数据库版本 7 同步更新：P1 持久化测试、M2 测试、Electron 集成测试和安装后烟测的期望值。
+- 未验证：CI 上的 SEC-08 运行、安装包烟测（`pnpm package && pnpm test:smoke`）；macOS/Linux 没有 Read Gate，按设计返回 `READ_ADAPTER_UNAVAILABLE`。
+
+PR #12 首轮 CI 修正（同日）：
+- **CI 发现真实漏洞**：Windows x64 runner 上竞态测试有一次读到了外部文件内容（本机上千次读取、数万次替换从未复现）。合理解释是：Node 只暴露 Windows 文件 ID 的 64 位，而 ReFS 等 128 位 ID 卷上这 64 位不保证唯一，两个不同文件可能报告相同的 `ino`，使“打开后身份比对”失效，退化为普通的先检查后打开竞态。
+- 修正：身份不再只是 `(dev, ino)`。目录为卷号、文件 ID、创建时间；文件另加变更时间、修改时间和大小，均取自同一句柄或无链接路径。两个不同文件必须在所有字段上都相同才会被混淆。竞态测试新增诊断 `inoCollision`，在 CI 上记录两个目标文件的 64 位 ID 是否相同，用来证实或否定上述解释。
+- 仍是 Read Gate 级别的保证：能在工作区内写文件并精确复制外部目标文件全部时间戳与大小的同用户恶意代码不在本门禁防护范围内（§5.2）。
+- Codex 评审：读取结果保留 UTF-8 BOM（`ignoreBOM: true`），`bytes` 和 `sha256` 与返回内容严格一致；新增对应测试。
+- macOS P0 metadata 任务在 15 分钟上限被取消，没有失败步骤，与本 PR 改动无关。
+

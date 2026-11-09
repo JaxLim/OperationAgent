@@ -13,11 +13,13 @@ import { createModelStore } from './models.js';
 import type { ModelStore } from './models.js';
 import { createConfigStore } from './config.js';
 import type { ConfigStore } from './config.js';
+import { createAuditStore } from './audit.js';
+import type { AuditStore } from './audit.js';
 
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
 const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql',
-  '006-providers-agents.sql'];
-export interface Store extends TaskLog, ModelStore, ConfigStore {
+  '006-providers-agents.sql', '007-tool-audit.sql'];
+export interface Store extends TaskLog, ModelStore, ConfigStore, AuditStore {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;
   /** Unfinished tasks moved to INTERRUPTED when this instance opened the database. */
@@ -32,6 +34,7 @@ export interface Store extends TaskLog, ModelStore, ConfigStore {
   addProject(input: { name: string; path: string }): Project;
   /** Removing the active project also clears it from settings in the same transaction. */
   removeProject(id: string): boolean;
+  getProject(id: string): Project | null;
   listRuns(): ControlRun[];
   counts(): { projects: number; runs: number; records: number };
   close(clean: boolean): void;
@@ -73,6 +76,7 @@ export function openStore(directory: string, runId: string, migrationDirectory =
     const tasks = createTaskLog(db);
     const models = createModelStore(db);
     const config = createConfigStore(db);
+    const audit = createAuditStore(db);
     const { recoveredRuns, recoveredTasks } = db.transaction(() => {
       const interrupted = db.prepare("UPDATE control_plane_runs SET outcome = 'INTERRUPTED', ended_at = ? WHERE outcome = 'RUNNING'").run(new Date().toISOString()).changes;
       db.prepare("INSERT INTO control_plane_runs(id, started_at, outcome) VALUES (?, ?, 'RUNNING')").run(runId, new Date().toISOString());
@@ -95,6 +99,7 @@ export function openStore(directory: string, runId: string, migrationDirectory =
       ...tasks,
       ...models,
       ...config,
+      ...audit,
       databaseVersion: migrationNames.length,
       recoveredRuns,
       recoveredTasks,
@@ -125,6 +130,11 @@ export function openStore(directory: string, runId: string, migrationDirectory =
           if (removed && current.activeProjectId === id) writeSettings.run(JSON.stringify({ ...current, activeProjectId: null }), new Date().toISOString());
           return removed;
         }).immediate();
+      },
+      getProject(id) {
+        const row = db.prepare('SELECT id, name, path, created_at AS createdAt FROM projects WHERE id = ?').get(id);
+        const parsed = ProjectSchema.safeParse(row);
+        return parsed.success ? parsed.data : null;
       },
       listRuns: () => ControlRunListSchema.parse({ runs: db.prepare(`SELECT id, started_at AS startedAt, ended_at AS endedAt, outcome
         FROM control_plane_runs ORDER BY started_at DESC, id LIMIT ?`).all(WORKBENCH_LIMITS.maxRuns) }).runs,

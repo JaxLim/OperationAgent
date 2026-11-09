@@ -28,7 +28,8 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 **还没实现的**
 
 - Agent 推理循环（Agent Loop）：提交任务会返回 `WORKER_ISOLATION_UNAVAILABLE`，不会执行任何操作。
-- 读取项目文件（Read Adapter）、写文件与运行 Shell 的沙箱、审批流程、网页搜索工具、MCP Host。
+- Agent 调用读取工具：Read Adapter 与 SEC-08 Read Gate 测试已实现（仅 Windows x64，等待 CI 证据），但 Agent Loop 尚未接入，应用内还没有任何入口会读取项目文件。
+- 写文件与运行 Shell 的沙箱、审批流程、网页搜索工具、MCP Host。
 - 账号登录型供应商和自定义模型端点：方案见 [ADR-PROV-001](docs/adr/ADR-PROV-001.md)（提议中，未批准），在此之前界面中保持锁定。
 - macOS 和 Linux 的进程级验收与 SEC-W01（目前为 NOT_RUN）。
 
@@ -48,7 +49,7 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 | P1 | 桌面应用、控制面、持久化、Worker 启动器、安装包与安装后烟测 | 已完成（Windows x64，见 [退出报告](docs/P1-EXIT-REPORT.md)） |
 | P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体验收所需的 CI 证据还没产出 |
 | M1 | SEC-W01：Windows 生产 Worker 隔离门禁 | 已完成（Windows x64 通过） |
-| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关、多供应商设置、Agent 与 MCP 配置、界面多语言已合并；Read Adapter 与 Agent Loop 尚未开始 |
+| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关、多供应商设置、Agent 与 MCP 配置、界面多语言已合并；Read Adapter 与 SEC-08 测试已实现（Windows x64，CI 证据待产生）；Agent Loop 尚未开始 |
 | M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
 | M4 | 产品化：MCP、签名与升级 | 未开始 |
 
@@ -68,7 +69,7 @@ flowchart LR
 
 - **桌面端**：Electron 45、React 19、TypeScript 5.9、Vite。Renderer 只管界面，碰不到 Node、文件系统和密钥；Preload 只暴露一组固定的白名单接口。
 - **控制面**：Express 5，跑在独立的官方 Node.js 24 进程里（不用 Electron 自带的 Node），也是唯一能读写数据库的进程。主进程先通过继承的通道确认服务身份，再经 HMAC 认证的回环 HTTP 转发 API 请求。
-- **持久化**：better-sqlite3（SQLite 3.53），6 个版本化 SQL 迁移；任务状态和事件在同一事务中提交。
+- **持久化**：better-sqlite3（SQLite 3.53），7 个版本化 SQL 迁移；任务状态和事件在同一事务中提交。
 - **契约**：`packages/contracts` 用 zod 定义 API、IPC、事件和错误码，单元测试确保未知字段和非法的状态迁移都会被拒绝。
 - **Worker 隔离（Windows）**：控制面内的原生 WorkerLauncher 以 AppContainer + Job Object 启动 Worker，通过单条受保护的继承管道通信（OWIP/1 分帧 + JSON-RPC 2.0）。
 - **凭据**：API Key 的加解密都经过主进程的 `safeStorage` 加密桥，只有控制面在请求 Anthropic 时才会用到，Worker 和界面都拿不到明文。

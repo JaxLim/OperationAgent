@@ -43,14 +43,24 @@ export default {
       'apps/desktop/src/main/staged-runtime.ts': ['node:crypto', 'node:fs/promises'],
       // ADR-WIN-001 narrow native boundary: only the fixed package-relative parent artifact.
       'packages/platform-worker/src/parent.ts': ['node:module'],
+      // SEC-08: the Read Adapter launcher is the only Express module that creates a child process.
+      'apps/server/src/tools/read-adapter.ts': ['node:child_process'],
     };
-    const allowed = [...baseAllowed, ...(mainCapabilities[source] ?? [])];
+    // SEC-08: Express never reads workspace files in-process. Under tools/, only the Read Adapter child program may use
+    // the file system, it may use nothing else (it runs under a read-only permission grant), and nothing imports it.
+    const readChild = 'apps/server/src/tools/read-child.ts';
+    const toolFileSystem = source.startsWith('apps/server/src/tools/') && source !== readChild;
+    let allowed = [...baseAllowed, ...(mainCapabilities[source] ?? [])];
+    if (source === readChild) allowed = ['node:fs', 'node:path'];
+    else if (toolFileSystem) allowed = allowed.filter(name => !name.startsWith('node:fs'));
     const report = (node, reason) => context.report({ node, messageId: 'forbidden', data: { reason } });
     function check(node, specifier) {
       if (typeof specifier !== 'string' || /[\\?#]/.test(specifier)) return report(node, 'unresolved module');
       if (specifier.startsWith('.')) {
         const target = resolve(context.filename, '..', specifier);
         if (zoneFor(target, context.cwd)?.[0] !== prefix) report(node, specifier);
+        else if (source === readChild) report(node, 'Read Adapter child must be self-contained');
+        else if (relative(context.cwd, target).replaceAll('\\', '/').replace(/\.js$/, '.ts') === readChild) report(node, 'in-process Read Adapter child');
       } else if (!allowed.includes(specifier)) report(node, specifier);
     }
     const noAmbientIO = !prefix.endsWith('/main') && prefix !== 'apps/server/src';
