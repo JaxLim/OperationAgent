@@ -8,8 +8,13 @@
 // reply line is written to stdout. Express validates both directions against packages/contracts.
 //
 // Symbolic link and race defence: every component below the root is checked with lstat (a link or junction is refused),
-// the final file must have exactly one link, and after opening, the handle's (device, file id) must equal the checked
-// identity. The whole chain is then re-checked, so a component swapped for a link between check and open is detected.
+// the final file must have exactly one link, and after opening, the handle's identity must equal the checked identity.
+// The whole chain is then re-checked, so a component swapped for a link between check and open is detected.
+//
+// Identity is not just (device, file id): Node exposes 64 bits of the Windows file id, and on volumes with 128-bit ids
+// (ReFS) those 64 bits are not guaranteed unique, so two different files can report the same `ino`. Every identity
+// therefore also carries the creation time, and for the file the change and modification times and the size, all read
+// from the same handle or link-free path. Two distinct files must collide on every field to be confused.
 import { closeSync, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
 import type { BigIntStats } from 'node:fs';
 import { join } from 'node:path';
@@ -50,8 +55,12 @@ function parse(raw: string): { segments: string[]; maxBytes: number } {
   return { segments: segments as string[], maxBytes: maxBytes as number };
 }
 
-type Identity = readonly [bigint, bigint];
-const same = (stats: BigIntStats, identity: Identity): boolean => stats.dev === identity[0] && stats.ino === identity[1];
+type Identity = readonly bigint[];
+/** Directory identity: volume, file id and creation time. A file also adds change time, modification time and size. */
+const identityOf = (stats: BigIntStats): Identity => stats.isFile()
+  ? [stats.dev, stats.ino, stats.birthtimeNs, stats.ctimeNs, stats.mtimeNs, stats.size]
+  : [stats.dev, stats.ino, stats.birthtimeNs];
+const equal = (left: Identity, right: Identity): boolean => left.length === right.length && left.every((value, index) => value === right[index]);
 
 /** lstat every component; returns the identity of each, the last being the file. */
 function walk(root: string, segments: readonly string[]): { path: string; chain: Identity[]; file: BigIntStats } {
@@ -69,7 +78,7 @@ function walk(root: string, segments: readonly string[]): { path: string; chain:
       if (stats.nlink !== 1n) throw new Refused('MULTIPLE_LINKS');
       file = stats;
     } else if (!stats.isDirectory()) throw new Refused('NOT_FOUND');
-    chain.push([stats.dev, stats.ino]);
+    chain.push(identityOf(stats));
   }
   return { path, chain, file: file! };
 }
@@ -113,13 +122,13 @@ function run(root: string, raw: string): void {
   }
   try {
     const opened = fstatSync(fd, { bigint: true });
-    if (!opened.isFile() || opened.nlink !== 1n || !same(opened, checked.chain[checked.chain.length - 1]!)) throw new Refused('CHANGED_DURING_READ');
+    if (!opened.isFile() || opened.nlink !== 1n || !equal(identityOf(opened), checked.chain[checked.chain.length - 1]!)) throw new Refused('CHANGED_DURING_READ');
     // Re-walk: a directory swapped for a link, or the file replaced, after the first walk shows up here.
     const again = stat(root);
-    if (!again || again.isSymbolicLink() || again.dev !== rootStats.dev || again.ino !== rootStats.ino) throw new Refused('CHANGED_DURING_READ');
+    if (!again || again.isSymbolicLink() || !equal(identityOf(again), identityOf(rootStats))) throw new Refused('CHANGED_DURING_READ');
     let rewalk: ReturnType<typeof walk>;
     try { rewalk = walk(root, request.segments); } catch { throw new Refused('CHANGED_DURING_READ'); }
-    if (rewalk.chain.some((identity, index) => identity[0] !== checked.chain[index]![0] || identity[1] !== checked.chain[index]![1])) {
+    if (rewalk.chain.length !== checked.chain.length || rewalk.chain.some((identity, index) => !equal(identity, checked.chain[index]!))) {
       throw new Refused('CHANGED_DURING_READ');
     }
     const { data, truncated } = readBounded(fd, request.maxBytes);

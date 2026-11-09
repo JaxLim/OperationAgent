@@ -25,7 +25,8 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
   const registration = TOOL_REGISTRY.read_file;
   const adapter = options.adapter ?? createReadAdapter({ timeoutMs: registration.timeoutMs });
   const platform = options.platform ?? currentPlatform();
-  const decoder = new TextDecoder('utf-8', { fatal: true });
+  // ignoreBOM keeps a leading byte-order mark in `content`, so `bytes` and `sha256` describe exactly the returned text.
+  const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
   return {
     adapter,

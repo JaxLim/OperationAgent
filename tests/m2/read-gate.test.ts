@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { ESLint } from 'eslint';
 import { READ_FILE_LIMITS, ReadChildReplySchema, ReadFileResultSchema } from '../../packages/contracts/dist/index.js';
@@ -107,6 +107,11 @@ test('SEC-08 Windows: allowed reads return bounded UTF-8 text with identity, tru
       writeFileSync(resolve(root, 'utf8.txt'), 'aé😀z');
       const cut = await router.readFile({ projectId, args: { path: 'utf8.txt', maxBytes: 5 } });
       assert.deepEqual(cut.status === 'ok' && [cut.content, cut.bytes, cut.size, cut.truncated], ['aé', 3, 8, true]);
+      // A leading byte-order mark stays in the content, so bytes and sha256 describe exactly the returned text.
+      writeFileSync(resolve(root, 'bom.txt'), Buffer.from([0xef, 0xbb, 0xbf, 0x68, 0x69]));
+      const bom = await router.readFile({ projectId, args: { path: 'bom.txt' } });
+      assert.ok(bom.status === 'ok' && bom.content === '﻿hi' && bom.bytes === 5 && Buffer.byteLength(bom.content, 'utf8') === bom.bytes &&
+        bom.sha256 === createHash('sha256').update(bom.content, 'utf8').digest('hex'));
       writeFileSync(resolve(root, 'big.txt'), 'x'.repeat(READ_FILE_LIMITS.maxBytes + 10));
       const big = await router.readFile({ projectId, args: { path: 'big.txt', maxBytes: READ_FILE_LIMITS.maxBytes } });
       assert.deepEqual(big.status === 'ok' && [big.bytes, big.truncated], [READ_FILE_LIMITS.maxBytes, true]);
@@ -164,6 +169,10 @@ test('SEC-08 Windows: a directory swapped for a junction while reads run never y
   await withFixture(async ({ root, outside, store, projectId }) => {
     const router = createToolRouter({ store, adapter: createReadAdapter({ maxConcurrent: 4 }) });
     mkdirSync(resolve(root, 'swap')); writeFileSync(resolve(root, 'swap', 'secret.txt'), 'inside');
+    // Some volumes (ReFS) do not guarantee unique 64-bit file ids; record whether the two targets collide here, since the
+    // child's identity check must hold either way.
+    const ino = (path: string): bigint => lstatSync(path, { bigint: true }).ino;
+    const collision = ino(resolve(root, 'swap', 'secret.txt')) === ino(resolve(outside, 'secret.txt'));
     let running = true; let swaps = 0; let blocked = 0;
     const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
     // Windows refuses to rename a directory while a child holds a file open inside it; such attempts are retried.
@@ -198,7 +207,7 @@ test('SEC-08 Windows: a directory swapped for a junction while reads run never y
       }
     }
     running = false; await swapper;
-    t.diagnostic(`swaps=${swaps} blocked=${blocked} outcomes=${JSON.stringify(Object.fromEntries(outcomes))}`);
+    t.diagnostic(`inoCollision=${collision} swaps=${swaps} blocked=${blocked} outcomes=${JSON.stringify(Object.fromEntries(outcomes))}`);
     assert.ok(swaps > 10, 'the swapper actually raced the reads');
     for (const key of outcomes.keys()) assert.ok(['ok', 'LINK_REJECTED', 'NOT_FOUND', 'CHANGED_DURING_READ', 'ACCESS_DENIED'].includes(key), key);
   });
