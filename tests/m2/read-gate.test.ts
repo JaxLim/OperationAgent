@@ -192,7 +192,7 @@ test('SEC-08 Windows: a directory swapped for a junction while reads run never y
       while (running) {
         // Real directory → junction to outside → real directory, as fast as the file system allows.
         await retry(() => renameSync(resolve(root, 'swap'), resolve(root, 'swap-real')));
-        symlinkSync(outside, resolve(root, 'swap'), 'junction');
+        await retry(() => symlinkSync(outside, resolve(root, 'swap'), 'junction'));
         await tick();
         await retry(() => rmSync(resolve(root, 'swap')));
         await retry(() => renameSync(resolve(root, 'swap-real'), resolve(root, 'swap')));
@@ -352,7 +352,7 @@ test('SEC-08 Windows: list_directory reads a directory only while it is pinned; 
       const swapper = (async () => {
         while (running) {
           await retry(() => renameSync(resolve(root, 'swap'), resolve(root, 'swap-real')));
-          symlinkSync(outside, resolve(root, 'swap'), 'junction');
+          await retry(() => symlinkSync(outside, resolve(root, 'swap'), 'junction'));
           await tick();
           await retry(() => rmSync(resolve(root, 'swap')));
           await retry(() => renameSync(resolve(root, 'swap-real'), resolve(root, 'swap')));
