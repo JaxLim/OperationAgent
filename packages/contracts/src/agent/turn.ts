@@ -1,0 +1,110 @@
+import { z } from 'zod';
+import { ClaudeModelSchema } from '../api/model.js';
+
+// M2 agent turns (ARCHITECTURE §6.1/§6.2). Express holds the authoritative conversation: the provider's content blocks
+// verbatim (thinking signatures, fallback markers) and every tool result it produced. The Worker drives the loop but
+// only ever sees this normalized view: text, tool calls (id, name, input) and the stop reason. It never sends
+// conversation content back: it asks Express to continue, and Express builds the tool_result blocks from its own
+// records, so a Worker cannot forge a tool result or alter what the model asked for.
+
+export const AGENT_RUN_LIMITS = Object.freeze({
+  maxPromptChars: 32_000,
+  /** Model turns per task; each turn is one Messages API request. */
+  maxTurns: 40,
+  maxToolCallsPerTurn: 16,
+  /** Output token ceiling for one turn (streamed, so long turns do not hit HTTP timeouts). */
+  maxOutputTokens: 64_000,
+  /** Wall clock for one turn, including provider retries. */
+  turnTimeoutMs: 600_000,
+  /** Assistant text a Worker sees per turn; the full text stays in Express. */
+  maxViewTextChars: 16_000,
+  maxToolInputBytes: 16_384,
+  /** Rough local bound on the conversation Express keeps in memory for one task. */
+  maxConversationBytes: 16 * 1024 * 1024,
+});
+
+export const AgentToolNameSchema = z.enum(['read_file', 'list_directory']);
+export type AgentToolName = z.infer<typeof AgentToolNameSchema>;
+
+/** Why a turn ended, normalized from the provider's stop_reason. `refusal` is a policy decline (HTTP 200). */
+export const TurnStopReasonSchema = z.enum(['end_turn', 'tool_use', 'max_tokens', 'refusal', 'pause_turn', 'stop_sequence', 'context_exhausted', 'other']);
+export type TurnStopReason = z.infer<typeof TurnStopReasonSchema>;
+
+/** Normalized provider failures. Provider bodies, headers and error text never leave the gateway. */
+export const TurnFailureCodeSchema = z.enum(['not_configured', 'credential_unavailable', 'auth_failed', 'permission_denied', 'rate_limited',
+  'overloaded', 'model_unavailable', 'invalid_request', 'context_too_long', 'provider_error', 'unreachable', 'timed_out', 'cancelled',
+  'response_invalid']);
+export type TurnFailureCode = z.infer<typeof TurnFailureCodeSchema>;
+export const RETRYABLE_TURN_FAILURES: readonly TurnFailureCode[] = Object.freeze(['rate_limited', 'overloaded', 'provider_error', 'unreachable', 'timed_out']);
+
+const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const TurnUsageSchema = z.strictObject({ inputTokens: count, outputTokens: count, cacheReadTokens: count, cacheWriteTokens: count });
+export type TurnUsage = z.infer<typeof TurnUsageSchema>;
+
+/** A tool call exactly as the model requested it; `input` is untrusted model output and is validated before any use. */
+export const ToolCallViewSchema = z.strictObject({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+  name: z.string().min(1).max(128),
+  input: z.record(z.string(), z.unknown()),
+});
+export type ToolCallView = z.infer<typeof ToolCallViewSchema>;
+
+export const TurnViewSchema = z.strictObject({
+  turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns),
+  model: ClaudeModelSchema,
+  stopReason: TurnStopReasonSchema,
+  /** Text the model wrote this turn, truncated to `maxViewTextChars`; `textTruncated` says whether it was. */
+  text: z.string().max(AGENT_RUN_LIMITS.maxViewTextChars),
+  textTruncated: z.boolean(),
+  toolCalls: z.array(ToolCallViewSchema).max(AGENT_RUN_LIMITS.maxToolCallsPerTurn),
+  usage: TurnUsageSchema,
+  /** True when a server-side fallback model finished this turn after the requested model declined. */
+  fallback: z.boolean(),
+});
+export type TurnView = z.infer<typeof TurnViewSchema>;
+
+export const TurnOutcomeSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('ok'), view: TurnViewSchema }),
+  z.strictObject({ status: z.literal('failed'), code: TurnFailureCodeSchema, retryable: z.boolean(),
+    /** Provider HTTP status when there was one; never the provider's body. */
+    httpStatus: z.number().int().min(100).max(599).nullable() }),
+]);
+export type TurnOutcome = z.infer<typeof TurnOutcomeSchema>;
+
+/** Transient stream deltas for a live view. Never persisted; a reconnecting client may miss some. */
+export const TurnDeltaSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('text'), text: z.string().min(1).max(16_384) }),
+  z.strictObject({ kind: z.literal('thinking'), text: z.string().min(1).max(16_384) }),
+  z.strictObject({ kind: z.literal('tool_call'), id: ToolCallViewSchema.shape.id, name: z.string().min(1).max(128) }),
+]);
+export type TurnDelta = z.infer<typeof TurnDeltaSchema>;
+
+/**
+ * Tool definitions Express sends to the model. Each JSON Schema mirrors the strict Zod argument schema in
+ * tools/read-file.ts (a contract test keeps them in step); `strict` makes the provider emit schema-valid input, and
+ * Express still re-validates every input with Zod because model output is untrusted.
+ */
+export const AGENT_TOOL_DEFINITIONS = Object.freeze({
+  read_file: Object.freeze({
+    name: 'read_file',
+    description: 'Read a UTF-8 text file in the current project. `path` is relative to the project root and uses / separators. ' +
+      'Returns at most `maxBytes` bytes (default 65536, up to 262144) and says when the file was truncated. Binary files, ' +
+      'files outside the project, links, and secrets such as .env files, keys and .git internals are refused.',
+    input_schema: { type: 'object', additionalProperties: false, required: ['path'],
+      properties: {
+        path: { type: 'string', description: 'Project-relative file path, for example src/index.ts' },
+        maxBytes: { type: 'integer', minimum: 1, maximum: 262_144, description: 'Upper bound on bytes returned' },
+      } },
+  }),
+  list_directory: Object.freeze({
+    name: 'list_directory',
+    description: 'List the entries of a directory in the current project. `path` is relative to the project root (use "." for ' +
+      'the root). `depth` 1 lists the directory itself; up to 4 also lists subdirectories, skipping .git and node_modules. Links ' +
+      'are shown but never followed. Use this to find files before reading them.',
+    input_schema: { type: 'object', additionalProperties: false, required: ['path'],
+      properties: {
+        path: { type: 'string', description: 'Project-relative directory path, or "." for the project root' },
+        depth: { type: 'integer', minimum: 1, maximum: 4, description: 'How many directory levels to list (default 1)' },
+      } },
+  }),
+} satisfies Record<AgentToolName, { name: AgentToolName; description: string; input_schema: Record<string, unknown> }>);

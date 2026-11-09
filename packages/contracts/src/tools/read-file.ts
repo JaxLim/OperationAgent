@@ -10,6 +10,8 @@ export const READ_FILE_LIMITS = Object.freeze({
   /** Express-side deadline for one child, from spawn to confirmed exit. Registry values outside the range are rejected. */
   defaultTimeoutMs: 5_000, minTimeoutMs: 1_000, maxTimeoutMs: 30_000,
   maxConcurrent: 4, maxQueued: 32,
+  /** list_directory: entries returned per call and levels walked. */
+  maxEntries: 1_000, maxDepth: 4,
 });
 
 export const ReadFileArgsSchema = z.strictObject({
@@ -48,35 +50,72 @@ export const ReadFileResultSchema = z.discriminatedUnion('status', [
 ]);
 export type ReadFileResult = z.infer<typeof ReadFileResultSchema>;
 
+export const ListDirectoryArgsSchema = z.strictObject({
+  /** Workspace-relative directory; "." or "" is the workspace root. Same refusals as `read_file`. */
+  path: z.string().max(READ_FILE_LIMITS.maxPathChars),
+  depth: z.number().int().min(1).max(READ_FILE_LIMITS.maxDepth).optional(),
+});
+export type ListDirectoryArgs = z.infer<typeof ListDirectoryArgsSchema>;
+export const DirectoryEntrySchema = z.strictObject({
+  /** Workspace-relative, `/` separators. */
+  path: RelativePathSchema,
+  type: z.enum(['file', 'directory', 'link', 'other']),
+  /** Bytes, files only. */
+  size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+});
+export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>;
+export const ListDirectoryResultSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('ok'), path: z.string().max(READ_FILE_LIMITS.maxPathChars),
+    entries: z.array(DirectoryEntrySchema).max(READ_FILE_LIMITS.maxEntries), truncated: z.boolean(),
+    /** Directories whose contents were not read because they could not be pinned (they hold only links or locked entries). */
+    unlisted: z.array(z.string().max(READ_FILE_LIMITS.maxPathChars)).max(100) }),
+  z.strictObject({ status: z.literal('refused'), code: ReadRefusalCodeSchema }),
+  z.strictObject({ status: z.literal('failed'), code: ReadFailureCodeSchema, retryable: z.boolean() }),
+]);
+export type ListDirectoryResult = z.infer<typeof ListDirectoryResultSchema>;
+
 // Read Adapter child protocol (one line each way over the child's stdin/stdout). The workspace root is a launch
 // argument fixed by Express, not part of the request; content travels as base64 so the reply is ASCII and bounded.
 export const READ_CHILD_PROTOCOL = 1;
-export const ReadChildRequestSchema = z.strictObject({
-  v: z.literal(READ_CHILD_PROTOCOL),
-  segments: z.array(z.string().min(1).max(READ_FILE_LIMITS.maxSegmentChars)).min(1).max(READ_FILE_LIMITS.maxSegments),
-  maxBytes: z.number().int().min(1).max(READ_FILE_LIMITS.maxBytes),
-});
+const SegmentsSchema = z.array(z.string().min(1).max(READ_FILE_LIMITS.maxSegmentChars)).max(READ_FILE_LIMITS.maxSegments);
+export const ReadChildRequestSchema = z.discriminatedUnion('op', [
+  z.strictObject({ v: z.literal(READ_CHILD_PROTOCOL), op: z.literal('read'), segments: SegmentsSchema.min(1),
+    maxBytes: z.number().int().min(1).max(READ_FILE_LIMITS.maxBytes) }),
+  /** An empty segment list lists the root. */
+  z.strictObject({ v: z.literal(READ_CHILD_PROTOCOL), op: z.literal('list'), segments: SegmentsSchema,
+    depth: z.number().int().min(1).max(READ_FILE_LIMITS.maxDepth), maxEntries: z.number().int().min(1).max(READ_FILE_LIMITS.maxEntries) }),
+]);
 export type ReadChildRequest = z.infer<typeof ReadChildRequestSchema>;
 export const ReadChildReplySchema = z.discriminatedUnion('status', [
   z.strictObject({ v: z.literal(READ_CHILD_PROTOCOL), status: z.literal('ok'),
     content: z.base64().max(Math.ceil(READ_FILE_LIMITS.maxBytes / 3) * 4),
     size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), truncated: z.boolean() }),
+  z.strictObject({ v: z.literal(READ_CHILD_PROTOCOL), status: z.literal('listed'),
+    // Child-relative segments of each entry below the listed directory; Express rebuilds and re-checks the paths.
+    entries: z.array(z.strictObject({ segments: SegmentsSchema.min(1), type: DirectoryEntrySchema.shape.type,
+      size: DirectoryEntrySchema.shape.size })).max(READ_FILE_LIMITS.maxEntries),
+    truncated: z.boolean(),
+    // Directories (child-relative segments; empty is the listed directory itself) that could not be pinned and were not read.
+    unlisted: z.array(SegmentsSchema).max(100) }),
   z.strictObject({ v: z.literal(READ_CHILD_PROTOCOL), status: z.literal('refused'), code: ReadRefusalCodeSchema }),
 ]);
 export type ReadChildReply = z.infer<typeof ReadChildReplySchema>;
 /** Upper bound on one reply line, used by Express to cap the child's stdout. */
-export const READ_CHILD_MAX_REPLY_BYTES = Math.ceil(READ_FILE_LIMITS.maxBytes / 3) * 4 + 1_024;
+export const READ_CHILD_MAX_REPLY_BYTES = Math.max(Math.ceil(READ_FILE_LIMITS.maxBytes / 3) * 4,
+  // A full listing: every entry at the deepest path, with JSON escaping headroom.
+  READ_FILE_LIMITS.maxEntries * (READ_FILE_LIMITS.maxPathChars * 2 + 128)) + 1_024;
 
 // Express's audit record of one tool decision (migration 007). Never carries file content or the workspace root.
 export const TOOL_AUDIT_LIMITS = Object.freeze({ maxRows: 10_000, maxList: 200 });
 const nullableId = z.uuid().nullable();
 export const ToolAuditInputSchema = z.strictObject({
-  toolId: z.literal('read_file'),
+  toolId: z.enum(['read_file', 'list_directory']),
   projectId: nullableId, taskId: nullableId, toolCallId: nullableId,
   /** Normalized relative path; empty when the requested path was not valid. */
   path: z.string().max(READ_FILE_LIMITS.maxPathChars),
   decision: z.enum(['allowed', 'refused', 'failed']),
   code: z.string().min(1).max(64).regex(/^[A-Z_]+$/).nullable(),
+  /** Bytes returned (read_file) or entries returned (list_directory). */
   bytes: z.number().int().nonnegative().max(READ_FILE_LIMITS.maxBytes),
   durationMs: z.number().int().nonnegative(),
 });

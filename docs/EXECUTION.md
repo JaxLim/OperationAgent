@@ -528,7 +528,7 @@ PR #8 评审修正（同日）：
 - **执行链路**：`ToolRouter.readFile` → 参数 Schema 校验 → 平台门禁（只有 `win32-x64` 有 Read Gate 测试，其余平台返回 `READ_ADAPTER_UNAVAILABLE` 且不启动任何进程）→ 路径策略 → Read Adapter 子进程 → 结果 Schema 校验 → 审计。路由只决定路线，Express 自身从不打开工作区文件。
 - **Read Adapter 子进程**（`apps/server/src/tools/read-child.ts`）：每次读取一个短命进程，由 Express 用官方 Node 运行时以固定 argv 启动：`--permission --allow-fs-read=<项目根>`、`--max-old-space-size=64`、`--disallow-code-generation-from-strings`，`shell: false`，不继承 execArgv。Node 权限模型使该进程只能读项目根之下，不能写文件、创建子进程、启动 worker 线程或加载原生模块。程序只依赖 Node 内置模块，因此权限授予不必覆盖 `node_modules`。
 - **环境变量**：子进程环境只有 `SystemRoot`/`WINDIR`；Windows 进程启动器会自动补齐的 `PATH`、`USERPROFILE`、`TEMP` 等显式置空，`NODE_OPTIONS` 等任何 Express 环境变量都不会传入。
-- **路径策略**（Express，纯字符串，无 I/O，`read-path.ts`）：拒绝 `..`、绝对路径、盘符、UNC、`\?\`/`\.\`、NTFS 备用数据流（任何 `:`）、设备名（`nul.txt`、`COM1` 等）、8.3 短名（`~1`）、结尾的点或空格、控制字符；敏感路径按目录（`.git`、`.ssh`、`.aws`、`.kube`、`.config/gcloud` 等）、文件名（`.npmrc`、`.netrc`、`.git-credentials`、`credentials`、`terraform.tfstate` 等）、扩展名（`.pem`、`.key`、`.pfx`、`.kdbx` 等）、私钥前缀（`id_rsa*` 等）和 `.env*`（`.env.example` 等模板除外）拒绝，大小写不敏感。项目根必须是盘符绝对路径且不是盘符根目录。
+- **路径策略**（Express，纯字符串，无 I/O，`read-path.ts`）：拒绝 `..`、绝对路径、盘符、UNC、`\\?\`/`\\.\`、NTFS 备用数据流（任何 `:`）、设备名（`nul.txt`、`COM1` 等）、8.3 短名（`~1`）、结尾的点或空格、控制字符；敏感路径按目录（`.git`、`.ssh`、`.aws`、`.kube`、`.config/gcloud` 等）、文件名（`.npmrc`、`.netrc`、`.git-credentials`、`credentials`、`terraform.tfstate` 等）、扩展名（`.pem`、`.key`、`.pfx`、`.kdbx` 等）、私钥前缀（`id_rsa*` 等）和 `.env*`（`.env.example` 等模板除外）拒绝，大小写不敏感。项目根必须是盘符绝对路径且不是盘符根目录。
 - **符号链接与竞态**（子进程内）：逐级 `lstat`，任何符号链接或 junction 拒绝（`LINK_REJECTED`）；目标必须是普通文件且只有一个链接（硬链接拒绝，`MULTIPLE_LINKS`）；打开后用句柄的 `(dev, ino)` 与检查时的身份比对，并对整条路径重新逐级核验，任一处不一致即 `CHANGED_DURING_READ`。项目根本身是链接时也拒绝。
 - **内容**：默认最多 64 KiB，上限 256 KiB；截断时不切断 UTF-8 字符；含 NUL 或不是合法 UTF-8 的文件按 `BINARY_FILE` 拒绝。结果带 `sha256`、实际字节数、文件大小和截断标志。
 - **Express 侧启动器**（`read-adapter.ts`，Express 中唯一允许 `node:child_process` 的模块）：并发上限 4、排队上限 32（超出返回 `BUSY`）；stdout 上限约 350 KiB，stderr 上限 8 KiB 且直接丢弃；回复必须恰好一行并通过 `ReadChildReplySchema`；默认 5 秒超时（注册时只接受 1–30 秒），超时强杀，并且**只有观察到子进程退出后读取才算结束**；2 秒内确认不了退出则返回 `CLEANUP_UNCONFIRMED`，适配器自我停用（fail closed）直到控制面重启。运行时不是官方 Node（例如 Electron）时同样停用。
@@ -556,3 +556,23 @@ PR #12 首轮 CI 修正（同日）：
 - Codex 评审：读取结果保留 UTF-8 BOM（`ignoreBOM: true`），`bytes` 和 `sha256` 与返回内容严格一致；新增对应测试。
 - macOS P0 metadata 任务在 15 分钟上限被取消，没有失败步骤，与本 PR 改动无关。
 
+
+## M2 第四切片：流式模型回合、Express 会话与 list_directory（2026-11-09）
+
+授权：同上（M1–M4 授权；用户本轮原话 “Please continue developing OperationAgent independently according to the existing roadmap and architecture … Only merge changes after all required checks pass and critical issues are resolved.”）。M2 剩余工作拆为三个 PR：本切片（模型流式回合 + 读取工具）、Agent Loop 与任务执行器、生产 Worker 与实时界面。本切片**不新增任何 IPC/HTTP 入口，不启动 Worker，`agentReady` 仍为 false**。
+
+设计要点：
+- **会话由 Express 持有**（`apps/server/src/agent/conversation.ts`）。供应商返回的 assistant 内容按原样保存（含 thinking 签名、fallback 标记），因为 thinking 块必须原样回放、历史必须只追加。工具结果只由 Express 根据自己实际执行的结果生成；每一轮的每个 tool_use 恰好得到一个 tool_result（未执行、被截断或超出每轮上限的调用得到 is_error 结果），所以下一次请求总满足配对规则。Worker 只看到规范化视图（文本、工具调用 id/name/input、停止原因、用量），不能伪造工具结果，也不会经 OWIP（单帧 256 KiB 上限）传输会话内容。
+- **流式模型网关**（`apps/server/src/models/turns.ts`）：按 Claude API 参考使用官方 `@anthropic-ai/sdk`（精确锁定 1.3.0，发布超过两周；新增 7 个传递依赖，均写入锁文件哈希）。`client.beta.messages.stream` + `finalMessage()`；系统提示与顶层自动缓存两个 `cache_control` 断点；`thinking: {type: "adaptive", display: "summarized"}`；工具定义 `strict: true`（输入只是路径，保留供应商侧缓冲校验，不开启 eager input streaming，Express 仍用 Zod 复验）；Opus 5.5 与 Sonnet 5.5 默认开启服务端拒绝回退 `fallbacks: "default"`（`server-side-fallback-2026-07-01`），Haiku 5.5 没有服务端回退，不发送该参数。中途回退后按规则丢弃回退标记之前只有被拒模型能用的块。停止原因、失败码统一归一化；供应商正文、头和错误文本不离开网关。
+- **环境无关**：SDK 默认会读取 `ANTHROPIC_BASE_URL`、`ANTHROPIC_CUSTOM_HEADERS`、`ANTHROPIC_LOG`、OpenTelemetry 等环境配置。网关显式设置密钥、端点、`logLevel: 'off'`、静默 logger、关闭遥测与传播；每个回合的受控 fetch 只允许固定源和 `/v1/messages`、拒绝重定向、只转发惰性头，并由自己写入 `authorization`、`anthropic-version`、`anthropic-beta`。测试发现 `ANTHROPIC_CUSTOM_HEADERS` 能覆盖 SDK 自己的 `authorization` 头（生产侧车环境本来不含该变量），据此改为由受控 fetch 统一设置这三个头。SDK 1.x 以 `Authorization: Bearer <key>` 发送 API Key。
+- **导入边界**：只有 `models/turns.ts` 可导入 SDK 运行时，`agent/conversation.ts` 只导入其类型；`check-workspace` 依赖白名单同步加入 `@anthropic-ai/sdk@1.3.0`。
+- **list_directory**：同一 Read Adapter 子进程新增 `list` 操作，同一 Read Gate。广度优先、名称排序、最多 4 层、最多 1,000 项；链接/junction 显示为 `link` 且从不跟随；`.git`、`node_modules` 和单段敏感目录（`.ssh`、`.aws` 等）只显示不进入，Express 再丢弃任何位于敏感目录内的条目；每个目录读取前后核对身份，被替换为 junction 即整体 `CHANGED_DURING_READ`。迁移 `008-tool-audit-tools.sql` 重建审计表以接受 `list_directory`（007 已校验和，不修改），数据库版本 7 → 8。
+
+本地验证（Windows x64）：
+- `pnpm check:engineering` 九项全部退出 0，单元测试 **138/138**。新增 `tests/m2/agent-turns.test.ts`（8 项，本机假 Messages API，真实 HTTP、真实 SSE、真实 SDK 解析）：thinking/文本/工具输入增量实时到达、thinking 原样回放、请求体含缓存断点/strict/回退参数；Haiku 不发送回退；拒绝、max_tokens、上下文耗尽的停止原因；529→429→成功按 retry-after 重试，401/403/404/413/400 不重试且无供应商文本外泄；流中途错误事件；取消与回合截止时间；重定向时密钥不跟随；注入的环境变量无法改端点、加头、换凭据或开日志；回退回放过滤；会话只追加、一次一个结果、截断或超额调用不执行、大小上限。`tests/m2/read-gate.test.ts` 新增 list_directory 用例（11/11）。
+- 未验证：CI 运行、安装包烟测（期望迁移 1–8）；没有对真实 api.anthropic.com 发起请求。原有的“测试连接”仍使用直接 fetch（`x-api-key`，旧 API 版本），后续切片迁移到 SDK。
+
+PR #13 评审修正（同日）：
+- Codex P1：多层 `list_directory` 中，目录在读取后的身份检查之后若被替换为 junction，后续子项查找会经替换后的路径进行，深层可能列出敏感或工作区外目录的名称和大小；最终核验只覆盖所请求路径。属实。
+- 修正：Windows 上只要某目录内部有任一打开的句柄，该目录及其所有祖先都无法重命名（实测 EPERM）。现在每个目录先“钉住”：打开其中一个非链接条目并核对句柄身份与路径一致；再核验从根到该目录的整条链；然后才执行真正返回结果的 `readdir`；接受结果前再次核验钉子和整条链。钉住之前被替换会被强身份检查发现，钉住之后无法替换。无法钉住的非空目录（只含链接或被锁定的条目）不会被读取，作为 `unlisted` 返回。排他锁方案（`UV_FS_O_EXLOCK`）会阻断自己的 `readdir`，且在 IDE 文件监视器持有句柄时必然失败，故未采用。
+- 新增测试：只含 junction 的目录报告为 unlisted；子目录与指向外部（文件名带 canary）的 junction 反复替换时并发深度 3 列表，本次 2,884 次替换、120 次列表，无任何外部名称泄露，23 次检测为 `CHANGED_DURING_READ`。`check:engineering` 九项退出 0，**139/139**。

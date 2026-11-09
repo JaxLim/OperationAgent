@@ -73,9 +73,10 @@ test('SEC-08 platforms without a Read Gate fail closed with READ_ADAPTER_UNAVAIL
     for (const platform of ['linux-x64', 'darwin-arm64', 'win32-arm64'] as const) {
       const router = createToolRouter({ store, adapter, platform });
       assert.deepEqual(await router.readFile({ projectId, args: { path: 'README.md' } }), { status: 'failed', code: 'READ_ADAPTER_UNAVAILABLE', retryable: false });
+      assert.deepEqual(await router.listDirectory({ projectId, args: { path: '.' } }), { status: 'failed', code: 'READ_ADAPTER_UNAVAILABLE', retryable: false });
     }
     assert.equal(adapter.snapshot().launched, 0);
-    assert.equal(store.listToolAudit().filter(entry => entry.code === 'READ_ADAPTER_UNAVAILABLE').length, 3);
+    assert.equal(store.listToolAudit().filter(entry => entry.code === 'READ_ADAPTER_UNAVAILABLE').length, 6);
   });
 });
 
@@ -143,6 +144,9 @@ test('SEC-08 Windows: out-of-bounds and sensitive reads are refused, audited, la
       assert.equal(audit.length, 5);
       assert.ok(audit.every(entry => entry.decision === 'refused' && entry.toolCallId !== null && entry.projectId === projectId && entry.bytes === 0));
       assert.deepEqual(audit.map(entry => entry.path).sort(), ['', '', '', '.env', '.git/config'].sort());
+      assert.deepEqual(await router.readFile({ projectId, toolCallId: '-'.repeat(36), taskId: 'f'.repeat(36), args: { path: '.env' } }),
+        { status: 'refused', code: 'SENSITIVE_PATH' }, 'malformed correlation ids never break the audit');
+      assert.deepEqual([store.listToolAudit()[0]!.toolCallId, store.listToolAudit()[0]!.taskId], [null, null]);
       await router.readFile({ projectId, args: { path: 'README.md' } });
       assert.equal(store.listToolAudit()[0]!.decision, 'allowed');
       const bytes = readdirSync(resolve(base, 'data')).map(name => readFileSync(resolve(base, 'data', name)).toString('latin1')).join('');
@@ -188,7 +192,7 @@ test('SEC-08 Windows: a directory swapped for a junction while reads run never y
       while (running) {
         // Real directory → junction to outside → real directory, as fast as the file system allows.
         await retry(() => renameSync(resolve(root, 'swap'), resolve(root, 'swap-real')));
-        symlinkSync(outside, resolve(root, 'swap'), 'junction');
+        await retry(() => symlinkSync(outside, resolve(root, 'swap'), 'junction'));
         await tick();
         await retry(() => rmSync(resolve(root, 'swap')));
         await retry(() => renameSync(resolve(root, 'swap-real'), resolve(root, 'swap')));
@@ -284,5 +288,88 @@ test('SEC-08 Windows: a hung child is killed at the deadline and its exit confir
       assert.equal((await first).status, 'failed');
       assert.equal(ReadChildReplySchema.safeParse({ v: 1, status: 'ok', content: 'not base64!', size: 1, truncated: false }).success, false);
       assert.match(READ_CHILD_SCRIPT, /[\\/]apps[\\/]server[\\/]dist[\\/]tools[\\/]read-child\.js$/);
+    });
+  });
+
+test('SEC-08 Windows: list_directory is bounded, never follows links, never enters sensitive directories, and is audited',
+  { skip: !WINDOWS && 'win32-x64 only' }, async () => {
+    await withFixture(async ({ root, outside, store, projectId }) => {
+      const router = createToolRouter({ store });
+      mkdirSync(resolve(root, 'node_modules', 'pkg'), { recursive: true }); writeFileSync(resolve(root, 'node_modules', 'pkg', 'index.js'), 'x');
+      mkdirSync(resolve(root, '.ssh')); writeFileSync(resolve(root, '.ssh', 'id_rsa'), SECRET);
+      symlinkSync(outside, resolve(root, 'linked'), 'junction');
+      const top = await router.listDirectory({ projectId, args: { path: '.' } });
+      assert.deepEqual(top.status === 'ok' && top.entries.map(entry => [entry.path, entry.type]), [['.env', 'file'], ['.git', 'directory'],
+        ['.ssh', 'directory'], ['README.md', 'file'], ['linked', 'link'], ['node_modules', 'directory'], ['src', 'directory']]);
+      assert.equal(top.status === 'ok' && top.entries.find(entry => entry.path === 'README.md')?.size, 8);
+      const deep = await router.listDirectory({ projectId, args: { path: '', depth: 4 } });
+      assert.ok(deep.status === 'ok');
+      const paths = deep.status === 'ok' ? deep.entries.map(entry => entry.path) : [];
+      assert.ok(paths.includes('src/deep') && paths.includes('src/deep/code.ts'));
+      for (const hidden of ['.git/config', '.ssh/id_rsa', 'node_modules/pkg', 'linked/secret.txt']) assert.ok(!paths.includes(hidden), hidden);
+      assert.ok(!JSON.stringify(deep).includes(SECRET));
+      assert.deepEqual(await router.listDirectory({ projectId, args: { path: 'src', depth: 2 } }), { status: 'ok', path: 'src', truncated: false, unlisted: [],
+        entries: [{ path: 'src/deep', type: 'directory', size: null }, { path: 'src/deep/code.ts', type: 'file', size: 26 }] });
+      const launched = router.adapter.snapshot().launched;
+      for (const [path, code] of [['.git', 'SENSITIVE_PATH'], ['x/.ssh', 'SENSITIVE_PATH'], ['..\\outside', 'OUTSIDE_WORKSPACE'],
+        ['../outside', 'OUTSIDE_WORKSPACE'], ['C:\\Windows', 'OUTSIDE_WORKSPACE']] as const) {
+        assert.deepEqual(await router.listDirectory({ projectId, args: { path } }), { status: 'refused', code }, path);
+      }
+      assert.equal(router.adapter.snapshot().launched, launched, 'policy refusals start no child');
+      assert.deepEqual(await router.listDirectory({ projectId, args: { path: 'linked' } }), { status: 'refused', code: 'LINK_REJECTED' });
+      assert.deepEqual(await router.listDirectory({ projectId, args: { path: 'README.md' } }), { status: 'refused', code: 'NOT_A_FILE' });
+      assert.deepEqual(await router.listDirectory({ projectId, args: { path: 'missing' } }), { status: 'refused', code: 'NOT_FOUND' });
+      assert.deepEqual(await router.listDirectory({ projectId, args: { path: '.', depth: 9 } }), { status: 'refused', code: 'INVALID_PATH' });
+      mkdirSync(resolve(root, 'many'));
+      for (let index = 0; index < READ_FILE_LIMITS.maxEntries + 5; index++) writeFileSync(resolve(root, 'many', `f${String(index).padStart(4, '0')}.txt`), '');
+      const many = await router.listDirectory({ projectId, args: { path: 'many' } });
+      assert.deepEqual(many.status === 'ok' && [many.entries.length, many.truncated, many.entries[0]!.path], [READ_FILE_LIMITS.maxEntries, true, 'many/f0000.txt']);
+      const audit = store.listToolAudit().filter(entry => entry.toolId === 'list_directory');
+      assert.ok(audit.some(entry => entry.decision === 'allowed' && entry.path === 'many' && entry.bytes === READ_FILE_LIMITS.maxEntries));
+      assert.ok(audit.some(entry => entry.decision === 'refused' && entry.code === 'SENSITIVE_PATH' && entry.path === '.git'));
+      assert.deepEqual(router.adapter.snapshot().activePids, []);
+    });
+  });
+
+test('SEC-08 Windows: list_directory reads a directory only while it is pinned; a swapped subdirectory never leaks names',
+  { skip: !WINDOWS && 'win32-x64 only' }, async t => {
+    await withFixture(async ({ root, outside, store, projectId }) => {
+      const router = createToolRouter({ store, adapter: createReadAdapter({ maxConcurrent: 4 }) });
+      // A directory holding only a junction cannot be pinned, so it is reported as unlisted and never read.
+      mkdirSync(resolve(root, 'onlylinks')); symlinkSync(outside, resolve(root, 'onlylinks', 'away'), 'junction');
+      const linksOnly = await router.listDirectory({ projectId, args: { path: 'onlylinks' } });
+      assert.deepEqual(linksOnly, { status: 'ok', path: 'onlylinks', entries: [], truncated: false, unlisted: ['onlylinks'] });
+      const nested = await router.listDirectory({ projectId, args: { path: '.', depth: 2 } });
+      assert.ok(nested.status === 'ok' && nested.unlisted.includes('onlylinks') && !nested.entries.some(entry => entry.path.startsWith('onlylinks/')));
+      // Outside entries carry a canary in their names; no listing may ever return one.
+      for (let index = 0; index < 5; index++) mkdirSync(resolve(outside, `${SECRET}-${index}`, 'deeper'), { recursive: true });
+      mkdirSync(resolve(root, 'swap', 'inner'), { recursive: true }); writeFileSync(resolve(root, 'swap', 'inner', 'plain.txt'), 'x');
+      let running = true; let swaps = 0;
+      const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+      const retry = async (step: () => void): Promise<void> => {
+        for (;;) { try { step(); return; } catch (error) { if (!(error instanceof Error && 'code' in error && ['EPERM', 'EBUSY', 'EACCES'].includes(String(error.code)))) throw error; await tick(); } }
+      };
+      const swapper = (async () => {
+        while (running) {
+          await retry(() => renameSync(resolve(root, 'swap'), resolve(root, 'swap-real')));
+          await retry(() => symlinkSync(outside, resolve(root, 'swap'), 'junction'));
+          await tick();
+          await retry(() => rmSync(resolve(root, 'swap')));
+          await retry(() => renameSync(resolve(root, 'swap-real'), resolve(root, 'swap')));
+          swaps++; await tick();
+        }
+      })();
+      const outcomes = new Map<string, number>();
+      for (let round = 0; round < 30; round++) {
+        const results = await Promise.all(Array.from({ length: 4 }, () => router.listDirectory({ projectId, args: { path: '.', depth: 3 } })));
+        for (const result of results) {
+          assert.ok(!JSON.stringify(result).includes(SECRET), 'a name from outside the workspace was listed');
+          const key = result.status === 'ok' ? 'ok' : result.code;
+          outcomes.set(key, (outcomes.get(key) ?? 0) + 1);
+        }
+      }
+      running = false; await swapper;
+      t.diagnostic(`swaps=${swaps} outcomes=${JSON.stringify(Object.fromEntries(outcomes))}`);
+      assert.ok(swaps > 5);
     });
   });

@@ -45,6 +45,9 @@ export default {
       'packages/platform-worker/src/parent.ts': ['node:module'],
       // SEC-08: the Read Adapter launcher is the only Express module that creates a child process.
       'apps/server/src/tools/read-adapter.ts': ['node:child_process'],
+      // The Model Gateway is the only module that talks to the provider; the conversation only uses its types.
+      'apps/server/src/models/turns.ts': ['@anthropic-ai/sdk', '@anthropic-ai/sdk/resources/beta/messages/messages'],
+      'apps/server/src/agent/conversation.ts': ['@anthropic-ai/sdk/resources/beta/messages/messages'],
     };
     // SEC-08: Express never reads workspace files in-process. Under tools/, only the Read Adapter child program may use
     // the file system, it may use nothing else (it runs under a read-only permission grant), and nothing imports it.
