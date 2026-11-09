@@ -1,5 +1,6 @@
-import { PROTOCOL_VERSION, RpcMessageSchema, WorkerBootstrapSchema, WorkerIdentitySchema } from '@operation-agent/contracts';
-import type { PeerRole, RpcMessage, RpcRequest, RpcResponse, WorkerIdentity } from '@operation-agent/contracts';
+import { AGENT_CAPABILITY, AGENT_RPC_METHODS, PROTOCOL_VERSION, RPC_METHOD_DEADLINES_MS, RpcMessageSchema, WorkerBootstrapSchema,
+  WorkerIdentitySchema } from '@operation-agent/contracts';
+import type { PeerRole, RpcCapabilities, RpcMessage, RpcRequest, RpcResponse, WorkerIdentity } from '@operation-agent/contracts';
 import { OWIP_POLICY, OwipDecoder, encodeOwipFrame } from './framing.js';
 import { OwipWriteQueue } from './write-queue.js';
 import type { ByteTransport, TransportClock } from './write-queue.js';
@@ -13,7 +14,17 @@ export interface RpcSessionOptions {
   clock: TransportClock;
   onRequest?: (request: RpcRequest) => void;
   onClose?: (error: Error) => void;
+  /**
+   * Worker role: the capabilities this runtime implements. A hello asking for more is refused, so a runtime is never
+   * driven with methods it does not answer. Defaults to health and shutdown (the P1 fixture).
+   */
+  offer?: RpcCapabilities;
 }
+
+const BASE_CAPABILITIES: RpcCapabilities = ['health', 'shutdown'];
+const agentMethod = (method: string): boolean => (AGENT_RPC_METHODS as readonly string[]).includes(method);
+/** Per-method deadline; anything not listed keeps the short OWIP request deadline. */
+const deadlineFor = (method: string): number => RPC_METHOD_DEADLINES_MS[method as keyof typeof RPC_METHOD_DEADLINES_MS] ?? OWIP_POLICY.requestMs;
 
 // This session proves protocol membership on an already trusted inherited carrier, not OS isolation.
 // The launcher must bind identity to the actual created process handle before passing the carrier here.
@@ -29,6 +40,8 @@ export class RpcSession {
   private cancelHandshake: () => void;
   private cancelHeartbeat: (() => void) | undefined;
   private missedHeartbeats = 0;
+  /** Fixed by the handshake; agent methods are refused in both directions unless it includes `agent`. */
+  private capabilities: RpcCapabilities = BASE_CAPABILITIES;
   constructor(private readonly options: RpcSessionOptions) {
     this.identity = WorkerIdentitySchema.parse(options.identity);
     this.peer = options.role === 'express' ? 'worker' : 'express';
@@ -40,11 +53,16 @@ export class RpcSession {
     return { state: this.state, outbound: this.outbound.size, inbound: this.inbound.size, bufferedBytes: this.decoder.bufferedBytes,
       dataBytes: queue.dataBytes, controlBytes: queue.controlBytes, missedHeartbeats: this.missedHeartbeats };
   }
-  startHandshake(challenge: string, requestId: string): Promise<RpcResponse> {
+  startHandshake(challenge: string, requestId: string, capabilities: RpcCapabilities = BASE_CAPABILITIES): Promise<RpcResponse> {
     return this.request(WorkerBootstrapSchema.parse({ jsonrpc: '2.0', protocolVersion: PROTOCOL_VERSION, ...this.identity,
       role: 'express', requestId, id: requestId, method: 'hello', params: {
-        minimumProtocolVersion: PROTOCOL_VERSION, capabilities: ['health', 'shutdown'], challenge,
+        minimumProtocolVersion: PROTOCOL_VERSION, capabilities, challenge,
       } }));
+  }
+  /** Whether the handshake opened the agent methods on this session. */
+  get agentEnabled(): boolean { return (this.capabilities as readonly string[]).includes(AGENT_CAPABILITY); }
+  private requireCapability(method: string): void {
+    if (agentMethod(method) && !this.agentEnabled) throw new Error('RPC_CAPABILITY_REJECTED');
   }
   request(message: RpcRequest): Promise<RpcResponse> { return this.sendRequest(message, OWIP_POLICY.requestMs, true); }
   private parse(input: unknown, role: PeerRole): RpcMessage {
@@ -63,6 +81,7 @@ export class RpcSession {
         if (this.state !== 'new' || this.options.role !== 'express') throw new Error('RPC_HANDSHAKE_ORDER');
         this.state = 'handshaking'; timeoutMs = OWIP_POLICY.handshakeMs;
       } else if (this.state !== 'ready') throw new Error('RPC_NOT_READY');
+      else { this.requireCapability(message.method); if (timeoutMs === OWIP_POLICY.requestMs) timeoutMs = deadlineFor(message.method); }
       if (this.outbound.size >= OWIP_POLICY.maxInFlight) throw new Error('RPC_IN_FLIGHT_LIMIT');
       if (this.outbound.has(message.id)) throw new Error('RPC_DUPLICATE_REQUEST');
       if (message.method === 'shutdown') { this.state = 'closing'; this.cancelHeartbeat?.(); }
@@ -91,11 +110,15 @@ export class RpcSession {
     if ('method' in message) {
       if (message.method === 'hello') {
         if (this.state !== 'new' || this.options.role !== 'worker') throw new Error('RPC_HANDSHAKE_ORDER');
-        WorkerBootstrapSchema.parse(message); this.state = 'handshaking';
+        WorkerBootstrapSchema.parse(message);
+        const offer = this.options.offer ?? BASE_CAPABILITIES;
+        if (!message.params.capabilities.every(capability => (offer as readonly string[]).includes(capability))) throw new Error('RPC_CAPABILITY_REJECTED');
+        this.capabilities = message.params.capabilities; this.state = 'handshaking';
       } else if (this.state !== 'ready') throw new Error('RPC_NOT_READY');
+      else this.requireCapability(message.method);
       if (this.inbound.size >= OWIP_POLICY.maxInFlight) throw new Error('RPC_IN_FLIGHT_LIMIT');
       if (this.inbound.has(message.id)) throw new Error('RPC_DUPLICATE_REQUEST');
-      const cancel = this.options.clock.schedule(OWIP_POLICY.requestMs, () => this.fail(new Error('RPC_HANDLER_TIMEOUT')));
+      const cancel = this.options.clock.schedule(deadlineFor(message.method), () => this.fail(new Error('RPC_HANDLER_TIMEOUT')));
       this.inbound.set(message.id, { request: message, cancel, responding: false });
       if (message.method === 'hello') {
         void this.respond({ jsonrpc: '2.0', protocolVersion: PROTOCOL_VERSION, ...this.identity,
@@ -111,7 +134,9 @@ export class RpcSession {
     if (!pending) throw new Error('RPC_UNCORRELATED_RESPONSE');
     this.validateResponse(message, pending.request);
     pending.cancel(); this.outbound.delete(message.id);
-    if (pending.request.method === 'hello') { this.cancelHandshake(); this.state = 'ready'; }
+    if (pending.request.method === 'hello' && 'result' in message && message.result.kind === 'hello') {
+      this.capabilities = message.result.capabilities; this.cancelHandshake(); this.state = 'ready';
+    }
     pending.resolve(message);
   }
   private validateResponse(response: RpcResponse, request: RpcRequest): void {
@@ -120,6 +145,9 @@ export class RpcSession {
       if (request.method === 'hello' && (response.result.kind !== 'hello' || response.result.challenge !== request.params.challenge)) {
         throw new Error('RPC_CHALLENGE_MISMATCH');
       }
+      // The negotiated set is exactly what Express asked for: a Worker can neither add nor drop a capability.
+      if (request.method === 'hello' && response.result.kind === 'hello' &&
+        JSON.stringify(response.result.capabilities) !== JSON.stringify(request.params.capabilities)) throw new Error('RPC_CAPABILITY_REJECTED');
     } else if (request.method === 'hello') throw new Error('RPC_HANDSHAKE_REJECTED');
   }
   // Resolves on transport write completion; a shutdown reply is not proof of process-tree cleanup.

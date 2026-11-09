@@ -18,7 +18,7 @@ import type { AuditStore } from './audit.js';
 
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
 const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql',
-  '006-providers-agents.sql', '007-tool-audit.sql', '008-tool-audit-tools.sql'];
+  '006-providers-agents.sql', '007-tool-audit.sql', '008-tool-audit-tools.sql', '009-agent-conversation.sql'];
 export interface Store extends TaskLog, ModelStore, ConfigStore, AuditStore {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;

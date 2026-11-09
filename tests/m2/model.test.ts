@@ -68,7 +68,7 @@ test('model contracts: keys are bounded printable ASCII, failures never echo the
   assert.equal(CryptoBridgeRequestSchema.safeParse({ ...decrypt, ciphertext: 'A'.repeat(8_196) }).success, false);
   assert.equal(CryptoBridgeRequestSchema.safeParse({ ...decrypt, ciphertext: 'not base64!' }).success, false);
   assert.equal(CryptoBridgeResponseSchema.safeParse({ kind: 'crypto-response', ...identity, requestId: randomUUID(), ok: false, error: 'boom' }).success, false);
-  assert.equal(ControlHealthSchema.shape.databaseVersion.value, 8);
+  assert.equal(ControlHealthSchema.shape.databaseVersion.value, 9);
   assert.deepEqual([CONTROL_ROUTES.modelSettings, CONTROL_ROUTES.modelCredential, CONTROL_ROUTES.modelCredentialClear, CONTROL_ROUTES.modelTest],
     ['/v1/model/settings', '/v1/model/credential', '/v1/model/credential/clear', '/v1/model/test']);
   assert.deepEqual([IPC_CHANNELS.getModelSettings, IPC_CHANNELS.saveModelChoice, IPC_CHANNELS.setApiKey, IPC_CHANNELS.clearApiKey, IPC_CHANNELS.testModelConnection],
@@ -76,7 +76,7 @@ test('model contracts: keys are bounded printable ASCII, failures never echo the
 });
 
 test('CredentialService stores only ciphertext and a hint; the key never reaches SQLite bytes', () => withStore(async (store, directory) => {
-  assert.equal(store.databaseVersion, 8);
+  assert.equal(store.databaseVersion, 9);
   assert.equal(store.getModel(), 'claude-sonnet-5-5');
   assert.equal(store.saveModel('claude-opus-5-5'), 'claude-opus-5-5');
   assert.throws(() => store.saveModel('gpt-4' as never));
