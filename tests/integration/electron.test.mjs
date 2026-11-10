@@ -263,9 +263,9 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.match(view.end, /Done/); assert.match(view.end, /no files were changed/);
   assert.equal(view.stop, false, 'a finished task offers no Stop');
   assert.match(view.activity, /Activity log/);
-  // The usage line is derived from the committed turn and tool events: 900 + 300 + 900 prompt tokens, 900 of them cached.
+  // The usage line is derived from the committed turn and tool events: 900 + 300 + 900 input tokens, 900 of them cached.
   assert.match(view.usage, /turns 2 · tool calls 2/);
-  assert.match(view.usage, /prompt 2,100 tokens \(43% cached\)/);
+  assert.match(view.usage, /input 2,100 tokens \(43% cached\)/);
   assert.match(view.usage, /output 240 tokens/);
   assert.match(view.usage, /model 5\.5s · first content 0\.5s \(median\) · tools 0\.1s/);
   await host.command('capture', `m2/${process.platform}-${process.arch}/conversation.png`);

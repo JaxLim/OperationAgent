@@ -23,10 +23,16 @@ const compactionBlock = (index: number, summary: string): Record<string, unknown
   { type: 'content_block_start', index, content_block: { type: 'compaction', content: null, encrypted_content: null } },
   { type: 'content_block_delta', index, delta: { type: 'compaction_delta', content: summary, encrypted_content: 'opaque-1' } },
   { type: 'content_block_stop', index }];
-const invalidRequest = (res: ServerResponse): void => {
-  res.writeHead(400, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'Unexpected value(s) for the `anthropic-beta` header' } }));
+const rejected = (status: number, type: string) => (res: ServerResponse): void => {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ type: 'error', error: { type, message: 'Unexpected value(s) for the `anthropic-beta` header' } }));
 };
+const invalidRequest = rejected(400, 'invalid_request_error');
+/** A summary block whose summarization failed: its content stays null and the provider treats it as a no-op. */
+const failedCompactionBlock = (index: number): Record<string, unknown>[] => [
+  { type: 'content_block_start', index, content_block: { type: 'compaction', content: null, encrypted_content: null } },
+  { type: 'content_block_delta', index, delta: { type: 'compaction_delta', content: null, encrypted_content: null } },
+  { type: 'content_block_stop', index }];
 /** A request body without the context parameter, to compare a managed request with an unmanaged one. */
 const unmanaged = (body: ProviderBody): Record<string, unknown> => Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'context_management'));
 const turnEvents = (events: TaskEvent[]) => events.flatMap(event => event.type === 'assistant_turn' ? [event.payload] : []);
@@ -124,6 +130,24 @@ test('gateway: a turn reports when its first content arrived, how long it took a
   });
   assert.deepEqual(usageOf({ input_tokens: 10, output_tokens: 2, cache_read_input_tokens: null, cache_creation_input_tokens: null,
     iterations: null } as Parameters<typeof usageOf>[0]), { usage: { inputTokens: 10, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 }, promptTokens: 10 });
+  // After a server-side fallback the prompt that was answered is the fallback model's iteration, not the declined one.
+  assert.equal(usageOf({ input_tokens: 1_400, output_tokens: 9, cache_read_input_tokens: 100, cache_creation_input_tokens: 0, iterations: [
+    { type: 'message', input_tokens: 500, output_tokens: 4, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    { type: 'fallback_message', input_tokens: 900, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 0 }],
+  } as unknown as Parameters<typeof usageOf>[0]).promptTokens, 1_000);
+  // A summary block and a fallback marker show the user nothing: alone they are not "first content"; a failed
+  // summarization (null content) is replayed like any block but is not reported as a summary.
+  await withProvider([
+    res => sse(res, [messageStart(), ...compactionBlock(0, 'Summary only.'), ...messageStop('end_turn')]),
+    res => sse(res, [messageStart(), ...failedCompactionBlock(0), ...textBlock(1, 'Still here.'), ...messageStop('end_turn')]),
+  ], async endpoint => {
+    const gateway = createTurnGateway({ endpoint, maxRetries: 0 });
+    const markerOnly = await gateway.runTurn(turnInput({ context: CONTEXT_POLICIES['claude-sonnet-5-5'] }));
+    assert.ok(markerOnly.status === 'ok' && markerOnly.timing.ttftMs === null && markerOnly.context.compacted);
+    const failed = await gateway.runTurn(turnInput({ context: CONTEXT_POLICIES['claude-sonnet-5-5'] }));
+    assert.ok(failed.status === 'ok' && failed.timing.ttftMs !== null && failed.context.compacted === false);
+    assert.deepEqual(failed.status === 'ok' && failed.replay.map(block => block.type), ['compaction', 'text']);
+  });
 });
 
 test('a summary block is conversation content: kept across a fallback, stored verbatim and sent back unchanged', async () => {
@@ -205,6 +229,27 @@ test('if the provider rejects a managed request, the task continues unmanaged: o
       assert.equal(summarizeTaskUsage(task.events).contextManaged, false);
     });
   });
+  // A provider that answers the managed request with 403 or 404 (the feature is not available to this key or model)
+  // is handled the same way.
+  for (const [status, type] of [[403, 'permission_error'], [404, 'not_found_error']] as const) {
+    const reply = (res: ServerResponse, body: ProviderBody): void => ('context_management' in body ? rejected(status, type)(res)
+      : sse(res, [messageStart(), ...textBlock(0, 'Answered.'), ...messageStop('end_turn')]));
+    await withProvider([reply], async (endpoint, bodies) => {
+      await withAgentHarness(endpoint, async harness => {
+        const task = await harness.runTask('What is here?');
+        assert.equal(task.state, 'COMPLETED', `HTTP ${status}`);
+        assert.deepEqual(bodies.map(body => 'context_management' in body), [true, false]);
+        assert.deepEqual(turnEvents(task.events).map(turn => turn.context?.managed), [false]);
+      });
+    });
+  }
+  // Failures that are not a rejection of the request itself are never retried this way.
+  await withProvider([rejected(401, 'authentication_error')], async (endpoint, bodies) => {
+    await withAgentHarness(endpoint, async harness => {
+      assert.equal((await harness.runTask('What is here?')).state, 'FAILED');
+      assert.equal(bodies.length, 1);
+    });
+  });
   // A request that is invalid for another reason still fails the task: one unmanaged retry, then the normal failure.
   await withProvider([invalidRequest], async (endpoint, bodies) => {
     await withAgentHarness(endpoint, async harness => {
@@ -234,6 +279,18 @@ test('once a summary is part of the history the feature is not switched off: tha
       assert.deepEqual(turnEvents(task.events).map(turn => [turn.context?.compacted, turn.context?.managed]), [[true, true]]);
     });
   });
+  const failedSummary = (res: ServerResponse, body: ProviderBody): void => (body.messages.length === 1
+    ? sse(res, [messageStart(), ...failedCompactionBlock(0), ...toolBlock(1, 'toolu_1', 'list_directory', { path: '.' }), ...messageStop('tool_use')])
+    : invalidRequest(res));
+  await withProvider([failedSummary], async (endpoint, bodies) => {
+    await withAgentHarness(endpoint, async harness => {
+      const task = await harness.runTask('Long task.');
+      assert.equal(task.state, 'FAILED');
+      assert.deepEqual(bodies.map(body => 'context_management' in body), [true, true], 'the block is in the history, so the feature stays on');
+      assert.deepEqual(turnEvents(task.events).map(turn => turn.context?.compacted), [false], 'a failed summarization is not a summary');
+      assert.equal(summarizeTaskUsage(task.events).compactions, 0);
+    });
+  });
 });
 
 test('turn and tool metrics are committed with the events, and a task usage summary is a pure function of them', async () => {
@@ -256,10 +313,12 @@ test('turn and tool metrics are committed with the events, and a task usage summ
       for (const call of calls) assert.ok(typeof call.durationMs === 'number' && call.durationMs >= 0 && call.durationMs < 30_000, JSON.stringify(call));
       const summary = summarizeTaskUsage(task.events);
       assert.deepEqual({ ...summary, modelMs: 0, toolMs: 0, medianTtftMs: 0 }, { turns: 2, toolCalls: 2, inputTokens: 150, cacheReadTokens: 1_000,
-        cacheWriteTokens: 1_350, outputTokens: 14, promptTokens: 2_500, cacheHitRatio: 0.4, peakPromptTokens: 1_500, modelMs: 0, toolMs: 0, medianTtftMs: 0,
+        cacheWriteTokens: 1_350, outputTokens: 14, totalInputTokens: 2_500, cacheHitRatio: 0.4, peakPromptTokens: 1_500, modelMs: 0, toolMs: 0, medianTtftMs: 0,
         compactions: 0, contextManaged: true });
       assert.equal(summary.modelMs, turns.reduce((sum, turn) => sum + turn.timing!.durationMs, 0));
-      assert.equal(summary.toolMs, calls.reduce((sum, call) => sum + call.durationMs!, 0));
+      // The two calls ran in parallel: elapsed tool time is at least the longer call and at most their sum.
+      assert.ok(summary.toolMs >= Math.max(...calls.map(call => call.durationMs!)) - 1 && summary.toolMs <= calls.reduce((sum, call) => sum + call.durationMs!, 0),
+        JSON.stringify({ toolMs: summary.toolMs, calls: calls.map(call => call.durationMs) }));
     });
   });
   // Events recorded before these fields existed still validate and simply contribute no timing or context.
@@ -269,9 +328,15 @@ test('turn and tool metrics are committed with the events, and a task usage summ
       usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 30, cacheWriteTokens: 0 } } },
     { ...base, eventId: randomUUID(), seq: 3, type: 'tool_call', payload: { turn: 1, callId: 'toolu_1', tool: 'read_file', target: 'a.ts', status: 'ok', code: null, size: 12 } },
   ].map(event => TaskEventSchema.parse(event));
-  assert.deepEqual(summarizeTaskUsage(older), { turns: 1, toolCalls: 1, inputTokens: 10, cacheReadTokens: 30, cacheWriteTokens: 0, outputTokens: 5, promptTokens: 40,
+  assert.deepEqual(summarizeTaskUsage(older), { turns: 1, toolCalls: 1, inputTokens: 10, cacheReadTokens: 30, cacheWriteTokens: 0, outputTokens: 5, totalInputTokens: 40,
     cacheHitRatio: 0.75, peakPromptTokens: null, modelMs: 0, toolMs: 0, medianTtftMs: null, compactions: 0, contextManaged: null });
   assert.equal(summarizeTaskUsage([]).cacheHitRatio, null);
+  // Tool time is elapsed time with at least one call running: overlapping calls are not counted twice. Calls ending at
+  // 100, 150 and 400 ms that ran for 100, 100 and 50 ms cover [0,150] and [350,400]; one contained in another adds nothing.
+  const call = (seq: number, endMs: number, durationMs?: number) => TaskEventSchema.parse({ ...base, eventId: randomUUID(), seq, type: 'tool_call',
+    occurredAt: new Date(1_000_000 + endMs).toISOString(), payload: { turn: 1, callId: `toolu_${seq}`, tool: 'read_file', target: 'a.ts', status: 'ok', code: null,
+      size: 1, ...(durationMs === undefined ? {} : { durationMs }) } });
+  assert.equal(summarizeTaskUsage([call(2, 100, 100), call(3, 150, 100), call(4, 400, 50), call(5, 120, 20), call(6, 900)]).toolMs, 200);
   // Unknown or out-of-range metric fields are still rejected: the payloads stay strict.
   for (const extra of [{ timing: { ttftMs: -1, durationMs: 5 } }, { timing: { ttftMs: 1, durationMs: 1, note: 'x' } }, { context: { promptTokens: 1 } }, { prompt: 'text' }]) {
     assert.equal(TaskEventSchema.safeParse({ ...base, seq: 2, type: 'assistant_turn', payload: { turn: 1, model: 'claude-sonnet-5-5', messageId: null,

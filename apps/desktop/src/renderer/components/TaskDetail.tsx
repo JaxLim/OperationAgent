@@ -95,8 +95,8 @@ function TaskUsage({ events }: { events: readonly TaskEvent[] }) {
   const seconds = (milliseconds: number): string => `${(milliseconds / 1000).toFixed(1)}s`;
   const items = [
     t('taskUsage.turns', { turns: count(usage.turns), calls: count(usage.toolCalls) }),
-    usage.cacheHitRatio === null ? t('taskUsage.prompt', { tokens: count(usage.promptTokens) })
-      : t('taskUsage.promptCached', { tokens: count(usage.promptTokens), percent: Math.round(usage.cacheHitRatio * 100) }),
+    usage.cacheHitRatio === null ? t('taskUsage.input', { tokens: count(usage.totalInputTokens) })
+      : t('taskUsage.inputCached', { tokens: count(usage.totalInputTokens), percent: Math.round(usage.cacheHitRatio * 100) }),
     t('taskUsage.output', { tokens: count(usage.outputTokens) }),
     ...(usage.medianTtftMs !== null ? [t('taskUsage.time', { model: seconds(usage.modelMs), first: seconds(usage.medianTtftMs), tools: seconds(usage.toolMs) })] : []),
     ...(usage.compactions > 0 ? [t('taskUsage.summarized', { compactions: usage.compactions })] : []),

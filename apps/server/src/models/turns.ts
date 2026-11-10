@@ -95,8 +95,9 @@ export function contextManagement(policy: ContextPolicy): BetaContextManagementC
 
 /**
  * Billed tokens and the prompt size of one turn. A summarization the provider ran is reported as its own `compaction`
- * iteration and is not part of the top-level counts, so it is added here; the prompt the model saw is the last
- * `message` iteration when the provider lists iterations, and the top-level counts otherwise.
+ * iteration and is not part of the top-level counts, so it is added here. The prompt the answering model saw is the
+ * last sampling iteration when the provider lists iterations (`message`, or `fallback_message` when a fallback model
+ * answered), and the top-level counts otherwise.
  */
 export function usageOf(usage: BetaUsage): { usage: TurnUsage; promptTokens: number } {
   const total = { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0,
@@ -107,7 +108,7 @@ export function usageOf(usage: BetaUsage): { usage: TurnUsage; promptTokens: num
     if (iteration.type === 'compaction') {
       total.inputTokens += iteration.input_tokens ?? 0; total.outputTokens += iteration.output_tokens ?? 0;
       total.cacheReadTokens += read; total.cacheWriteTokens += written;
-    } else if (iteration.type === 'message') promptTokens = (iteration.input_tokens ?? 0) + read + written;
+    } else if (iteration.type === 'message' || iteration.type === 'fallback_message') promptTokens = (iteration.input_tokens ?? 0) + read + written;
   }
   return { usage: total, promptTokens };
 }
@@ -157,7 +158,7 @@ export function failureOf(error: unknown, signal: AbortSignal | undefined): { co
   return result('response_invalid');
 }
 
-function viewOf(turn: number, model: ClaudeModel, message: BetaMessage, replay: readonly BetaContentBlock[]): TurnView {
+function viewOf(turn: number, model: ClaudeModel, message: BetaMessage, replay: readonly BetaContentBlock[], usage: TurnUsage): TurnView {
   const text = replay.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('');
   // An oversized or non-object input is shown as {}; Express executes from its own record and its Zod check refuses it.
   const inputOf = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) &&
@@ -173,7 +174,7 @@ function viewOf(turn: number, model: ClaudeModel, message: BetaMessage, replay: 
     text: text.slice(0, limit), textTruncated: text.length > limit,
     // Beyond the per-turn cap the extra calls are not shown; Express answers them with an error result.
     toolCalls: calls,
-    usage: usageOf(message.usage).usage,
+    usage,
     fallback: message.content.some(block => block.type === 'fallback'),
   });
 }
@@ -224,7 +225,10 @@ export function createTurnGateway(options: TurnGatewayOptions = {}): TurnGateway
           ...(input.context ? { context_management: contextManagement(input.context) } : {}),
         }, { signal });
         stream.on('streamEvent', (event: BetaRawMessageStreamEvent) => {
-          if (firstContentAt === undefined && event.type === 'content_block_start') firstContentAt = now();
+          // The first block a person can see. A summary block or a fallback marker comes first on some turns and shows
+          // nothing, so the wait they cause counts towards the time to first content.
+          if (firstContentAt === undefined && event.type === 'content_block_start' && event.content_block.type !== 'compaction' &&
+            event.content_block.type !== 'fallback') firstContentAt = now();
           if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') emit(input.onDelta, 'text', event.delta.text);
           else if (event.type === 'content_block_delta' && event.delta.type === 'thinking_delta') emit(input.onDelta, 'thinking', event.delta.thinking);
           else if (event.type === 'content_block_start' && event.content_block.type === 'tool_use' && /^[A-Za-z0-9_-]{1,128}$/.test(event.content_block.id)) {
@@ -234,9 +238,11 @@ export function createTurnGateway(options: TurnGatewayOptions = {}): TurnGateway
         const message = await stream.finalMessage();
         const finishedAt = now();
         const replay = replayContent(message.content);
-        return { status: 'ok', message, replay, view: viewOf(input.turn, input.model, message, replay),
+        const usage = usageOf(message.usage);
+        return { status: 'ok', message, replay, view: viewOf(input.turn, input.model, message, replay, usage.usage),
           timing: { ttftMs: firstContentAt === undefined ? null : elapsed(startedAt, firstContentAt), durationMs: elapsed(startedAt, finishedAt) },
-          context: { promptTokens: usageOf(message.usage).promptTokens, compacted: message.content.some(block => block.type === 'compaction') } };
+          // A summary block whose content is null is a summarization that failed: the provider treats it as a no-op.
+          context: { promptTokens: usage.promptTokens, compacted: message.content.some(block => block.type === 'compaction' && block.content !== null) } };
       } catch (error) {
         return { status: 'failed', ...failureOf(error, signal) };
       }

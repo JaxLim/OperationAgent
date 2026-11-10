@@ -9,6 +9,7 @@ import type { ClaudeModel, ContextPolicy } from '../packages/contracts/dist/inde
 import { createTurnGateway } from '../apps/server/dist/models/turns.js';
 import { createToolRouter } from '../apps/server/dist/tools/router.js';
 import { AGENT_HARNESS_KEY, withAgentHarness } from '../tests/m2/support/agent-harness.ts';
+import { messageStart, messageStop, sse, textBlock, toolBlock } from '../tests/m2/support/fake-provider.ts';
 
 // Offline agent benchmark (ADR-PLAT-001 D2): `pnpm bench:agent`. It measures what this repository can measure without
 // a provider account, on this machine, against a local fake of the Messages API:
@@ -26,18 +27,6 @@ const percentile = (values: number[], fraction: number): number => {
 };
 const stats = (values: number[]) => ({ count: values.length, p50: +percentile(values, 0.5).toFixed(2), p95: +percentile(values, 0.95).toFixed(2),
   max: +Math.max(0, ...values).toFixed(2) });
-const sse = (res: ServerResponse, events: Record<string, unknown>[]): void => {
-  res.writeHead(200, { 'content-type': 'text/event-stream' });
-  for (const event of events) res.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`);
-  res.end();
-};
-const messageStart = (inputTokens: number) => ({ type: 'message_start', message: { id: 'msg_bench', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5',
-  content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: inputTokens, output_tokens: 1 } } });
-const messageStop = (reason: string) => [{ type: 'message_delta', delta: { stop_reason: reason, stop_sequence: null }, usage: { output_tokens: 20 } }, { type: 'message_stop' }];
-const textBlock = (index: number, value: string) => [{ type: 'content_block_start', index, content_block: { type: 'text', text: '' } },
-  { type: 'content_block_delta', index, delta: { type: 'text_delta', text: value } }, { type: 'content_block_stop', index }];
-const toolBlock = (index: number, id: string, name: string, input: unknown) => [{ type: 'content_block_start', index, content_block: { type: 'tool_use', id, name, input: {} } },
-  { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) } }, { type: 'content_block_stop', index }];
 
 interface Provider { endpoint: string; bodies: { bytes: number; body: { messages: unknown[]; [key: string]: unknown } }[]; connections: () => number; close(): void }
 async function provider(reply: (res: ServerResponse, request: number) => void): Promise<Provider> {
@@ -61,7 +50,7 @@ async function provider(reply: (res: ServerResponse, request: number) => void): 
 
 /** The control plane's own cost per turn: an immediate, tiny reply, so everything measured is ours or loopback. */
 async function benchGateway(turns: number) {
-  const fake = await provider(res => sse(res, [messageStart(40), ...textBlock(0, 'ok'), ...messageStop('end_turn')]));
+  const fake = await provider(res => sse(res, [messageStart(), ...textBlock(0, 'ok'), ...messageStop('end_turn')]));
   try {
     const gateway = createTurnGateway({ endpoint: fake.endpoint, maxRetries: 0 });
     const input = { apiKey: AGENT_HARNESS_KEY, model: 'claude-sonnet-5-5' as const, turn: 1, system: 'You read code.',
@@ -83,7 +72,7 @@ async function benchGateway(turns: number) {
 
 /** One read-only tool call end to end through the Tool Router: policy, child process, reply validation and audit row. */
 async function benchTools(calls: number) {
-  const fake = await provider(res => sse(res, [messageStart(40), ...messageStop('end_turn')]));
+  const fake = await provider(res => sse(res, [messageStart(), ...messageStop('end_turn')]));
   try {
     let result: Record<string, unknown> = {};
     const files = Object.fromEntries([['small.ts', 'x'.repeat(4_096)], ['large.ts', 'y'.repeat(262_144)],
@@ -115,9 +104,9 @@ async function benchTools(calls: number) {
 /** A scripted exploration: every round the model reads two 16 KiB files, then answers. Real loop, real tools. */
 async function benchTask(rounds: number) {
   const fake = await provider((res, request) => (request <= rounds
-    ? sse(res, [messageStart(40), ...textBlock(0, `Reading round ${request}.`), ...toolBlock(1, `toolu_${request}_a`, 'read_file', { path: `src/a${request}.ts` }),
+    ? sse(res, [messageStart(), ...textBlock(0, `Reading round ${request}.`), ...toolBlock(1, `toolu_${request}_a`, 'read_file', { path: `src/a${request}.ts` }),
       ...toolBlock(2, `toolu_${request}_b`, 'read_file', { path: `src/b${request}.ts` }), ...messageStop('tool_use')])
-    : sse(res, [messageStart(40), ...textBlock(0, 'Finished.'), ...messageStop('end_turn')])));
+    : sse(res, [messageStart(), ...textBlock(0, 'Finished.'), ...messageStop('end_turn')])));
   try {
     const files = Object.fromEntries(Array.from({ length: rounds }, (_, index) => [[`src/a${index + 1}.ts`, `// a${index + 1}\n${'a'.repeat(16_000)}`],
       [`src/b${index + 1}.ts`, `// b${index + 1}\n${'b'.repeat(16_000)}`]]).flat()) as Record<string, string>;

@@ -12,14 +12,21 @@ export interface TaskUsageSummary {
   readonly cacheReadTokens: number;
   readonly cacheWriteTokens: number;
   readonly outputTokens: number;
-  /** All prompt tokens sent: uncached, cache-read and cache-written together. */
-  readonly promptTokens: number;
-  /** The share of prompt tokens served from the provider's cache (0 to 1); null before any prompt token. */
+  /**
+   * All billed input tokens: uncached, cache-read and cache-written together. This is the prompts of every turn plus
+   * the input of any summarization the provider ran, so it is a cost figure; `peakPromptTokens` is the context size.
+   */
+  readonly totalInputTokens: number;
+  /** The share of `totalInputTokens` served from the provider's cache (0 to 1); null before any input token. */
   readonly cacheHitRatio: number | null;
   /** The largest prompt of any single turn; null when no turn recorded it. */
   readonly peakPromptTokens: number | null;
-  /** Wall-clock time in model turns and in tool calls, over the events that recorded it. */
+  /** Time spent in model turns, over the turns that recorded it (turns never overlap). */
   readonly modelMs: number;
+  /**
+   * Elapsed time during which at least one tool call was running, over the calls that recorded their duration. The
+   * calls of one turn run in parallel, so this is the length of the union of their intervals, not the sum.
+   */
   readonly toolMs: number;
   /** Median time to the first content of a turn; null when no turn recorded it. */
   readonly medianTtftMs: number | null;
@@ -31,7 +38,8 @@ export interface TaskUsageSummary {
 
 export function summarizeTaskUsage(events: readonly TaskEvent[]): TaskUsageSummary {
   let turns = 0, toolCalls = 0, inputTokens = 0, cacheReadTokens = 0, cacheWriteTokens = 0, outputTokens = 0;
-  let modelMs = 0, toolMs = 0, compactions = 0;
+  let modelMs = 0, compactions = 0;
+  const toolIntervals: [number, number][] = [];
   let peakPromptTokens: number | null = null, contextManaged: boolean | null = null;
   const ttfts: number[] = [];
   for (const event of events) {
@@ -48,14 +56,23 @@ export function summarizeTaskUsage(events: readonly TaskEvent[]): TaskUsageSumma
       }
     } else if (event.type === 'tool_call') {
       toolCalls++;
-      toolMs += event.payload.durationMs ?? 0;
+      // The event is committed when the call ends, so the call ran from (end - duration) to end.
+      const end = Date.parse(event.occurredAt), duration = event.payload.durationMs;
+      if (duration !== undefined && Number.isFinite(end)) toolIntervals.push([end - duration, end]);
     }
   }
-  const promptTokens = inputTokens + cacheReadTokens + cacheWriteTokens;
+  const totalInputTokens = inputTokens + cacheReadTokens + cacheWriteTokens;
+  toolIntervals.sort((a, b) => a[0] - b[0]);
+  let toolMs = 0, coveredUntil = -Infinity;
+  for (const [start, end] of toolIntervals) {
+    if (end <= coveredUntil) continue;
+    toolMs += end - Math.max(start, coveredUntil);
+    coveredUntil = end;
+  }
   ttfts.sort((a, b) => a - b);
   const middle = ttfts.length >> 1;
   const medianTtftMs = !ttfts.length ? null : ttfts.length % 2 ? ttfts[middle]! : Math.round((ttfts[middle - 1]! + ttfts[middle]!) / 2);
-  return { turns, toolCalls, inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens, promptTokens,
-    cacheHitRatio: promptTokens ? cacheReadTokens / promptTokens : null, peakPromptTokens, modelMs, toolMs, medianTtftMs,
+  return { turns, toolCalls, inputTokens, cacheReadTokens, cacheWriteTokens, outputTokens, totalInputTokens,
+    cacheHitRatio: totalInputTokens ? cacheReadTokens / totalInputTokens : null, peakPromptTokens, modelMs, toolMs, medianTtftMs,
     compactions, contextManaged };
 }

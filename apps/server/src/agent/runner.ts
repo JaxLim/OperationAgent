@@ -40,6 +40,8 @@ export interface TaskRunnerOptions {
 export type RunnerReply = { kind: string; [key: string]: unknown } | null;
 
 const AGENT_TOOLS: AgentToolName[] = [...AgentToolNameSchema.options];
+/** Failures that say the provider refused the request itself (HTTP 400, 403, 404), as opposed to load, limits or the key. */
+const REJECTED_OUTRIGHT: readonly string[] = ['invalid_request', 'permission_denied', 'model_unavailable'];
 const READ_ONLY = 'Read-only task: no files were changed';
 const REASONS: Readonly<Record<AgentFinishReason, string>> = Object.freeze({
   end_turn: 'Completed', max_tokens: 'The answer reached the output limit and may be incomplete',
@@ -66,8 +68,8 @@ interface Run {
   conversation: Conversation;
   /** The policy this task's requests are managed under; null once it has been switched off (or was never on). */
   context: ContextPolicy | null;
-  /** The provider has summarized this conversation: its summary block is part of the history from then on. */
-  compacted: boolean;
+  /** The history holds a summary block (even one whose summarization failed): it can only be sent with the feature on. */
+  summaryInHistory: boolean;
   turn: number;
   abort: AbortController | undefined;
   /** At most one Worker request acts on a task at a time: a model turn, or that turn's tool calls (each at most once). */
@@ -139,7 +141,7 @@ export class TaskRunner {
     let settle!: () => void;
     const model = this.options.model();
     const run: Run = { taskId, project, model, tools: AGENT_TOOLS, conversation: new Conversation(systemPrompt(project), prompt),
-      context: (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(model), compacted: false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
+      context: (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(model), summaryInHistory: false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
     this.runs.set(taskId, run);
     this.transition(taskId, 'QUEUED', null);
     const message = this.options.store.addTaskMessage(taskId, 'user', 0, prompt);
@@ -202,10 +204,12 @@ export class TaskRunner {
       system: run.conversation.system, messages: run.conversation.history(), tools: run.tools, signal: abort.signal, context,
       onDelta: delta => this.options.live.push(taskId, turn, delta) }));
     let used = await request(run.context);
-    // Context management relies on provider betas. If the provider rejects a managed request as invalid, the task goes
-    // on unmanaged: this turn is retried once, exactly as it would have been sent without the feature, and no later
-    // request is managed. Not once a summary is part of the history, though: that block needs the feature to be sent.
-    if (used.ok && used.value.status === 'failed' && used.value.code === 'invalid_request' && run.context && !run.compacted && !run.done && !run.stopping) {
+    // Context management relies on a provider beta. If the provider rejects a managed request outright (as invalid, or
+    // as something this key or model may not use), the task goes on unmanaged: this turn is retried once, exactly as it
+    // would have been sent without the feature, and no later request is managed. A rejection that had another cause
+    // simply fails the same way again. Not once a summary block is part of the history, though: that block needs the
+    // feature to be sent.
+    if (used.ok && used.value.status === 'failed' && REJECTED_OUTRIGHT.includes(used.value.code) && run.context && !run.summaryInHistory && !run.done && !run.stopping) {
       run.context = null;
       used = await request(null);
     }
@@ -217,7 +221,7 @@ export class TaskRunner {
     if (result.status === 'failed') return { kind: 'model.turn', outcome: { status: 'failed', code: result.code, retryable: result.retryable, httpStatus: result.httpStatus } };
     try {
       run.conversation.acceptTurn(result.replay, result.view.stopReason);
-      run.compacted ||= result.context.compacted;
+      run.summaryInHistory ||= result.replay.some(block => block.type === 'compaction');
       const text = result.replay.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('');
       const message = text ? this.options.store.addTaskMessage(taskId, 'assistant', turn, clip(text)) : null;
       this.options.store.appendAgentEvent(taskId, 'assistant_turn', { turn, model: result.view.model, messageId: message?.id ?? null,
