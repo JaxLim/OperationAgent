@@ -29,6 +29,8 @@ export interface TaskLog {
   /** Oldest first; rows that no longer validate are skipped. Throws NOT_FOUND for an unknown task. */
   listTaskMessages(taskId: string): TaskMessage[];
   getTask(taskId: string): TaskSnapshot | null;
+  /** The task a create request already made (its task_created event carries the request id), or null. */
+  taskForRequest(requestId: string): TaskSnapshot | null;
   /** Most recently created first. */
   listTasks(limit: number): TaskSnapshot[];
   /** Events after the cursor in seq order, at most one page. Throws NOT_FOUND for an unknown task. */
@@ -151,6 +153,10 @@ export function createTaskLog(db: Database.Database): TaskLog {
         .flatMap(row => { const parsed = TaskMessageSchema.safeParse(row); return parsed.success ? [parsed.data] : []; });
     },
     getTask: task,
+    taskForRequest(requestId) {
+      const row = db.prepare<[string], { taskId: string }>(`SELECT task_id AS taskId FROM task_events WHERE request_id = ? AND type = 'task_created'`).get(requestId);
+      return row ? task(row.taskId) : null;
+    },
     listTasks(limit) {
       if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('VALIDATION_ERROR');
       return selectRecent.all(limit).map(row => TaskSnapshotSchema.parse(row));
