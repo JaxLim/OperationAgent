@@ -60,8 +60,14 @@ test('the isolated agent runtime runs a read-only task end to end and its cleanu
     tools: createToolRouter({ store }), model: () => 'claude-sonnet-5-5', live: new LiveFeed(), stopGraceMs: () => 5_000, ensureWorker: () => holder.supervisor.ensure() });
   const supervisor = holder.supervisor = new AgentWorkerSupervisor({ runtimeDirectory: runtime, expressRunId: randomUUID(), runner: taskRunner });
   // Launch from exactly the environment Main gives the Express sidecar, so the Main → Express boundary is exercised too.
+  // Built the way Main builds it: each allowed name is looked up through process.env (case-insensitive on Windows) and
+  // set under its contract spelling. Filtering the existing keys by exact name is wrong here: a runner step started from
+  // Git Bash spells the variable SYSTEMROOT, so that would drop SystemRoot and no child Node process could start.
   const saved = { ...process.env };
-  for (const key of Object.keys(process.env)) if (!SIDECAR_ENVIRONMENT.includes(key)) delete process.env[key];
+  const sidecarEnvironment = Object.fromEntries(SIDECAR_ENVIRONMENT.filter(key => process.env[key]).map(key => [key, process.env[key]]));
+  for (const key of Object.keys(process.env)) delete process.env[key];
+  Object.assign(process.env, sidecarEnvironment);
+  assert.ok(process.env.SystemRoot && process.env.LOCALAPPDATA, 'the sidecar environment carries SystemRoot and LOCALAPPDATA');
   t.after(() => { for (const key of Object.keys(process.env)) delete process.env[key]; Object.assign(process.env, saved); });
   try {
     const task = await taskRunner.start(projectId, 'What is this project?', randomUUID());
