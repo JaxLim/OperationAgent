@@ -52,6 +52,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     async handshake(challenge: string) {
       await session.startHandshake(challenge, randomUUID(), AGENT_SESSION_CAPABILITIES);
       if (!session.agentEnabled) throw new Error('RPC_CAPABILITY_REJECTED');
+      // The inherited channel has a read deadline on both ends; heartbeats keep an idle or long-waiting session alive
+      // (a model turn may take minutes) and detect a Worker that stopped answering.
+      session.startHeartbeat(randomUUID);
       runner.attach(link);
     },
   };

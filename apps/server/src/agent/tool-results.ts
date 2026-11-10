@@ -25,6 +25,11 @@ const FAILURES: Readonly<Record<ReadFailureCode, string>> = Object.freeze({
   CLEANUP_UNCONFIRMED: 'The file reader could not be confirmed stopped, so reading is disabled for now.',
 });
 
+const SUMMARY_LIMIT = 256;
+const bound = (summary: string): string => summary.length <= SUMMARY_LIMIT ? summary : summary.slice(0, SUMMARY_LIMIT - 1) + '…';
+/** Shortens a path for a one-line summary, keeping its end (the file name), which is the useful part. */
+const short = (path: string): string => path.length <= 160 ? path : '…' + path.slice(-159);
+
 export interface FormattedToolResult { content: string; isError: boolean; status: ToolCallStatus; code: string | null; summary: string; size: number | null }
 
 const kib = (bytes: number): string => bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KiB`;
@@ -33,11 +38,11 @@ export function formatReadResult(result: ReadFileResult, requested: string): For
   if (result.status === 'ok') {
     const note = result.truncated ? `\n\n[Showing the first ${kib(result.bytes)} of ${kib(result.size)}. The rest of the file was not read.]` : '';
     return { content: result.content + note, isError: false, status: 'ok', code: null, size: result.bytes,
-      summary: `Read ${result.path} (${kib(result.bytes)}${result.truncated ? ', truncated' : ''})` };
+      summary: bound(`Read ${short(result.path)} (${kib(result.bytes)}${result.truncated ? ', truncated' : ''})`) };
   }
   const message = result.status === 'refused' ? REFUSALS[result.code] : FAILURES[result.code];
   return { content: `${result.status === 'refused' ? 'Refused' : 'Failed'}: ${message}`, isError: true, status: result.status,
-    code: result.code, size: null, summary: `${result.status === 'refused' ? 'Refused' : 'Failed'} to read ${requested.slice(0, 160)} (${result.code})` };
+    code: result.code, size: null, summary: bound(`${result.status === 'refused' ? 'Refused' : 'Failed'} to read ${short(requested)} (${result.code})`) };
 }
 
 export function formatListResult(result: ListDirectoryResult, requested: string): FormattedToolResult {
@@ -48,13 +53,13 @@ export function formatListResult(result: ListDirectoryResult, requested: string)
     const unlisted = result.unlisted.length ? `\n[Not listed, because they contain only links or locked entries: ${result.unlisted.join(', ')}]` : '';
     const note = (result.truncated ? '\n[Listing truncated. List a subdirectory to see more.]' : '') + unlisted;
     return { content: `${header}\n${lines.join('\n')}${note}`, isError: false, status: 'ok', code: null, size: result.entries.length,
-      summary: `Listed ${result.path} (${result.entries.length}${result.truncated ? '+' : ''} entries)` };
+      summary: bound(`Listed ${short(result.path)} (${result.entries.length}${result.truncated ? '+' : ''} entries)`) };
   }
   const message = result.status === 'refused' ? REFUSALS[result.code] : FAILURES[result.code];
   return { content: `${result.status === 'refused' ? 'Refused' : 'Failed'}: ${message}`, isError: true, status: result.status,
-    code: result.code, size: null, summary: `${result.status === 'refused' ? 'Refused' : 'Failed'} to list ${requested.slice(0, 160)} (${result.code})` };
+    code: result.code, size: null, summary: bound(`${result.status === 'refused' ? 'Refused' : 'Failed'} to list ${short(requested)} (${result.code})`) };
 }
 
 export function skippedResult(reason: string): FormattedToolResult {
-  return { content: `Not executed: ${reason}`, isError: true, status: 'skipped', code: null, size: null, summary: `Skipped: ${reason}`.slice(0, 256) };
+  return { content: `Not executed: ${reason}`, isError: true, status: 'skipped', code: null, size: null, summary: bound(`Skipped: ${reason}`) };
 }

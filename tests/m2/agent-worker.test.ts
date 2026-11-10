@@ -15,6 +15,7 @@ import { TaskRunner } from '../../apps/server/dist/agent/runner.js';
 import { AgentWorkerSupervisor } from '../../apps/server/dist/agent/supervisor.js';
 import { runAgentRuntime } from '../../apps/agent-worker/dist/runtime.js';
 import { messageStart, messageStop, sse, textBlock, withProvider } from './support/fake-provider.ts';
+import { SIDECAR_ENVIRONMENT } from '../../packages/contracts/dist/index.js';
 
 // The Express Worker supervisor through FixtureWorker's real lifecycle code (handshake, heartbeat, exit watch, two-phase
 // stop, confirmed cleanup), with an in-process carrier in place of the native AppContainer launch. The isolated launch
@@ -69,7 +70,7 @@ function inProcessLauncher(log: Launches) {
 }
 
 async function withSupervisor(endpoint: string, run: (context: { store: Store; runner: TaskRunner; supervisor: AgentWorkerSupervisor;
-  projectId: string; launches: Launches }) => Promise<void>): Promise<void> {
+  projectId: string; launches: Launches }) => Promise<void>, launcher?: () => Promise<LaunchedFixture>): Promise<void> {
   const cache = resolve('.cache'); mkdirSync(cache, { recursive: true });
   const base = mkdtempSync(resolve(cache, 'agent-worker-'));
   const root = resolve(base, 'workspace'); mkdirSync(root, { recursive: true }); writeFileSync(resolve(root, 'README.md'), '# hi\n');
@@ -81,7 +82,7 @@ async function withSupervisor(endpoint: string, run: (context: { store: Store; r
   const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store }),
     model: () => 'claude-haiku-5-5', live: new LiveFeed(), stopGraceMs: () => 5_000, ensureWorker: () => holder.supervisor!.ensure() });
   const supervisor = holder.supervisor = new AgentWorkerSupervisor({ runtimeDirectory: 'C:\\in-process', expressRunId: randomUUID(), runner,
-    launcher: inProcessLauncher(launches), target: 'in-process' });
+    launcher: launcher ?? inProcessLauncher(launches), target: 'in-process' });
   try { await run({ store, runner, supervisor, projectId, launches }); }
   finally { await supervisor.stop(); store.close(true); if (base.startsWith(cache + sep)) rmSync(base, { recursive: true, force: true }); }
 }
@@ -138,3 +139,43 @@ test('agent worker: an exit whose cleanup is unconfirmed blocks every further la
     });
   });
 });
+
+test('agent worker: a launch that fails without confirmed cleanup blocks every later launch; a confirmed failure stays retryable', async () => {
+  await withProvider([(res) => sse(res, [messageStart('claude-haiku-5-5'), ...textBlock(0, 'x'), ...messageStop('end_turn')])], async endpoint => {
+    const scenarios = [
+      { name: 'native creation', launcher: async (): Promise<LaunchedFixture> => { throw new Error('WORKER_ISOLATION_UNAVAILABLE: WORKER_CREATION_CLEANUP_UNCONFIRMED'); },
+        expect: 'unavailable' },
+      { name: 'handshake, close unconfirmed', launcher: silentLauncher(false), expect: 'unavailable' },
+      { name: 'handshake, close confirmed', launcher: silentLauncher(true), expect: 'idle' },
+    ] as const;
+    for (const scenario of scenarios) {
+      await withSupervisor(endpoint, async ({ runner, supervisor, projectId }) => {
+        await assert.rejects(runner.start(projectId, 'Hello', randomUUID()), /WORKER_ISOLATION_UNAVAILABLE/, scenario.name);
+        assert.equal(supervisor.snapshot().state, scenario.expect, scenario.name);
+        if (scenario.expect === 'unavailable') {
+          assert.equal(supervisor.snapshot().lastError, 'CLEANUP_UNCONFIRMED', scenario.name);
+          const launches = supervisor.snapshot().launches;
+          await assert.rejects(runner.start(projectId, 'Again', randomUUID()), /WORKER_ISOLATION_UNAVAILABLE/);
+          assert.equal(supervisor.snapshot().launches, launches, 'no further launch is attempted');
+        }
+      }, scenario.launcher);
+    }
+  });
+  assert.ok(SIDECAR_ENVIRONMENT.includes('LOCALAPPDATA'), 'the Worker launcher needs LOCALAPPDATA in the sidecar environment');
+});
+
+/** A carrier whose Worker never answers the handshake; its close confirms cleanup or not. */
+function silentLauncher(confirmed: boolean) {
+  return async (): Promise<LaunchedFixture> => {
+    let markExit!: (code: number) => void; const exit = new Promise<number>(resolve => { markExit = resolve; });
+    return {
+      baseline: { pid: nextPid++, parentPid: process.pid, integrityRid: 0x1000, appContainer: true, capabilityCount: 0, jobAssignedAtCreation: true,
+        noChildProcessCreation: true, inheritedHandleCount: 3, inheritedHandles: 'rpc-pipe,nul-read,stderr-pipe', verifiedBeforeResume: true, profile: 'silent' },
+      read: async () => { await exit; return new Uint8Array(); },
+      write: async frame => { markExit(1); return frame.length; },
+      close: async () => { markExit(1); if (!confirmed) throw new Error('WORKER_CLEANUP_UNCONFIRMED'); return true; },
+      diagnostics: () => '',
+      wait: async () => exit,
+    };
+  };
+}

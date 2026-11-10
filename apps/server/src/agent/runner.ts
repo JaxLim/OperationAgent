@@ -62,6 +62,9 @@ interface Run {
   conversation: Conversation;
   turn: number;
   abort: AbortController | undefined;
+  /** At most one Worker request acts on a task at a time: a model turn, or that turn's tool calls (each at most once). */
+  modelInFlight: boolean;
+  activeTools: Set<string>;
   stopping: boolean;
   done: boolean;
   finished: Promise<void>;
@@ -106,6 +109,12 @@ export class TaskRunner {
   /** Creates and starts a task. Throws NOT_FOUND, VALIDATION_ERROR, MODEL_NOT_CONFIGURED, AGENT_BUSY or WORKER_ISOLATION_UNAVAILABLE. */
   async start(projectId: string, prompt: string, requestId: string): Promise<TaskSnapshot> {
     if (!prompt.trim() || prompt.length > AGENT_RUN_LIMITS.maxPromptChars) throw new Error('VALIDATION_ERROR');
+    // A retried request (same id) returns the task it already created, whatever the runner is doing now.
+    const prior = this.options.store.taskForRequest(requestId);
+    if (prior) {
+      if (prior.projectId !== projectId) throw new Error('VALIDATION_ERROR');
+      return prior;
+    }
     const project = this.options.store.getProject(projectId);
     if (!project) throw new Error('NOT_FOUND');
     // Cheap preconditions first: an isolated Worker is never launched for a start that would be refused anyway.
@@ -121,7 +130,7 @@ export class TaskRunner {
     const taskId = created.task.id;
     let settle!: () => void;
     const run: Run = { taskId, project, model: this.options.model(), tools: AGENT_TOOLS, conversation: new Conversation(systemPrompt(project), prompt),
-      turn: 0, abort: undefined, stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
+      turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
     this.runs.set(taskId, run);
     this.transition(taskId, 'QUEUED', null);
     const message = this.options.store.addTaskMessage(taskId, 'user', 0, prompt);
@@ -166,8 +175,15 @@ export class TaskRunner {
 
   private async modelTurn(taskId: string, turn: number): Promise<RunnerReply> {
     const run = this.runs.get(taskId);
-    if (!run || run.done || turn !== run.turn + 1) return null;
+    // Turns are strictly sequential: never while another turn or any of the previous turn's tool calls is running.
+    if (!run || run.done || turn !== run.turn + 1 || run.modelInFlight || run.activeTools.size) return null;
     run.turn = turn;
+    run.modelInFlight = true;
+    try { return await this.runModelTurn(run, taskId, turn); }
+    finally { run.modelInFlight = false; }
+  }
+
+  private async runModelTurn(run: Run, taskId: string, turn: number): Promise<RunnerReply> {
     const failed = (code: Extract<TurnOutcome, { status: 'failed' }>['code'], retryable = false): RunnerReply =>
       ({ kind: 'model.turn', outcome: { status: 'failed', code, retryable, httpStatus: null } });
     if (run.stopping) return failed('cancelled');
@@ -176,7 +192,8 @@ export class TaskRunner {
     const used = await this.options.credentials.withKey(apiKey => this.options.gateway.runTurn({ apiKey, model: run.model, turn,
       system: run.conversation.system, messages: run.conversation.history(), tools: run.tools, signal: abort.signal,
       onDelta: delta => this.options.live.push(taskId, turn, delta) }));
-    run.abort = undefined;
+    // This turn owned the controller until it settled; Stop and detach always reach the request that is actually running.
+    if (run.abort === abort) run.abort = undefined;
     if (run.done) return failed('cancelled');
     if (!used.ok) return failed(used.reason);
     const result = used.value;
@@ -193,9 +210,15 @@ export class TaskRunner {
 
   private async toolCall(taskId: string, turn: number, toolCallId: string): Promise<RunnerReply> {
     const run = this.runs.get(taskId);
-    if (!run || run.done || turn !== run.turn) return null;
+    if (!run || run.done || turn !== run.turn || run.modelInFlight || run.activeTools.has(toolCallId)) return null;
     const call = run.conversation.pendingCall(toolCallId);
     if (!call) return { kind: 'tool.call', status: 'skipped', summary: 'Unknown tool call' };
+    run.activeTools.add(toolCallId);
+    try { return await this.runToolCall(run, taskId, turn, call); }
+    finally { run.activeTools.delete(toolCallId); }
+  }
+
+  private async runToolCall(run: Run, taskId: string, turn: number, call: NonNullable<ReturnType<Conversation['pendingCall']>>): Promise<RunnerReply> {
     const name = AgentToolNameSchema.safeParse(call.name);
     let formatted: FormattedToolResult;
     let target = '';
@@ -212,10 +235,10 @@ export class TaskRunner {
       formatted = formatListResult(await this.options.tools.listDirectory({ projectId: run.project.id, taskId, toolCallId: randomUUID(), args: call.input }), target);
     }
     if (run.done) return { kind: 'tool.call', status: 'skipped', summary: 'The task has ended' };
-    if (call.executable) run.conversation.recordResult(call.id, formatted.content, formatted.isError);
+    if (call.executable && run.conversation.pendingCall(call.id)) run.conversation.recordResult(call.id, formatted.content, formatted.isError);
     this.options.store.appendAgentEvent(taskId, 'tool_call', { turn, callId: call.id, tool: call.name.slice(0, 128) || 'tool',
       target: target.slice(0, 512), status: formatted.status, code: formatted.code, size: formatted.size });
-    return { kind: 'tool.call', status: formatted.status, summary: formatted.summary };
+    return { kind: 'tool.call', status: formatted.status, summary: clipSummary(formatted.summary) };
   }
 
   private finish(taskId: string, outcome: AgentFinishOutcome, reason: AgentFinishReason): RunnerReply {
@@ -226,6 +249,11 @@ export class TaskRunner {
     else this.end(run, 'FAILED', REASONS[reason]);
     return { kind: 'agent.finish', accepted: true };
   }
+}
+
+/** The tool.call reply contract allows 256 characters; a long path must never fail the reply (and with it the session). */
+export function clipSummary(summary: string): string {
+  return summary.length <= 256 ? summary : summary.slice(0, 255) + '…';
 }
 
 /** Stored answer text is bounded; the live view and the model already had the full text. */

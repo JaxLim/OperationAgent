@@ -16,6 +16,7 @@ import { createToolRouter } from '../../apps/server/dist/tools/router.js';
 import { LiveFeed } from '../../apps/server/dist/agent/live.js';
 import { TaskRunner } from '../../apps/server/dist/agent/runner.js';
 import { AgentWorkerSupervisor } from '../../apps/server/dist/agent/supervisor.js';
+import { SIDECAR_ENVIRONMENT } from '../../packages/contracts/dist/index.js';
 
 const runner = process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_OS === 'Windows' && process.platform === 'win32' && process.arch === 'x64';
 const root = resolve(import.meta.dirname, '../..');
@@ -58,6 +59,10 @@ test('the isolated agent runtime runs a read-only task end to end and its cleanu
   const taskRunner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint: `http://127.0.0.1:${provider.address().port}`, maxRetries: 0 }),
     tools: createToolRouter({ store }), model: () => 'claude-sonnet-5-5', live: new LiveFeed(), stopGraceMs: () => 5_000, ensureWorker: () => holder.supervisor.ensure() });
   const supervisor = holder.supervisor = new AgentWorkerSupervisor({ runtimeDirectory: runtime, expressRunId: randomUUID(), runner: taskRunner });
+  // Launch from exactly the environment Main gives the Express sidecar, so the Main → Express boundary is exercised too.
+  const saved = { ...process.env };
+  for (const key of Object.keys(process.env)) if (!SIDECAR_ENVIRONMENT.includes(key)) delete process.env[key];
+  t.after(() => { for (const key of Object.keys(process.env)) delete process.env[key]; Object.assign(process.env, saved); });
   try {
     const task = await taskRunner.start(projectId, 'What is this project?', randomUUID());
     const deadline = Date.now() + 120_000;
