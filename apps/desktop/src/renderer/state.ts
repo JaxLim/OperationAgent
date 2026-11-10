@@ -220,8 +220,16 @@ export const actions = {
   async submitTask(projectId: string, prompt: string, goal: string | null = null): Promise<void> {
     const at = Date.now(); const id = crypto.randomUUID();
     let outcome: Submission['outcome'] = 'refused'; let code: string;
-    try { code = (await api().startTask({ projectId, prompt: composePrompt(prompt, goal) })).error; }
-    catch (error) { outcome = 'failed'; code = errorCode(error); }
+    try {
+      const result = await api().startTask({ projectId, prompt: composePrompt(prompt, goal) });
+      if (result.accepted) {
+        // The task now exists in Express; the task list and its view take over from here.
+        await loadTasks();
+        actions.selectTask(result.task.id);
+        return;
+      }
+      code = result.error;
+    } catch (error) { outcome = 'failed'; code = errorCode(error); }
     set({ submissions: [...state.submissions, { id, projectId, prompt, goal, at, outcome, code }].slice(-20) });
   },
   async refreshModel(): Promise<void> {

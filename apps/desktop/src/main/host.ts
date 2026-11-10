@@ -8,7 +8,7 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, CO
   IPC_CHANNELS, ProjectAddResultSchema, ProjectInputSchema, ProjectListSchema, ProjectRefSchema, ProjectSchema, ProviderKeyInputSchema,
   ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema, ProviderOverviewViewSchema, ProviderRefSchema, ProviderTestResultSchema,
   SmokeBatchSchema, THEME_CANVAS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema,
-  TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
+  TaskStartRefusalSchema, TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
 import type { DesktopStatus, ModelSettings, ModelSettingsView, ProjectAddResult, ProviderOverview, ProviderOverviewView, TaskStartResult, ThemeId,
   WorkbenchSettings } from '@operation-agent/contracts';
 import { SidecarSupervisor } from './sidecar.js';
@@ -24,7 +24,8 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   if (options.modelEndpoint !== undefined && app.isPackaged) throw new Error('MODEL_ENDPOINT_OVERRIDE_REJECTED');
   const modelEndpoint = options.modelEndpoint === undefined ? undefined : ModelEndpointSchema.parse(options.modelEndpoint);
   const supervisor = new SidecarSupervisor(options.stageDirectory, options.dataDirectory,
-    { cryptoHandler: createCryptoBridge(safeStorage), ...(modelEndpoint ? { modelEndpoint } : {}) });
+    // ADR-WIN-001 §3: only the installed application creates AppContainer profiles; a development build never does.
+    { cryptoHandler: createCryptoBridge(safeStorage), launchWorkers: app.isPackaged, ...(modelEndpoint ? { modelEndpoint } : {}) });
   const renderer = fileURLToPath(new URL('../renderer/index.html', import.meta.url));
   const expectedUrl = pathToFileURL(renderer).href;
   Menu.setApplicationMenu(null);
@@ -131,12 +132,13 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   register(IPC_CHANNELS.removeProject, async input => supervisor.call('POST', CONTROL_ROUTES.projectRemove, ProjectListSchema, ProjectRefSchema.parse(input)));
   register(IPC_CHANNELS.listRuns, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.runs, ControlRunListSchema); });
   register(IPC_CHANNELS.startTask, async (input): Promise<TaskStartResult> => {
-    try { await supervisor.call('POST', CONTROL_ROUTES.taskStart, TaskStartResultSchema, TaskStartInputSchema.parse(input)); }
+    try { return await supervisor.call('POST', CONTROL_ROUTES.taskStart, TaskStartResultSchema, TaskStartInputSchema.parse(input)); }
     catch (error) {
-      if (error instanceof Error && error.message === 'WORKER_ISOLATION_UNAVAILABLE') return { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' };
+      // Refusals are answers, not failures: the Renderer shows why nothing was started.
+      const refusal = TaskStartRefusalSchema.safeParse(error instanceof Error ? error.message : '');
+      if (refusal.success) return { accepted: false, error: refusal.data };
       throw error;
     }
-    throw new Error('CONTROL_PLANE_REQUEST_FAILED');
   });
   register(IPC_CHANNELS.listTasks, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.tasks, TaskListSchema); });
   register(IPC_CHANNELS.getTask, async input => supervisor.call('POST', CONTROL_ROUTES.taskSnapshot, TaskSnapshotSchema, TaskRefSchema.parse(input)));

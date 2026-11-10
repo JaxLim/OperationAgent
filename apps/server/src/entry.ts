@@ -8,9 +8,16 @@ import { openStore } from './persistence/store.js';
 import type { Store } from './persistence/store.js';
 import { createIpcCryptoBridge } from './credentials/bridge.js';
 import type { IpcCryptoBridge } from './credentials/bridge.js';
+import { createCredentialService } from './credentials/service.js';
+import { createTurnGateway } from './models/turns.js';
+import { createToolRouter } from './tools/router.js';
+import { LiveFeed } from './agent/live.js';
+import { TaskRunner } from './agent/runner.js';
+import { AgentWorkerSupervisor } from './agent/supervisor.js';
 
 let store: Store | undefined; let server: Server | undefined; let identity: Bootstrap | undefined;
 let stopping = false; let lastContact = Date.now(); let bootstrapped = false; let bridge: IpcCryptoBridge | undefined;
+let workers: AgentWorkerSupervisor | undefined;
 const handshake = setTimeout(() => stop(false), CONTROL_POLICY.handshakeMs);
 const lease = setInterval(() => { if (Date.now() - lastContact > CONTROL_POLICY.shutdownMs) stop(false); }, CONTROL_POLICY.heartbeatMs);
 function stop(clean: boolean): void {
@@ -21,8 +28,11 @@ function stop(clean: boolean): void {
     try { store?.close(clean); } catch { process.exit(1); }
     process.exit(clean ? 0 : 1);
   };
-  if (!server) finish();
-  else { server.close(finish); server.closeAllConnections(); }
+  // The Worker is stopped first (its tasks become INTERRUPTED in the still-open store). Its Job is also killed when this
+  // process exits, so a failed stop cannot leave it running.
+  const close = (): void => { if (!server) finish(); else { server.close(finish); server.closeAllConnections(); } };
+  if (workers) void workers.stop().catch(() => {}).finally(close);
+  else close();
 }
 
 async function start(message: unknown): Promise<void> {
@@ -37,9 +47,19 @@ async function start(message: unknown): Promise<void> {
   // The Crypto Bridge rides the same inherited channel as the bootstrap; Main serves it only for this service tree.
   bridge = createIpcCryptoBridge({ mainRunId: input.mainRunId, expressRunId: input.expressRunId },
     message => process.connected && process.send ? process.send(message) : false);
+  // The Task Runner exists only when Main handed over a verified isolated Worker runtime (packaged Windows x64 builds).
+  let runner: TaskRunner | undefined;
+  if (input.agentRuntime) {
+    const openStore = store;
+    runner = new TaskRunner({ store: openStore, credentials: createCredentialService(openStore, bridge),
+      gateway: createTurnGateway({ endpoint: input.modelEndpoint }), tools: createToolRouter({ store: openStore }),
+      model: () => openStore.getModel(), live: new LiveFeed(), stopGraceMs: () => openStore.getSettings().stopGraceMs,
+      ensureWorker: () => workers!.ensure() });
+    workers = new AgentWorkerSupervisor({ runtimeDirectory: input.agentRuntime, expressRunId: input.expressRunId, runner });
+  }
   server = createServer({ maxHeaderSize: 8192 }, createControlPlane(input, store, () => {
     const address = server?.address(); return address && typeof address !== 'string' ? address.port : 0;
-  }, () => { lastContact = Date.now(); }, { bridge }));
+  }, () => { lastContact = Date.now(); }, { bridge, ...(runner && workers ? { runner, workers } : {}) }));
   server.maxConnections = 16; server.requestTimeout = 5_000; server.headersTimeout = 5_000; server.keepAliveTimeout = 1_000;
   server.on('error', () => stop(false));
   await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', resolve); });

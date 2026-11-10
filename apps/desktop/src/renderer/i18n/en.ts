@@ -209,6 +209,8 @@ export const en = {
   'panel.transport': 'Transport',
   'panel.worker': 'Agent Worker',
   'panel.blockedBy': 'Blocked by',
+  'panel.workerState': 'Worker',
+  'panel.launches': '{count} launches',
   'panel.taskStart': 'Task start',
   'panel.fixture': 'Fixture launch',
   'panel.capabilities': 'Capabilities · {platform}',

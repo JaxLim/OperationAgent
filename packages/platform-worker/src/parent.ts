@@ -26,7 +26,7 @@ export interface LaunchedFixture {
   /** Resolves with the exit code once the owned process handle is signalled. */
   wait(deadlineMs: number): Promise<number>;
 }
-interface ParentAddon { launchFixture(runtimeDirectory: string): Promise<LaunchedFixture> }
+interface ParentAddon { launchFixture(runtimeDirectory: string): Promise<LaunchedFixture>; launchWorker(runtimeDirectory: string): Promise<LaunchedFixture> }
 
 const artifact = '../native-dist/win32-x64/parent.node';
 let addon: ParentAddon | undefined;
@@ -41,5 +41,18 @@ export async function launchIsolatedFixture(target: string, runtimeDirectory: st
   try { addon ??= createRequire(import.meta.url)(artifact) as ParentAddon; }
   catch (error) { throw new Error('WORKER_ISOLATION_UNAVAILABLE: native launcher artifact missing', { cause: error }); }
   try { return await addon.launchFixture(runtimeDirectory); }
+  catch (error) { throw new Error('WORKER_ISOLATION_UNAVAILABLE: ' + (error instanceof Error ? error.message : 'launch failed'), { cause: error }); }
+}
+
+/**
+ * Launch the production agent runtime through exactly the same public AppContainer + Job + HANDLE_LIST path as the
+ * fixture (same token baseline, verified before resume). Only the installed application calls this; it never runs on
+ * a host where the runtime is missing, and any failure rejects with WORKER_ISOLATION_UNAVAILABLE without a fallback.
+ */
+export async function launchIsolatedWorker(target: string, runtimeDirectory: string): Promise<LaunchedFixture> {
+  if (target !== 'win32-x64') throw new Error('WORKER_ISOLATION_UNAVAILABLE: no native launcher for ' + target);
+  try { addon ??= createRequire(import.meta.url)(artifact) as ParentAddon; }
+  catch (error) { throw new Error('WORKER_ISOLATION_UNAVAILABLE: native launcher artifact missing', { cause: error }); }
+  try { return await addon.launchWorker(runtimeDirectory); }
   catch (error) { throw new Error('WORKER_ISOLATION_UNAVAILABLE: ' + (error instanceof Error ? error.message : 'launch failed'), { cause: error }); }
 }

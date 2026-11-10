@@ -592,9 +592,35 @@ PR #13 评审修正（同日）：
 - `pnpm check:engineering` 九项全部退出 0，单元测试 **147/147**。新增 `tests/m2/agent-loop.test.ts`（5 项，同一进程内的真实 Worker 运行时 ↔ 真实 Express 会话，经内存双工通道传输 OWIP 帧）：完整只读任务（列目录、读文件、敏感文件被拒、任务未授予的工具不执行、Express 构建全部工具结果并按序配对、事件与消息落盘、数据库中没有文件内容和密钥）；Worker 伪造的任务/轮次/工具调用全部被拒或跳过；停止中止流式回合并确认为 STOPPED；Worker 丢失后任务 INTERRUPTED 且不再接受新任务；未提供 `agent` 能力的运行时握手失败。`tests/m2/agent-store.test.ts`（3 项）：迁移 009 的元数据事件、重建后的触发器、消息只追加与上限、实时增量的游标/缺口/保留。
 - 未验证：生产 AppContainer 中运行 Agent 运行时（下一切片，CI 一次性 runner）；安装包烟测（期望迁移 1–9）；真实 api.anthropic.com。
 
+## M2 第六切片：生产 Agent Worker 运行时与隔离启动（2026-11-09）
+
+授权：同上。本切片让**安装后的应用**能在 Windows x64 上真正启动隔离的 Agent Worker 并执行任务；对话界面（实时流式文本、停止按钮、消息视图）在下一切片。
+
+- **原生启动器**：`parent.node` 新增 `launchWorker`，与 `launchFixture` 共用同一条公开 API 隔离路径（AppContainer + Job + HANDLE_LIST、恢复执行前核验令牌基线、单一继承管道、确认清理并删除 profile、恢复运行时 ACL）。唯一区别：不要求一次性 runner（P1 fixture 仍要求）、profile 名称前缀为 `OperationAgent.Worker.`、运行时文件集不同。运行时目录不完整时在创建 profile 之前即拒绝（`WORKER_RUNTIME_INCOMPLETE`），本机测试据此验证而不创建 profile。
+- **运行时打包**：`stage-sidecar` 在 Windows x64 上生成独立的最小 Worker 目录（独立的锁定 `node.exe`、打包后的受信 bootstrap、子端 `channel.node`、`package.json`，恰好四个文件），并把 `parent.node` 放到 Express 加载它的位置；全部写入阶段清单的哈希。Main 启动时逐文件复核哈希，Worker 目录要么完整（恰好四个文件）要么不存在。`pnpm package` 与集成测试在打包前先构建原生组件。
+- **ADR-WIN-001 §3**：只有已打包的应用会把 Worker 运行时交给 Express（`launchWorkers: app.isPackaged`），开发构建和本机集成测试从不创建 AppContainer profile 或修改 ACL；没有运行时的 Express 不创建 Task Runner，任务启动照旧返回 `WORKER_ISOLATION_UNAVAILABLE`。
+- **Express**：`AgentWorkerSupervisor` 按需（第一次启动任务时）通过原生启动器启动 Worker，会话经 `createAgentSession` 绑定 Task Runner，复用 P1 已验证的 `FixtureWorker` 生命周期（握手、心跳、退出监视、两阶段停止、确认清理；新增可选会话工厂，P1 行为不变）。Worker 退出时其任务转为 INTERRUPTED；清理未确认则此后拒绝一切启动；连续失败受重启预算限制；每次启动使用新的 Worker 身份。Task Runner 先检查廉价前置条件（提示、项目、密钥、忙碌），再按需启动 Worker，不会为必然被拒的请求启动隔离进程。
+- **任务启动路由**：有 Task Runner 时创建并运行任务（201，返回任务快照），否则 503；拒绝原因明确为 `WORKER_ISOLATION_UNAVAILABLE`、`MODEL_NOT_CONFIGURED`、`AGENT_BUSY`。认证请求 ID 同时作为任务创建 ID，重放请求不会创建第二个任务。界面接受后直接打开该任务。
+- **概览如实反映**：`agentReady` 与 Worker 状态来自 supervisor（未暂存运行时 / 清理未确认 / 预算耗尽 / 已关闭，或 idle/starting/ready 与启动次数），不再写死。
+- **一次性 runner 端到端测试** `tests/worker-fixture/agent-runtime.test.mjs`：用生产启动器在真实 AppContainer 中运行生产 Agent 运行时，对本机假 Messages API 执行列目录 + 读文件 + 回答的完整任务，核对 Express 读取的文件内容交给了模型、数据库中无文件内容与密钥、停止后清理确认。结果写入 `integration.json` 的 `agentRuntime`。
+
+本地验证（Windows x64）：
+- `pnpm check:engineering` 九项全部退出 0，单元测试 **150/150**。新增 `tests/m2/agent-worker.test.ts`（3 项，经 `FixtureWorker` 真实生命周期代码、进程内载体代替原生启动）：首个任务按需启动、后续复用、随控制面停止；任务中 Worker 死亡则任务 INTERRUPTED、下一个任务使用新的 Worker；清理未确认后拒绝一切启动。原生接口测试新增 `launchWorker` 参数与运行时完整性在创建 profile 前即拒绝的用例。
+- 生产 AppContainer 中的端到端运行只在一次性 runner 上执行（本机按规定为 BLOCKED）；`build/agent-status.json` 未修改，`agentReady` 的构建记录仍为 false，待 CI 证据提交后另行记录。
 PR #14 评审修正（2026-11-10）：
 - Codex P1：被攻陷的 Worker 可以不等第一个回复就连续发送第 1、2 轮 `model.turn`，两轮并发作用于同一会话，停止只能中止后一轮。修正：模型回合严格串行，有回合或工具调用在进行时拒绝新回合；同一工具调用不能并发执行两次；中止控制器归属其回合直到结束。
 - Codex P2：合法的长路径会使工具摘要超过回复契约的 256 字符，导致会话关闭、任务中断。修正：所有摘要限长（保留文件名一端），回复前再统一截断。
 - Codex P2：使用同一请求 ID 重试启动时，若任务仍在运行会先返回 `AGENT_BUSY`。修正：先按请求 ID 返回已创建的任务（项目不符则拒绝），再检查是否忙碌。
 - Codex P2：Agent 会话握手后未启动心跳；继承通道读取有 30 秒截止时间，长回合或空闲时会断开。修正：握手后即启动心跳。
 - 新增测试：回合进行中拒绝新回合与工具调用且无第二次模型请求；忙碌时同 ID 重试返回原任务、换项目被拒；空闲会话持续心跳；长路径摘要不超过 256 字符且保留文件名。`check:engineering` 九项退出 0，**148/148**。
+
+PR #15 评审修正（2026-11-10）：
+- Codex P1：Main 给 Express 侧车的环境白名单不含 `LOCALAPPDATA`，而原生 Worker 启动器需要它（AppContainer 的本地应用数据根），安装版中每次启动任务都会失败；runner 测试直接从测试进程启动 supervisor，未覆盖这一边界。修正：白名单改为共享契约常量 `SIDECAR_ENVIRONMENT` 并加入 `LOCALAPPDATA`；runner 端到端测试在启动前把自身环境裁剪为该白名单，从而覆盖 Main → Express 边界。
+- Codex P1：原生创建失败（`WORKER_CREATION_CLEANUP_UNCONFIRMED`）或握手失败且清理未确认时，supervisor 回到 idle，可能在旧进程/profile/ACL 未确认清理时再次启动。修正：启动失败的错误携带清理结果，未确认则 supervisor 永久不可用（`CLEANUP_UNCONFIRMED`），不再尝试启动；清理已确认的失败仍可重试。同时 agent 会话自己启动心跳，launcher 不再为工厂会话重复启动。
+- 新增测试：原生创建失败与握手失败（关闭未确认）后拒绝一切启动且不再尝试，握手失败但清理已确认时保持可重试。`check:engineering` 九项退出 0，**152/152**。
+
+PR #15 CI 修正（2026-11-10）：
+- 现象：`f134b3c` 的 Windows runner 上 `agent-runtime.test.mjs` 失败，任务 COMPLETED 但 `list_directory`、`read_file` 均为 `failed`（上一提交 `f458b3a` 通过）。
+- 根因（测试缺陷，非产品缺陷）：CI 步骤用 Git Bash 启动，环境变量拼写为 `SYSTEMROOT`。测试按**精确名称**过滤 `Object.keys(process.env)`，`SYSTEMROOT` 不在 `SIDECAR_ENVIRONMENT`（`SystemRoot`）中而被删除；Read Adapter 子进程的环境因此没有 `SystemRoot`，Node 子进程无法启动，返回 `ADAPTER_FAILED`。Main 的做法是逐个按名称读取 `process.env[key]`（Windows 上不区分大小写）再以契约拼写写入，不受影响。
+- 本机复现：在 Git Bash 下对同一 Read Adapter 用旧裁剪方式得到 `ADAPTER_FAILED`，改为 Main 的构造方式后得到 `ok`。
+- 修正：测试按 Main 的方式构造侧车环境（逐个读取、清空、按契约拼写写回），并断言 `SystemRoot` 与 `LOCALAPPDATA` 存在。隔离运行本身仍只能在一次性 runner 上验证。

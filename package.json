@@ -28,7 +28,7 @@
     "test:integration": "node scripts/test-integration.mjs",
     "prepare:electron": "node scripts/prepare-electron.mjs",
     "desktop": "node apps/desktop/node_modules/electron/cli.js apps/desktop",
-    "package": "node scripts/workspace.mjs build && node scripts/stage-sidecar.mjs && node scripts/prepare-electron.mjs && node scripts/package-windows.mjs",
+    "package": "node scripts/workspace.mjs build && node scripts/build-worker-native.mjs && node scripts/stage-sidecar.mjs && node scripts/prepare-electron.mjs && node scripts/package-windows.mjs",
     "test:smoke": "node tests/installer/installed-smoke.mjs",
     "icon": "node scripts/generate-icon.mjs"
   },

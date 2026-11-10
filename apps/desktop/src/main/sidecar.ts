@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { request } from 'node:http';
-import { BootstrapSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlFailureSchema, ControlHealthSchema, PROTOCOL_VERSION,
+import { BootstrapSchema, CONTROL_POLICY, CONTROL_ROUTES, SIDECAR_ENVIRONMENT, ControlFailureSchema, ControlHealthSchema, PROTOCOL_VERSION,
   SidecarReadySchema, SmokeBatchSchema, SmokeRecordsSchema, requestProof, responseProof } from '@operation-agent/contracts';
 import type { Bootstrap, SidecarReady, SmokeBatch, ControlHealth, SmokeRecords, DesktopStatus, CryptoBridgeResponse, ServiceTreeIdentity } from '@operation-agent/contracts';
 import { verifyStagedRuntime } from './staged-runtime.js';
@@ -10,7 +10,9 @@ import { verifyStagedRuntime } from './staged-runtime.js';
 interface Instance { child: ChildProcess; bootstrap: Bootstrap; exited: Promise<void>; ready?: SidecarReady; accepted: boolean }
 /** Serves Crypto Bridge requests arriving on one instance's inherited channel; null means no attributable reply. */
 export type CryptoHandler = (identity: ServiceTreeIdentity, message: unknown) => Promise<CryptoBridgeResponse | null>;
-export interface SupervisorOptions { cryptoHandler?: CryptoHandler; modelEndpoint?: Bootstrap['modelEndpoint'] }
+export interface SupervisorOptions { cryptoHandler?: CryptoHandler; modelEndpoint?: Bootstrap['modelEndpoint'];
+  /** Packaged builds only: hand the verified Worker runtime to Express. Development and test builds never launch a Worker. */
+  launchWorkers?: boolean }
 export class SidecarSupervisor {
   private readonly mainRunId = randomUUID();
   private active: Instance | undefined;
@@ -41,10 +43,11 @@ export class SidecarSupervisor {
     if (!this.wanted || this.active) throw new Error('SERVICE_UNAVAILABLE');
     const bootstrap = BootstrapSchema.parse({ kind: 'bootstrap', protocolVersion: PROTOCOL_VERSION, mainRunId: this.mainRunId,
       expressRunId: randomUUID(), parentPid: process.pid, token: randomBytes(32).toString('hex'), dataDirectory: this.dataDirectory,
-      ...(this.options.modelEndpoint ? { modelEndpoint: this.options.modelEndpoint } : {}) });
+      ...(this.options.modelEndpoint ? { modelEndpoint: this.options.modelEndpoint } : {}),
+      ...(this.options.launchWorkers && runtime.worker && process.platform === 'win32' && process.arch === 'x64' ? { agentRuntime: runtime.worker } : {}) });
     // spawn avoids Electron's fork shim and ELECTRON_RUN_AS_NODE. No PATH, NODE_OPTIONS or user argv are inherited.
     const env: NodeJS.ProcessEnv = {};
-    for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'TMPDIR', 'LANG']) if (process.env[key]) env[key] = process.env[key];
+    for (const key of SIDECAR_ENVIRONMENT) if (process.env[key]) env[key] = process.env[key];
     const child = spawn(runtime.node, [runtime.entry], { cwd: runtime.cwd, env, windowsHide: true,
       shell: false, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
     let markExited: () => void = () => {};

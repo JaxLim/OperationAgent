@@ -69,6 +69,35 @@ if (!materialized.startsWith(stagingRoot + sep)) throw new Error('STAGE_ESCAPE')
 await rm(materialized, { recursive: true, force: true });
 await cp(server, materialized, { recursive: true, dereference: true });
 await rm(server, { recursive: true, force: true }); await rename(materialized, server);
+
+// Windows x64 ships the isolated agent runtime (ADR-WIN-001): the native parent launcher next to the platform-worker
+// package Express loads it from, and a separate minimal Worker directory (its own pinned node.exe, the bundled trusted
+// bootstrap, the child channel addon and a package scope). Only the installed application ever launches it.
+const worker = resolve(stage, 'worker');
+if (!worker.startsWith(stagingRoot + sep)) throw new Error('STAGE_ESCAPE');
+await rm(worker, { recursive: true, force: true });
+if (target === 'win32-x64') {
+  const native = resolve(root, 'packages/platform-worker/native-dist/win32-x64');
+  for (const file of ['parent.node', 'channel.node']) {
+    try { await lstat(resolve(native, file)); } catch { throw new Error('WORKER_NATIVE_MISSING: run scripts/build-worker-native.mjs first'); }
+  }
+  const stagedNative = resolve(server, 'node_modules/@operation-agent/platform-worker/native-dist/win32-x64');
+  await mkdir(stagedNative, { recursive: true });
+  await cp(resolve(native, 'parent.node'), resolve(stagedNative, 'parent.node'));
+  await mkdir(worker, { recursive: true });
+  await cp(nodeSource, resolve(worker, 'node.exe'));
+  await cp(resolve(native, 'channel.node'), resolve(worker, 'channel.node'));
+  const { build } = await import('vite');
+  await build({ configFile: false, logLevel: 'warn', build: {
+    outDir: worker, emptyOutDir: false, target: 'node24', minify: false, ssr: true, copyPublicDir: false,
+    rolldownOptions: { input: resolve(root, 'apps/agent-worker/bootstrap/agent-bootstrap.mjs'), external: [/^node:/],
+      output: { format: 'es', entryFileNames: 'bootstrap.mjs', codeSplitting: false } },
+  } });
+  // Package-scope lookups stop here instead of walking into ancestors the AppContainer cannot read.
+  await writeFile(resolve(worker, 'package.json'), JSON.stringify({ name: 'operation-agent-worker-runtime', private: true, type: 'module' }, null, 2) + '\n');
+  const staged = (await readdir(worker)).sort();
+  if (JSON.stringify(staged) !== JSON.stringify(['bootstrap.mjs', 'channel.node', 'node.exe', 'package.json'])) throw new Error('WORKER_RUNTIME_UNEXPECTED_FILES');
+}
 const files = {};
 async function inspect(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -81,6 +110,7 @@ async function inspect(directory) {
   }
 }
 await inspect(resolve(stage, 'server')); await inspect(resolve(stage, 'node'));
+if (target === 'win32-x64') await inspect(worker);
 const node = resolve(stage, nodeRelative);
 const probe = JSON.parse(run(node, ['--input-type=module', '-e',
   "import Database from 'better-sqlite3'; const db = new Database(':memory:'); const sqlite = db.prepare('select sqlite_version() as version').get(); db.close(); console.log(JSON.stringify({node:process.versions.node,abi:process.versions.modules,napi:process.versions.napi,platform:process.platform,arch:process.arch,sqlite:sqlite.version}));"], { cwd: server }));

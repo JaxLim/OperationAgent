@@ -31,9 +31,9 @@ std::wstring sidText(PSID sid) {
   LPWSTR value = nullptr; if (!ConvertSidToStringSidW(sid, &value)) fail("SID_STRING");
   std::wstring result(value); LocalFree(value); return result;
 }
-std::wstring randomName() {
+std::wstring randomName(const wchar_t* prefix = L"OperationAgent.P1.") {
   uint8_t bytes[16]{}; if (BCryptGenRandom(nullptr, bytes, sizeof(bytes), BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) throw std::runtime_error("RANDOM_FAILED");
-  std::wstring result = L"OperationAgent.P1."; const wchar_t* hex = L"0123456789abcdef";
+  std::wstring result = prefix; const wchar_t* hex = L"0123456789abcdef";
   for (auto byte : bytes) { result += hex[byte >> 4]; result += hex[byte & 15]; }
   return result;
 }
@@ -52,7 +52,12 @@ DWORD parentPid(DWORD pid) {
   if (Process32FirstW(snapshot.value, &entry)) do { if (entry.th32ProcessID == pid) return entry.th32ParentProcessID; } while (Process32NextW(snapshot.value, &entry));
   throw std::runtime_error("PARENT_IDENTITY_UNAVAILABLE");
 }
+// The P1 fixture runs only on a disposable runner (ADR-WIN-001 §3). The production agent runtime is launched by the
+// installed application on the user's machine through exactly the same isolation path; only the profile name, the
+// runtime file set and the runner guard differ.
+enum class Mode { Fixture, Worker };
 struct Run final : Channel {
+  Mode mode = Mode::Fixture;
   Handle job, process, diagnostics;
   Sid sid;
   Local originalSecurity;
@@ -140,16 +145,22 @@ void verifySuspended(Run& run) {
   if (!GetProcessMitigationPolicy(run.process.value, ProcessChildProcessPolicy, &child, sizeof(child)) || !child.NoChildProcessCreation) throw std::runtime_error("WORKER_CHILD_POLICY_REJECTED");
 }
 void create(Run& run) {
-  wchar_t github[8]{}, runner[16]{};
-  if (!GetEnvironmentVariableW(L"GITHUB_ACTIONS", github, 8) || std::wstring(github) != L"true" ||
-    !GetEnvironmentVariableW(L"RUNNER_OS", runner, 16) || std::wstring(runner) != L"Windows") throw std::runtime_error("DISPOSABLE_WINDOWS_RUNNER_REQUIRED");
-  requireDirectory(run.runtime);
-  for (const auto* name : {L"node.exe", L"bootstrap.mjs", L"channel.node"}) {
-    const DWORD flags = GetFileAttributesW((run.runtime + L"/" + name).c_str());
-    if (flags == INVALID_FILE_ATTRIBUTES || flags & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) throw std::runtime_error("FIXTURE_RUNTIME_INCOMPLETE");
+  const bool fixture = run.mode == Mode::Fixture;
+  if (fixture) {
+    wchar_t github[8]{}, runner[16]{};
+    if (!GetEnvironmentVariableW(L"GITHUB_ACTIONS", github, 8) || std::wstring(github) != L"true" ||
+      !GetEnvironmentVariableW(L"RUNNER_OS", runner, 16) || std::wstring(runner) != L"Windows") throw std::runtime_error("DISPOSABLE_WINDOWS_RUNNER_REQUIRED");
   }
-  run.profile = randomName();
-  const HRESULT profile = CreateAppContainerProfile(run.profile.c_str(), run.profile.c_str(), L"OperationAgent isolated P1 fixture", nullptr, 0, &run.sid.value);
+  requireDirectory(run.runtime);
+  for (const auto* name : {L"node.exe", L"bootstrap.mjs", L"channel.node", L"package.json"}) {
+    const DWORD flags = GetFileAttributesW((run.runtime + L"/" + name).c_str());
+    if (flags == INVALID_FILE_ATTRIBUTES || flags & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) {
+      throw std::runtime_error(fixture ? "FIXTURE_RUNTIME_INCOMPLETE" : "WORKER_RUNTIME_INCOMPLETE");
+    }
+  }
+  run.profile = randomName(fixture ? L"OperationAgent.P1." : L"OperationAgent.Worker.");
+  const HRESULT profile = CreateAppContainerProfile(run.profile.c_str(), run.profile.c_str(),
+    fixture ? L"OperationAgent isolated P1 fixture" : L"OperationAgent isolated agent worker", nullptr, 0, &run.sid.value);
   if (FAILED(profile)) fail("CREATE_APPCONTAINER_PROFILE", static_cast<DWORD>(profile));
   run.profileCreated = true;
   grantRuntime(run);
@@ -255,10 +266,10 @@ OA_ENTRY(Diagnostics) {
   }
   return string(env, text);
 } OA_END
-OA_ENTRY(LaunchFixture) {
+napi_value Launch(napi_env env, napi_callback_info info, Mode mode) {
   napi_value arg; size_t count = 1; check(napi_get_cb_info(env, info, &count, &arg, nullptr, nullptr));
   if (count != 1) throw std::runtime_error("ARGUMENT_COUNT");
-  auto run = std::make_shared<Run>(); run->runtime = wide(text(env, arg));
+  auto run = std::make_shared<Run>(); run->mode = mode; run->runtime = wide(text(env, arg));
   return async(env, [run] {
     try { create(*run); }
     catch (...) { const auto original = std::current_exception(); try { run->cleanup(); } catch (...) { throw std::runtime_error("WORKER_CREATION_CLEANUP_UNCONFIRMED"); } std::rethrow_exception(original); }
@@ -277,10 +288,15 @@ OA_ENTRY(LaunchFixture) {
     };
     check(napi_define_properties(e, result, 2, methods)); return result;
   });
-} OA_END
+}
+OA_ENTRY(LaunchFixture) { return Launch(env, info, Mode::Fixture); } OA_END
+OA_ENTRY(LaunchWorker) { return Launch(env, info, Mode::Worker); } OA_END
 napi_value Init(napi_env env, napi_value exports) {
-  const napi_property_descriptor method = {"launchFixture", nullptr, LaunchFixture, nullptr, nullptr, nullptr, napi_default, nullptr};
-  napi_define_properties(env, exports, 1, &method); return exports;
+  const napi_property_descriptor methods[] = {
+    {"launchFixture", nullptr, LaunchFixture, nullptr, nullptr, nullptr, napi_default, nullptr},
+    {"launchWorker", nullptr, LaunchWorker, nullptr, nullptr, nullptr, napi_default, nullptr},
+  };
+  napi_define_properties(env, exports, 2, methods); return exports;
 }
 }
 NAPI_MODULE(NODE_GYP_MODULE_NAME, Init)

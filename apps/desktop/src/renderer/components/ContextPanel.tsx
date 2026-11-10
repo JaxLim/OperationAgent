@@ -43,9 +43,11 @@ function StatusTab() {
       <section className="status-card">
         <h3 className="status-title"><IconShield size={14} />{t('panel.worker')}</h3>
         <dl className="kv-list">
-          <Kv label="agentReady" tone="danger"><span className="mono">false</span></Kv>
-          <Kv label={t('panel.blockedBy')}><span className="mono">{overview?.worker.reason ?? 'AGENT_LOOP_NOT_IMPLEMENTED'}</span></Kv>
-          <Kv label={t('panel.taskStart')}><span className="mono">{overview?.worker.error ?? 'WORKER_ISOLATION_UNAVAILABLE'}</span></Kv>
+          <Kv label="agentReady" tone={overview?.agentReady ? 'ok' : 'danger'}><span className="mono">{String(overview?.agentReady ?? false)}</span></Kv>
+          {overview?.worker.state === 'unavailable' || !overview ? <>
+            <Kv label={t('panel.blockedBy')}><span className="mono">{overview?.worker.state === 'unavailable' ? overview.worker.reason : 'WORKER_RUNTIME_NOT_STAGED'}</span></Kv>
+            <Kv label={t('panel.taskStart')}><span className="mono">WORKER_ISOLATION_UNAVAILABLE</span></Kv>
+          </> : <Kv label={t('panel.workerState')}><span className="mono">{overview.worker.state} · {t('panel.launches', { count: overview.worker.launches })}</span></Kv>}
           <Kv label={t('panel.fixture')}><span className="mono">{overview?.worker.fixtureLaunch ?? 'disabled-in-release'}</span></Kv>
         </dl>
       </section>

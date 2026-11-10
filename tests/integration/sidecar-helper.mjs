@@ -4,7 +4,7 @@ import { request } from 'node:http';
 import { resolve } from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { CONTROL_ROUTES, PROTOCOL_VERSION, SidecarReadySchema, requestProof, responseProof } from '../../packages/contracts/dist/index.js';
+import { CONTROL_ROUTES, PROTOCOL_VERSION, SIDECAR_ENVIRONMENT, SidecarReadySchema, requestProof, responseProof } from '../../packages/contracts/dist/index.js';
 
 export const root = resolve(import.meta.dirname, '../..');
 // OA_SIDECAR_STAGE lets the installer smoke test run this suite against an installed resources/sidecar.
@@ -16,7 +16,7 @@ export async function closeDirectory(directory) {
   for (const [sidecar, path] of liveSidecars) if (path === directory) { await sidecar.close(); liveSidecars.delete(sidecar); }
 }
 export function environment() {
-  return Object.fromEntries(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
+  return Object.fromEntries(SIDECAR_ENVIRONMENT.filter(key => process.env[key]).map(key => [key, process.env[key]]));
 }
 export async function until(check, timeout = 10_000) {
   const end = Date.now() + timeout;
