@@ -11,6 +11,21 @@ const QUOTES = [
   'Then proceed autonomously with M1–M4, prioritizing usable Agent functionality.',
 ];
 const PLATFORMS = ['darwin-arm64', 'linux-x64', 'win32-x64'];
+// ADR-PLAT-001: the platform milestones the user's 2026-11-10 directive put in scope. The directive authorizes the scope
+// and the decisions that stay inside the frozen boundaries; each boundary-changing decision (class B in the ADR) needs
+// its own recorded approval before the milestone that depends on it can start.
+const PLATFORM_ADR = 'docs/adr/ADR-PLAT-001.md';
+const PLATFORM_MILESTONES = ['M5', 'M6', 'M7', 'M8'];
+const PLATFORM_QUOTES = [
+  'I want you to take full ownership of the continued development of OperationAgent, with the long-term ambition of building a world-class, production-grade autonomous AI agent platform comparable to the best capabilities of OpenAI Codex, Claude Code, and other leading agent systems.',
+  'Establish a technically realistic architecture and a prioritized development roadmap.',
+  'Then implement the roadmap yourself, incrementally, with real working functionality rather than prototypes, mock implementations, or settings-only features.',
+  'Manage branches, pull requests, CI failures, code reviews, and merges independently whenever checks and safety requirements are satisfied.',
+  'Autonomous execution must remain subject to appropriate user approvals and security boundaries.',
+];
+const BOUNDARY_DECISIONS = ['D7', 'D8', 'D9', 'D10'];
+/** The class B decisions a milestone cannot start without. */
+export const PLATFORM_GATES: Readonly<Record<string, readonly string[]>> = Object.freeze({ M7: ['D7', 'D8'], M8: ['D9'] });
 /** Committed CI evidence for a platform's SEC-W01 run (integration.json + raw sec-w01.json); absent means NOT_RUN. */
 export interface SecW01Evidence { integration: unknown; report: unknown }
 
@@ -81,7 +96,35 @@ export function validateAgentStage(value: unknown, evidence: Record<string, SecW
     need(stage.productionWorkerQualified === false || (secW01['win32-x64'] === 'PASS' && milestones.M1 === 'implemented'), 'AGENT_FALSE_QUALIFICATION');
     need(milestones.M1 !== 'implemented' || secW01['win32-x64'] === 'PASS', 'AGENT_M1_UNPROVEN');
     need(stage.agentReady === false || (stage.productionWorkerQualified === true && milestones.M2 === 'implemented'), 'AGENT_FALSE_READINESS');
+    errors.push(...validatePlatformScope(stage.platform, milestones));
   } catch { errors.push('AGENT_MALFORMED_STAGE'); }
+  return errors;
+}
+
+/** ADR-PLAT-001 scope: fixed milestones and authorization, and no class B milestone started without its approvals. */
+export function validatePlatformScope(value: unknown, agentMilestones: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  const need = (ok: boolean, message: string): void => { if (!ok) errors.push(message); };
+  try {
+    const platform = object(value);
+    need(platform.adr === PLATFORM_ADR, 'PLATFORM_ADR_MISSING');
+    need(JSON.stringify(platform.authorizedMilestones) === JSON.stringify(PLATFORM_MILESTONES), 'PLATFORM_SCOPE_EXCEEDED');
+    const authorization = object(platform.authorization);
+    need(authorization.kind === 'user-message' && authorization.date === '2026-11-10' &&
+      JSON.stringify(authorization.quotes) === JSON.stringify(PLATFORM_QUOTES), 'PLATFORM_AUTHORIZATION_MISSING');
+    const milestones = object(platform.milestones);
+    need(Object.keys(milestones).join('|') === PLATFORM_MILESTONES.join('|') &&
+      PLATFORM_MILESTONES.every(name => ['implemented', 'in-progress', 'blocked', 'not-started'].includes(String(milestones[name]))), 'PLATFORM_MILESTONES_INVALID');
+    const approved: unknown[] = Array.isArray(platform.approvedDecisions) ? platform.approvedDecisions : [];
+    need(Array.isArray(platform.approvedDecisions) && approved.every(item => typeof item === 'string' && BOUNDARY_DECISIONS.includes(item)) &&
+      new Set(approved).size === approved.length, 'PLATFORM_APPROVALS_INVALID');
+    for (const [name, decisions] of Object.entries(PLATFORM_GATES)) {
+      const started = ['implemented', 'in-progress'].includes(String(milestones[name]));
+      need(!started || decisions.every(decision => approved.includes(decision)), `PLATFORM_${name}_NEEDS_APPROVAL`);
+    }
+    // Every platform milestone builds on the usable read-only agent.
+    need(PLATFORM_MILESTONES.every(name => milestones[name] !== 'implemented') || agentMilestones.M2 === 'implemented', 'PLATFORM_WITHOUT_M2');
+  } catch { errors.push('PLATFORM_MALFORMED_SCOPE'); }
   return errors;
 }
 
@@ -99,9 +142,11 @@ export function checkAgent(root: string): void {
     if (existsSync(integration)) runtime[platform] = { integration: readJson(integration) };
   }
   const errors = validateAgentStage(stage, evidence, runtime);
+  if (!existsSync(resolve(root, PLATFORM_ADR))) errors.push('PLATFORM_ADR_FILE_MISSING');
   if (errors.length) throw new Error(errors.join('\n'));
   console.log(JSON.stringify({ check: 'AGENT_SCOPE', passed: true, milestones: stage.milestones, secW01: stage.secW01, agentRuntime: stage.agentRuntime,
-    agentReady: stage.agentReady, productionWorkerQualified: stage.productionWorkerQualified }));
+    agentReady: stage.agentReady, productionWorkerQualified: stage.productionWorkerQualified,
+    platform: { milestones: object(stage.platform).milestones, approvedDecisions: object(stage.platform).approvedDecisions } }));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) checkAgent(resolve('.'));

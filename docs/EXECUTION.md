@@ -669,3 +669,12 @@ main CI 修正：安装后烟测的强制终止竞态（2026-11-10）
 - README（中、英）改为如实描述现状：安装版在 Windows x64 上可以运行只读 Agent；从源码运行的开发构建不启动隔离 Worker；**尚未有针对真实 Claude API 的运行记录**。
 - 本地验证：`pnpm check:engineering` 九项全部退出 0，单元测试 **158/158**（状态检查的测试改为同时对照 M1 与 M2 两份已提交证据）。
 - 未验证：真实 `api.anthropic.com` 上的任务；macOS 与 Linux。
+
+## 平台范围与路线图：ADR-PLAT-001（2026-11-10）
+
+授权：用户 2026-11-10 指令（原话记录于 `build/agent-status.json` 的 `platform.authorization`）。本次只提交决策文档、路线图和范围检查，**不新增任何运行时能力**。
+
+- 评估：通读 `ARCHITECTURE.md`、`AGENTS.md`、已合并的 M1/M2 代码与两个未合并的 PR；结论见 `docs/ROADMAP.md` §6.1。
+- `docs/adr/ADR-PLAT-001.md`：把规划、目标驱动、技能与插件、上下文管理分成 A 类（不改变 §2.2 边界，范围已授权，可实施：D1～D6）与 B 类（改变边界，需对具体决策另行批准：D7 子 Agent 并发、D8 自动续接、D9 MCP Host 与插件、D10 工作区外的技能目录）。不修改冻结的 `ARCHITECTURE.md` / `AGENTS.md`。
+- `build/agent-status.json` 新增 `platform`：里程碑 M5～M8、授权原话、已批准的 B 类决策列表（当前为空）。`scripts/agent-check.ts` 校验范围与原话不可改动，M7 在 D7、D8 获批前、M8 在 D9 获批前不能标为进行中或已实现，任何平台里程碑在 M2 实现前不能标为已实现。
+- 本地验证：`pnpm check:engineering` 九项退出 0，**159/159**（新增 1 项平台范围测试）。

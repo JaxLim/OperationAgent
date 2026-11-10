@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readJson } from '../../scripts/p0-check.ts';
-import { agentRuntimeEvidenceViolations, validateAgentStage } from '../../scripts/agent-check.ts';
+import { PLATFORM_GATES, agentRuntimeEvidenceViolations, validateAgentStage, validatePlatformScope } from '../../scripts/agent-check.ts';
 import { SEC_W01_ENV, SEC_W01_ENV_AFTER_CHANNEL, evaluateSecW01 } from '../../scripts/sec-w01-rules.ts';
 
 const stage = () => readJson('build/agent-status.json');
@@ -145,4 +145,38 @@ test('M2 and agentReady need committed proof that the isolated agent runtime ran
   assert.notEqual(validateAgentStage({ ...ready(), agentRuntime: base().agentRuntime }, evidence(), runtimeRecord()).length, 0);
   assert.notEqual(validateAgentStage({ ...ready(), agentRuntime: { ...(ready().agentRuntime as object), 'linux-x64': 'PASS' } }, evidence(), runtimeRecord()).length, 0);
   assert.notEqual(validateAgentStage({ ...stage(), agentRuntime: { 'win32-x64': 'NOT_RUN' } }, committed()).length, 0, 'the matrix covers every platform');
+});
+
+test('ADR-PLAT-001: the platform scope is fixed by its recorded authorization and class B milestones need their approvals', () => {
+  const platform = () => stage().platform as Record<string, unknown>;
+  const milestones = stage().milestones as Record<string, unknown>;
+  const check = (change: Record<string, unknown>, agent: Record<string, unknown> = milestones): string[] => validatePlatformScope({ ...platform(), ...change }, agent);
+  assert.deepEqual(check({}), []);
+  assert.deepEqual(validateAgentStage(stage(), committed(), committedRuntime()), []);
+  // The scope, the quoted authorization and the ADR reference cannot drift.
+  for (const change of [{ adr: 'docs/adr/OTHER.md' }, { authorizedMilestones: ['M5', 'M6', 'M7', 'M8', 'M9'] },
+    { authorization: { ...(platform().authorization as object), date: '2026-11-11' } },
+    { authorization: { ...(platform().authorization as object), quotes: ['Do anything.'] } },
+    { milestones: { ...(platform().milestones as object), M9: 'not-started' } }, { milestones: { M5: 'done', M6: 'not-started', M7: 'blocked', M8: 'blocked' } },
+    { approvedDecisions: ['D1'] }, { approvedDecisions: ['D7', 'D7'] }, { approvedDecisions: 'D7' }]) {
+    assert.notEqual(check(change).length, 0, JSON.stringify(change).slice(0, 80));
+  }
+  assert.deepEqual(validateAgentStage({ ...stage(), platform: undefined }, committed(), committedRuntime()), ['PLATFORM_MALFORMED_SCOPE'], 'the block is required');
+  // Decisions that change a boundary gate their milestone: a general directive is not an approval of them.
+  const started = (name: string, state: string, approvedDecisions: string[] = []) =>
+    check({ milestones: { ...(platform().milestones as object), [name]: state }, approvedDecisions }, { ...milestones, M2: 'implemented' });
+  assert.deepEqual(Object.keys(PLATFORM_GATES), ['M7', 'M8']);
+  assert.deepEqual(started('M5', 'in-progress'), [], 'class A work needs no further approval');
+  assert.deepEqual(started('M6', 'in-progress'), []);
+  for (const state of ['in-progress', 'implemented']) {
+    assert.deepEqual(started('M7', state), ['PLATFORM_M7_NEEDS_APPROVAL']);
+    assert.deepEqual(started('M7', state, ['D7']), ['PLATFORM_M7_NEEDS_APPROVAL'], 'both decisions are needed');
+    assert.deepEqual(started('M8', state, ['D7', 'D8']), ['PLATFORM_M8_NEEDS_APPROVAL']);
+  }
+  assert.deepEqual(started('M7', 'in-progress', ['D7', 'D8']), []);
+  assert.deepEqual(started('M8', 'in-progress', ['D9']), []);
+  // No platform milestone is complete before the read-only agent it builds on.
+  const done = { milestones: { ...(platform().milestones as object), M5: 'implemented' } };
+  assert.deepEqual(check(done, { ...milestones, M2: 'in-progress' }), ['PLATFORM_WITHOUT_M2']);
+  assert.deepEqual(check(done, { ...milestones, M2: 'implemented' }), []);
 });
