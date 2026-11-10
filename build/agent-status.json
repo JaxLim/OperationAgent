@@ -31,6 +31,11 @@
     "darwin-arm64": "NOT_RUN",
     "linux-x64": "NOT_RUN"
   },
+  "agentRuntime": {
+    "win32-x64": "NOT_RUN",
+    "darwin-arm64": "NOT_RUN",
+    "linux-x64": "NOT_RUN"
+  },
   "agentReady": false,
   "productionWorkerQualified": true,
   "evidence": {

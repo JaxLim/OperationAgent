@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readJson } from '../../scripts/p0-check.ts';
-import { validateAgentStage } from '../../scripts/agent-check.ts';
+import { agentRuntimeEvidenceViolations, validateAgentStage } from '../../scripts/agent-check.ts';
 import { SEC_W01_ENV, SEC_W01_ENV_AFTER_CHANNEL, evaluateSecW01 } from '../../scripts/sec-w01-rules.ts';
 
 const stage = () => readJson('build/agent-status.json');
@@ -113,4 +113,22 @@ test('unreachable targets and failed host controls are inconclusive, never denia
     (value: Record<string, unknown>) => { results(value)['native.exports'] = ''; },
     (value: Record<string, unknown>) => { (value.report as { envAtStart: string[] }).envAtStart = [...SEC_W01_ENV, 'GITHUB_TOKEN']; },
   ]) assert.notEqual(evaluateSecW01(withReport(change)).length, 0, change.toString().slice(0, 90));
+});
+
+test('M2 and agentReady need committed proof that the isolated agent runtime ran a task on Windows x64', () => {
+  const runtimeRecord = (overrides: Record<string, unknown> = {}) => ({ 'win32-x64': { integration: { passed: true, secW01: 'PASS', agentRuntime: 'PASS',
+    source: 'b'.repeat(40), ...overrides } } });
+  const ready = () => ({ ...qualified(), agentRuntime: { ...(stage().agentRuntime as object), 'win32-x64': 'PASS' },
+    milestones: { ...(qualified().milestones as object), M2: 'implemented' }, agentReady: true });
+  assert.deepEqual(agentRuntimeEvidenceViolations(runtimeRecord()['win32-x64']), []);
+  assert.deepEqual(validateAgentStage(ready(), evidence(), runtimeRecord()), []);
+  // Without the record, with a failed or blocked run, or without provenance, nothing can be claimed.
+  for (const runtime of [{}, runtimeRecord({ agentRuntime: 'FAILED' }), runtimeRecord({ agentRuntime: 'BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST' }),
+    runtimeRecord({ secW01: 'FAILED' }), runtimeRecord({ passed: false }), runtimeRecord({ source: 'local' })]) {
+    assert.notEqual(validateAgentStage(ready(), evidence(), runtime).length, 0, JSON.stringify(runtime).slice(0, 100));
+  }
+  // M2 cannot be implemented, nor agentReady set, while the runtime claim is NOT_RUN; Windows proof never covers Linux.
+  assert.notEqual(validateAgentStage({ ...ready(), agentRuntime: stage().agentRuntime }, evidence(), runtimeRecord()).length, 0);
+  assert.notEqual(validateAgentStage({ ...ready(), agentRuntime: { ...(ready().agentRuntime as object), 'linux-x64': 'PASS' } }, evidence(), runtimeRecord()).length, 0);
+  assert.notEqual(validateAgentStage({ ...stage(), agentRuntime: { 'win32-x64': 'NOT_RUN' } }, committed()).length, 0, 'the matrix covers every platform');
 });
