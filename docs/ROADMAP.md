@@ -45,7 +45,7 @@
 | 里程碑 | 交付 | 退出证据 | 依赖 |
 |---|---|---|---|
 | **M1 SEC-W01（Windows）** | 在 P1.4 受限 fixture 上补齐生产 Worker 攻击面测试：用户文件与凭据不可读、全网络与回环被拒、无危险句柄继承、启动竞态、原生边界只暴露通道。全部在一次性 CI runner 上运行 | runner 证据全部 PASS 后，Windows 才能 `workerIsolation=verified`；有任何 UNKNOWN 都不放行 | P1.4 |
-| **M2 只读 Agent（P3a Read Gate + P4 最小闭环）**（进行中：凭据、模型网关与模型设置已在第一切片实现；Read Adapter 与 SEC-08 测试已在第三切片实现；流式模型回合、Express 会话与 list_directory 已在第四切片实现，见 `EXECUTION.md` 末节；Agent Loop 与生产 Worker 未开始） | Read Adapter 短命子进程（AppContainer，仅授权项目目录可读）+ SEC-08；Express Model Gateway + CredentialService/safeStorage + Claude 适配器；Worker Agent Loop 只能调用 `read_file` | SEC-08、SEC-20 真实测试；用模拟模型服务端做端到端 CI；第一次真正可用：能读代码并回答问题的 Agent | M1 |
+| **M2 只读 Agent（P3a Read Gate + P4 最小闭环）**（进行中：凭据、模型网关与模型设置已在第一切片实现；Read Adapter 与 SEC-08 测试已在第三切片实现；流式模型回合、Express 会话与 list_directory 已在第四切片实现；Agent Loop、任务执行器与会话持久化已在第五切片实现，见 `EXECUTION.md` 末节；生产 Worker 运行时与实时界面未开始） | Read Adapter 短命子进程（AppContainer，仅授权项目目录可读）+ SEC-08；Express Model Gateway + CredentialService/safeStorage + Claude 适配器；Worker Agent Loop 只能调用 `read_file` | SEC-08、SEC-20 真实测试；用模拟模型服务端做端到端 CI；第一次真正可用：能读代码并回答问题的 Agent | M1 |
 | **M3 写入与 Shell（P3a 沙箱 + P3b）** | `write_file`/`bash` 的 AppContainer + Job 沙箱、审批流程、Shell 规范化、工具流背压与停止 | SEC-05～08/12/16/19/21/23 | M2 |
 | **M4 产品化** | 审批/停止/恢复 UI 打磨，MCP（P5），签名与升级（P7） | 见 §13 | M3 |
 

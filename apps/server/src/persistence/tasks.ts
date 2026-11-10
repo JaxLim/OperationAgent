@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
-import { TERMINAL_TASK_STATES, TaskEventSchema, TaskSnapshotSchema, TaskStateSchema, ToolOutputSummarySchema,
-  checkTaskTransition } from '@operation-agent/contracts';
-import type { SideEffectStatus, TaskEvent, TaskSnapshot, TaskState, ToolOutputSummary, TransitionContext } from '@operation-agent/contracts';
+import { AGENT_EVENT_TYPES, TASK_MESSAGE_LIMITS, TERMINAL_TASK_STATES, TaskEventSchema, TaskMessageSchema, TaskSnapshotSchema, TaskStateSchema,
+  ToolOutputSummarySchema, checkTaskTransition } from '@operation-agent/contracts';
+import type { AgentEventType, SideEffectStatus, TaskEvent, TaskMessage, TaskSnapshot, TaskState, ToolOutputSummary,
+  TransitionContext } from '@operation-agent/contracts';
 
 // ARCHITECTURE §7.3: every state change and its event commit in one transaction, the per-task seq is gap-free,
 // and a request id is applied once. Callers broadcast only what these methods return, i.e. after commit.
@@ -21,7 +22,15 @@ export interface TaskLog {
   transitionTask(taskId: string, to: TaskState, input: TransitionInput): TaskCommit;
   /** Persists the redacted summary only (deltas are never stored). Throws NOT_FOUND or TASK_TERMINAL. */
   recordToolSummary(summary: ToolOutputSummary, requestId: string): TaskCommit;
+  /** Appends a metadata-only agent event to an unfinished task without changing its state. Throws NOT_FOUND or TASK_TERMINAL. */
+  appendAgentEvent(taskId: string, type: AgentEventType, payload: unknown): TaskCommit;
+  /** Stores prompt or answer text (bounded) for an unfinished task. Throws NOT_FOUND, TASK_TERMINAL or VALIDATION_ERROR. */
+  addTaskMessage(taskId: string, role: TaskMessage['role'], turn: number, text: string): TaskMessage;
+  /** Oldest first; rows that no longer validate are skipped. Throws NOT_FOUND for an unknown task. */
+  listTaskMessages(taskId: string): TaskMessage[];
   getTask(taskId: string): TaskSnapshot | null;
+  /** The task a create request already made (its task_created event carries the request id), or null. */
+  taskForRequest(requestId: string): TaskSnapshot | null;
   /** Most recently created first. */
   listTasks(limit: number): TaskSnapshot[];
   /** Events after the cursor in seq order, at most one page. Throws NOT_FOUND for an unknown task. */
@@ -117,7 +126,37 @@ export function createTaskLog(db: Database.Database): TaskLog {
         return append(current, { type: 'tool_output_summary', payload: summary }, requestId, current.state);
       }).immediate();
     },
+    appendAgentEvent(taskId, type, payload) {
+      if (!(AGENT_EVENT_TYPES as readonly string[]).includes(type)) throw new Error('VALIDATION_ERROR');
+      return db.transaction(() => {
+        const current = existing(taskId);
+        if (TERMINAL_TASK_STATES.includes(current.state)) throw new Error('TASK_TERMINAL');
+        return append(current, { type, payload } as Pick<TaskEvent, 'type' | 'payload'>, null, current.state);
+      }).immediate();
+    },
+    addTaskMessage(taskId, role, turn, text) {
+      const message = TaskMessageSchema.parse({ id: randomUUID(), taskId, role, turn, text, createdAt: new Date().toISOString() });
+      return db.transaction(() => {
+        const current = existing(taskId);
+        if (TERMINAL_TASK_STATES.includes(current.state)) throw new Error('TASK_TERMINAL');
+        const stored = (db.prepare('SELECT count(*) AS total FROM task_messages WHERE task_id = ?').get(taskId) as { total: number }).total;
+        if (stored >= TASK_MESSAGE_LIMITS.maxMessages) throw new Error('LIMIT_EXCEEDED');
+        db.prepare('INSERT INTO task_messages(id, task_id, role, turn, text, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(message.id, message.taskId, message.role, message.turn, message.text, message.createdAt);
+        return message;
+      }).immediate();
+    },
+    listTaskMessages(taskId) {
+      existing(taskId);
+      return db.prepare<[string, number], TaskMessage>(`SELECT id, task_id AS taskId, role, turn, text, created_at AS createdAt FROM task_messages
+        WHERE task_id = ? ORDER BY created_at, rowid LIMIT ?`).all(taskId, TASK_MESSAGE_LIMITS.maxMessages)
+        .flatMap(row => { const parsed = TaskMessageSchema.safeParse(row); return parsed.success ? [parsed.data] : []; });
+    },
     getTask: task,
+    taskForRequest(requestId) {
+      const row = db.prepare<[string], { taskId: string }>(`SELECT task_id AS taskId FROM task_events WHERE request_id = ? AND type = 'task_created'`).get(requestId);
+      return row ? task(row.taskId) : null;
+    },
     listTasks(limit) {
       if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('VALIDATION_ERROR');
       return selectRecent.all(limit).map(row => TaskSnapshotSchema.parse(row));

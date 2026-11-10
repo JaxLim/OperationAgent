@@ -13,7 +13,7 @@ export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 // handshake-only codes stay unchanged. `details` is omitted until a producer needs a whitelisted shape.
 export const DomainErrorCodeSchema = z.enum(['VALIDATION_ERROR', 'PERMISSION_DENIED', 'APPROVAL_REQUIRED',
   'WORKER_ISOLATION_UNAVAILABLE', 'SANDBOX_UNAVAILABLE', 'READ_ADAPTER_UNAVAILABLE', 'CAPABILITY_UNAVAILABLE',
-  'INVALID_TRANSITION', 'NOT_FOUND', 'SERVICE_UNAVAILABLE']);
+  'INVALID_TRANSITION', 'NOT_FOUND', 'SERVICE_UNAVAILABLE', 'MODEL_NOT_CONFIGURED', 'AGENT_BUSY']);
 export type DomainErrorCode = z.infer<typeof DomainErrorCodeSchema>;
 export const AppErrorSchema = z.strictObject({ code: DomainErrorCodeSchema, message: z.string().min(1).max(512),
   requestId: z.uuid(), retryable: z.boolean() });

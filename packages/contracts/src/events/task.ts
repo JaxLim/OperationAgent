@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { ToolOutputSummarySchema } from './tool-output.js';
+import { ClaudeModelSchema } from '../api/model.js';
+import { AGENT_RUN_LIMITS, ToolCallViewSchema, TurnStopReasonSchema, TurnUsageSchema } from '../agent/turn.js';
+import { ToolCallStatusSchema } from '../rpc/agent.js';
 
 // ARCHITECTURE §7.2/§7.3/§8.1. Express is the only writer: it checks a transition here, then commits the
 // state and its event in one transaction before anything is broadcast. Contracts hold no I/O.
@@ -56,7 +59,24 @@ export const TaskStateChangedEventSchema = z.strictObject({ ...eventBase, type: 
   .refine(event => TASK_TRANSITIONS[event.payload.from].includes(event.payload.to), 'INVALID_TRANSITION');
 export const TaskToolSummaryEventSchema = z.strictObject({ ...eventBase, type: z.literal('tool_output_summary'),
   payload: ToolOutputSummarySchema }).refine(event => event.payload.taskId === event.taskId, 'TASK_MISMATCH');
-export const TaskEventSchema = z.union([TaskCreatedEventSchema, TaskStateChangedEventSchema, TaskToolSummaryEventSchema]);
+// M2 agent events. Metadata only: prompt and answer text live in task_messages, file contents are never stored, and a
+// tool call records its target path and outcome, not its result.
+const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const TaskUserMessageEventSchema = z.strictObject({ ...eventBase, type: z.literal('user_message'),
+  payload: z.strictObject({ messageId: z.uuid(), chars: count }) });
+export const TaskAssistantTurnEventSchema = z.strictObject({ ...eventBase, type: z.literal('assistant_turn'),
+  payload: z.strictObject({ turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns), model: ClaudeModelSchema,
+    messageId: z.uuid().nullable(), stopReason: TurnStopReasonSchema, toolCalls: count, fallback: z.boolean(), usage: TurnUsageSchema }) });
+export const TaskToolCallEventSchema = z.strictObject({ ...eventBase, type: z.literal('tool_call'),
+  payload: z.strictObject({ turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns), callId: ToolCallViewSchema.shape.id,
+    tool: z.string().min(1).max(128), target: z.string().max(512), status: ToolCallStatusSchema,
+    code: z.string().min(1).max(64).regex(/^[A-Z_]+$/).nullable(),
+    /** Bytes returned (read_file) or entries listed (list_directory). */
+    size: count.nullable() }) });
+export const TaskEventSchema = z.union([TaskCreatedEventSchema, TaskStateChangedEventSchema, TaskToolSummaryEventSchema,
+  TaskUserMessageEventSchema, TaskAssistantTurnEventSchema, TaskToolCallEventSchema]);
+export const AGENT_EVENT_TYPES = Object.freeze(['user_message', 'assistant_turn', 'tool_call'] as const);
+export type AgentEventType = typeof AGENT_EVENT_TYPES[number];
 export type TaskEvent = z.infer<typeof TaskEventSchema>;
 
 export type EventSequenceError = 'TASK_MISMATCH' | 'SEQUENCE_GAP' | 'DUPLICATE_EVENT' | 'CREATED_NOT_FIRST' | 'STATE_DISCONTINUITY';

@@ -576,3 +576,25 @@ PR #13 评审修正（同日）：
 - Codex P1：多层 `list_directory` 中，目录在读取后的身份检查之后若被替换为 junction，后续子项查找会经替换后的路径进行，深层可能列出敏感或工作区外目录的名称和大小；最终核验只覆盖所请求路径。属实。
 - 修正：Windows 上只要某目录内部有任一打开的句柄，该目录及其所有祖先都无法重命名（实测 EPERM）。现在每个目录先“钉住”：打开其中一个非链接条目并核对句柄身份与路径一致；再核验从根到该目录的整条链；然后才执行真正返回结果的 `readdir`；接受结果前再次核验钉子和整条链。钉住之前被替换会被强身份检查发现，钉住之后无法替换。无法钉住的非空目录（只含链接或被锁定的条目）不会被读取，作为 `unlisted` 返回。排他锁方案（`UV_FS_O_EXLOCK`）会阻断自己的 `readdir`，且在 IDE 文件监视器持有句柄时必然失败，故未采用。
 - 新增测试：只含 junction 的目录报告为 unlisted；子目录与指向外部（文件名带 canary）的 junction 反复替换时并发深度 3 列表，本次 2,884 次替换、120 次列表，无任何外部名称泄露，23 次检测为 `CHANGED_DURING_READ`。`check:engineering` 九项退出 0，**139/139**。
+
+## M2 第五切片：Agent Loop、任务执行器与会话持久化（2026-11-09）
+
+授权：同上。本切片完成 Agent Loop 的全部逻辑与 Express 端任务执行器，并在同一进程内用真实 Worker 运行时、真实 RPC 会话、真实 Read Adapter 子进程和 SDK 网关端到端验证。**生产 Worker 的启动（AppContainer 运行时打包与生产 launcher）和实时界面属于下一切片**，本切片不新增 HTTP/IPC 入口，生产环境中启动任务仍返回 `WORKER_ISOLATION_UNAVAILABLE`，`agentReady` 仍为 false。
+
+- **RPC（能力协商，协议版本不变）**：新增 `agent.run`、`agent.cancel`（Express → Worker）与 `model.turn`、`tool.call`、`agent.finish`（Worker → Express），每个方法由角色固定方向。只有握手协商了 `agent` 能力的会话才开放这些方法，两个方向都检查；P1 fixture 只提供 `health`/`shutdown`，Express 若请求更多，fixture 拒绝握手（`RPC_CAPABILITY_REJECTED`），Worker 也不能增减 Express 请求的能力集。各方法有独立截止时间（模型回合 11 分钟，工具 90 秒，其余仍为 5 秒）。保持 `PROTOCOL_VERSION` 1.0.0：两端由同一份 contracts 构建，P1 冻结断言不变。工具输入单项 ≤16 KiB、回合视图 ≤192 KiB，保证一帧（256 KiB）可容纳。
+- **Worker Agent Loop**（`apps/agent-worker/src/agent.ts`、`runtime.ts`）：无文件/网络/加密能力，ID 生成器由受信 bootstrap 注入。每轮向 Express 请求模型回合；`tool_use` 时只调用任务允许的工具（每批 4 个并行）；`end_turn`/`stop_sequence` 完成，`refusal`、`context_exhausted`、模型失败、超出 40 轮均以失败结束；`max_tokens` 无工具调用时作为可能不完整的答案完成，有截断工具调用时不执行、进入下一轮；`pause_turn` 继续。同一时间只运行一个任务，可取消。
+- **Express Task Runner**（`apps/server/src/agent/runner.ts`）：任务状态机 CREATED → QUEUED → RUNNING → COMPLETED/FAILED/STOPPING → STOPPED/INTERRUPTED。每轮只解密一次密钥并只交给网关；工具调用只按 Express 自己记录的模型调用执行（Worker 不能伪造 id、轮次、任务或输入），审计关联 ID 由 Express 生成；工具结果以明确的说明返回模型（拒绝原因、截断说明、未执行原因）。用户停止：STOPPING → 中止模型流 → 取消循环 → 在宽限期内确认后 STOPPED（`cleanupConfirmed`），未确认则 INTERRUPTED，绝不虚报已停止。Worker 丢失时其任务转为 INTERRUPTED，不重连（SEC-17）。只读任务的副作用状态记为 `VERIFIED`（未修改任何文件）。前置条件均为明确的领域错误：`MODEL_NOT_CONFIGURED`、`AGENT_BUSY`、`WORKER_ISOLATION_UNAVAILABLE`、`NOT_FOUND`、`VALIDATION_ERROR`。
+- **持久化（迁移 009，数据库版本 8 → 9）**：任务事件新增三种只含元数据的类型 `user_message`、`assistant_turn`（轮次、模型、停止原因、用量、是否回退）、`tool_call`（工具、目标路径、结果、错误码、大小）；`task_events` 按同样方式重建以扩展 CHECK，行与只追加/无间隙触发器原样保留。提问与回答文本存入新的只追加表 `task_messages`（每条 ≤512 KiB，每任务 ≤82 条），与事件日志分离；**工具结果（文件内容）在任何地方都不落盘**。
+- **实时增量**（`agent/live.ts`）：每任务按字节有界（1 MiB）的瞬时缓冲，游标读取，溢出时明确返回 `gap`，任务结束后保留 2 分钟释放；不落盘。HTTP 路由与界面接入在下一切片。
+- 界面：任务时间线能显示新的三种事件（英文/中文/日文）。
+
+本地验证（Windows x64）：
+- `pnpm check:engineering` 九项全部退出 0，单元测试 **147/147**。新增 `tests/m2/agent-loop.test.ts`（5 项，同一进程内的真实 Worker 运行时 ↔ 真实 Express 会话，经内存双工通道传输 OWIP 帧）：完整只读任务（列目录、读文件、敏感文件被拒、任务未授予的工具不执行、Express 构建全部工具结果并按序配对、事件与消息落盘、数据库中没有文件内容和密钥）；Worker 伪造的任务/轮次/工具调用全部被拒或跳过；停止中止流式回合并确认为 STOPPED；Worker 丢失后任务 INTERRUPTED 且不再接受新任务；未提供 `agent` 能力的运行时握手失败。`tests/m2/agent-store.test.ts`（3 项）：迁移 009 的元数据事件、重建后的触发器、消息只追加与上限、实时增量的游标/缺口/保留。
+- 未验证：生产 AppContainer 中运行 Agent 运行时（下一切片，CI 一次性 runner）；安装包烟测（期望迁移 1–9）；真实 api.anthropic.com。
+
+PR #14 评审修正（2026-11-10）：
+- Codex P1：被攻陷的 Worker 可以不等第一个回复就连续发送第 1、2 轮 `model.turn`，两轮并发作用于同一会话，停止只能中止后一轮。修正：模型回合严格串行，有回合或工具调用在进行时拒绝新回合；同一工具调用不能并发执行两次；中止控制器归属其回合直到结束。
+- Codex P2：合法的长路径会使工具摘要超过回复契约的 256 字符，导致会话关闭、任务中断。修正：所有摘要限长（保留文件名一端），回复前再统一截断。
+- Codex P2：使用同一请求 ID 重试启动时，若任务仍在运行会先返回 `AGENT_BUSY`。修正：先按请求 ID 返回已创建的任务（项目不符则拒绝），再检查是否忙碌。
+- Codex P2：Agent 会话握手后未启动心跳；继承通道读取有 30 秒截止时间，长回合或空闲时会断开。修正：握手后即启动心跳。
+- 新增测试：回合进行中拒绝新回合与工具调用且无第二次模型请求；忙碌时同 ID 重试返回原任务、换项目被拒；空闲会话持续心跳；长路径摘要不超过 256 字符且保留文件名。`check:engineering` 九项退出 0，**148/148**。

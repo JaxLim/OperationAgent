@@ -49,7 +49,7 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 | P1 | 桌面应用、控制面、持久化、Worker 启动器、安装包与安装后烟测 | 已完成（Windows x64，见 [退出报告](docs/P1-EXIT-REPORT.md)） |
 | P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体验收所需的 CI 证据还没产出 |
 | M1 | SEC-W01：Windows 生产 Worker 隔离门禁 | 已完成（Windows x64 通过） |
-| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关、多供应商设置、Agent 与 MCP 配置、界面多语言已合并；Read Adapter、SEC-08 测试、流式模型回合与 list_directory 已实现（Windows x64）；Agent Loop 尚未开始 |
+| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关、多供应商设置、Agent 与 MCP 配置、界面多语言已合并；Read Adapter、SEC-08 测试、流式模型回合、list_directory、Agent Loop 与任务执行器已实现（Windows x64）；生产 Worker 运行时与实时界面尚未接入 |
 | M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
 | M4 | 产品化：MCP、签名与升级 | 未开始 |
 
@@ -69,7 +69,7 @@ flowchart LR
 
 - **桌面端**：Electron 45、React 19、TypeScript 5.9、Vite。Renderer 只管界面，碰不到 Node、文件系统和密钥；Preload 只暴露一组固定的白名单接口。
 - **控制面**：Express 5，跑在独立的官方 Node.js 24 进程里（不用 Electron 自带的 Node），也是唯一能读写数据库的进程。主进程先通过继承的通道确认服务身份，再经 HMAC 认证的回环 HTTP 转发 API 请求。
-- **持久化**：better-sqlite3（SQLite 3.53），8 个版本化 SQL 迁移；任务状态和事件在同一事务中提交。
+- **持久化**：better-sqlite3（SQLite 3.53），9 个版本化 SQL 迁移；任务状态和事件在同一事务中提交。
 - **契约**：`packages/contracts` 用 zod 定义 API、IPC、事件和错误码，单元测试确保未知字段和非法的状态迁移都会被拒绝。
 - **Worker 隔离（Windows）**：控制面内的原生 WorkerLauncher 以 AppContainer + Job Object 启动 Worker，通过单条受保护的继承管道通信（OWIP/1 分帧 + JSON-RPC 2.0）。
 - **凭据**：API Key 的加解密都经过主进程的 `safeStorage` 加密桥，只有控制面在请求 Anthropic 时才会用到，Worker 和界面都拿不到明文。

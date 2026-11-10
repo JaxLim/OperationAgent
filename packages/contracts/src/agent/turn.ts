@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ClaudeModelSchema } from '../api/model.js';
+import { utf8ByteLength } from '../events/tool-output.js';
 
 // M2 agent turns (ARCHITECTURE §6.1/§6.2). Express holds the authoritative conversation: the provider's content blocks
 // verbatim (thinking signatures, fallback markers) and every tool result it produced. The Worker drives the loop but
@@ -19,6 +20,8 @@ export const AGENT_RUN_LIMITS = Object.freeze({
   /** Assistant text a Worker sees per turn; the full text stays in Express. */
   maxViewTextChars: 16_000,
   maxToolInputBytes: 16_384,
+  /** Serialized view ceiling, well inside one 256 KiB OWIP frame with its RPC envelope. */
+  maxViewBytes: 196_608,
   /** Rough local bound on the conversation Express keeps in memory for one task. */
   maxConversationBytes: 16 * 1024 * 1024,
 });
@@ -45,7 +48,7 @@ export type TurnUsage = z.infer<typeof TurnUsageSchema>;
 export const ToolCallViewSchema = z.strictObject({
   id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
   name: z.string().min(1).max(128),
-  input: z.record(z.string(), z.unknown()),
+  input: z.record(z.string(), z.unknown()).refine(value => utf8ByteLength(JSON.stringify(value)) <= AGENT_RUN_LIMITS.maxToolInputBytes, 'TOOL_INPUT_TOO_LARGE'),
 });
 export type ToolCallView = z.infer<typeof ToolCallViewSchema>;
 
@@ -60,7 +63,7 @@ export const TurnViewSchema = z.strictObject({
   usage: TurnUsageSchema,
   /** True when a server-side fallback model finished this turn after the requested model declined. */
   fallback: z.boolean(),
-});
+}).refine(view => utf8ByteLength(JSON.stringify(view)) <= AGENT_RUN_LIMITS.maxViewBytes, 'VIEW_TOO_LARGE');
 export type TurnView = z.infer<typeof TurnViewSchema>;
 
 export const TurnOutcomeSchema = z.discriminatedUnion('status', [

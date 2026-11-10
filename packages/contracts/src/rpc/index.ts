@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { PROTOCOL_VERSION } from '../version/index.js';
 import { RpcErrorSchema } from '../errors/index.js';
+import { AGENT_RESULTS, AgentCancelParamsSchema, AgentFinishParamsSchema, AgentRunParamsSchema, ModelTurnParamsSchema,
+  ToolCallParamsSchema } from './agent.js';
+export * from './agent.js';
 
 export const RunIdSchema = z.uuid();
 export const WorkerIdentitySchema = z.strictObject({ expressRunId: RunIdSchema, workerRunId: RunIdSchema });
@@ -13,8 +16,12 @@ const envelope = {
 };
 const correlated = (value: { id: string; requestId: string }): boolean => value.id === value.requestId;
 export const HealthSchema = z.strictObject({ controlPlaneReady: z.literal(false), agentReady: z.literal(false) });
+// The P1 fixture offers health and shutdown only; an agent runtime additionally offers `agent` (see rpc/agent.ts).
+export const RpcCapabilitiesSchema = z.union([z.tuple([z.literal('health'), z.literal('shutdown')]),
+  z.tuple([z.literal('health'), z.literal('shutdown'), z.literal('agent')])]);
+export type RpcCapabilities = z.infer<typeof RpcCapabilitiesSchema>;
 const hello = z.strictObject({ minimumProtocolVersion: z.literal(PROTOCOL_VERSION),
-  capabilities: z.tuple([z.literal('health'), z.literal('shutdown')]), challenge: z.string().regex(/^[a-f0-9]{64}$/) });
+  capabilities: RpcCapabilitiesSchema, challenge: z.string().regex(/^[a-f0-9]{64}$/) });
 export const FixtureFaultSchema = z.enum(['exit', 'hang', 'invalid-frame', 'foreign-identity', 'duplicate-response']);
 export type FixtureFault = z.infer<typeof FixtureFaultSchema>;
 // The trusted bootstrap reads this first frame from the inherited channel; never from argv or env.
@@ -26,12 +33,19 @@ export const RpcRequestSchema = z.discriminatedUnion('method', [
   z.strictObject({ ...envelope, role: z.literal('express'), method: z.literal('shutdown'), params: z.strictObject({ reason: z.literal('normal') }) }),
   // P1 fixture only: controlled fault injection. Release builds stage no fixture that answers it.
   z.strictObject({ ...envelope, role: z.literal('express'), method: z.literal('fixture.fault'), params: z.strictObject({ mode: FixtureFaultSchema }) }),
+  // Agent methods: valid only on a session that negotiated the `agent` capability (enforced by the session).
+  z.strictObject({ ...envelope, role: z.literal('express'), method: z.literal('agent.run'), params: AgentRunParamsSchema }),
+  z.strictObject({ ...envelope, role: z.literal('express'), method: z.literal('agent.cancel'), params: AgentCancelParamsSchema }),
+  z.strictObject({ ...envelope, role: z.literal('worker'), method: z.literal('model.turn'), params: ModelTurnParamsSchema }),
+  z.strictObject({ ...envelope, role: z.literal('worker'), method: z.literal('tool.call'), params: ToolCallParamsSchema }),
+  z.strictObject({ ...envelope, role: z.literal('worker'), method: z.literal('agent.finish'), params: AgentFinishParamsSchema }),
 ]).refine(correlated, 'CORRELATION_MISMATCH');
 const result = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('hello'), ...hello.shape, ...HealthSchema.shape }),
   z.strictObject({ kind: z.literal('health'), ...HealthSchema.shape }),
   z.strictObject({ kind: z.literal('shutdown'), stopped: z.literal(true) }),
   z.strictObject({ kind: z.literal('fixture.fault'), accepted: z.literal(true) }),
+  ...AGENT_RESULTS,
 ]);
 export const RpcResponseSchema = z.union([
   z.strictObject({ ...envelope, role: PeerRoleSchema, result }),

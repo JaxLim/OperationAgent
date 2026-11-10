@@ -49,7 +49,7 @@ Anything not implemented is labelled as unavailable in the interface; the app ne
 | P1 | Desktop app, control plane, persistence, worker launcher, installer and installed-app smoke test | Done (Windows x64, see the [exit report](docs/P1-EXIT-REPORT.md)) |
 | P2.0–P2.3 | Task contracts and state machine, task event store, snapshots and cursor catch-up, workbench task views | Implemented; the CI evidence for the overall P2 exit is not produced yet |
 | M1 | SEC-W01: the Windows production worker-isolation gate | Done (passes on Windows x64) |
-| M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop | In progress: credentials, model gateway, multi-provider settings, agent and MCP configuration, and interface languages are merged; Read Adapter, SEC-08 tests, streaming model turns and list_directory implemented (Windows x64); agent loop not started |
+| M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop | In progress: credentials, model gateway, multi-provider settings, agent and MCP configuration, and interface languages are merged; Read Adapter, SEC-08 tests, streaming model turns, list_directory, the agent loop and the task runner implemented (Windows x64); the production worker runtime and live task view are not wired in yet |
 | M3 | File writes and shell: sandbox, approvals, command normalization, stop semantics | Not started |
 | M4 | Productization: MCP, signing and updates | Not started |
 
@@ -69,7 +69,7 @@ flowchart LR
 
 - **Desktop**: Electron 45, React 19, TypeScript 5.9, Vite. The renderer only draws the interface and has no access to Node, the file system or keys; the preload exposes a fixed allow-list of calls.
 - **Control plane**: Express 5 in a separate official Node.js 24 process (not Electron's bundled Node), the only reader and writer of the database. The main process establishes the service identity over an inherited channel, then forwards API calls over HMAC-authenticated loopback HTTP.
-- **Persistence**: better-sqlite3 (SQLite 3.53) with 8 versioned SQL migrations; task state and events are committed in the same transaction.
+- **Persistence**: better-sqlite3 (SQLite 3.53) with 9 versioned SQL migrations; task state and events are committed in the same transaction.
 - **Contracts**: `packages/contracts` defines the API, IPC, events and error codes with zod; unit tests cover rejection of unknown fields and illegal state transitions.
 - **Worker isolation (Windows)**: a native WorkerLauncher inside the control plane starts the worker in an AppContainer with a Job Object and talks to it over a single protected, inherited pipe (OWIP/1 framing + JSON-RPC 2.0).
 - **Credentials**: the API key is encrypted and decrypted through the main process's `safeStorage` crypto bridge and used only by the control plane when calling Anthropic; neither the worker nor the interface ever sees it in plain text.

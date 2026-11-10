@@ -120,14 +120,21 @@ export function failureOf(error: unknown, signal: AbortSignal | undefined): { co
 
 function viewOf(turn: number, model: ClaudeModel, message: BetaMessage, replay: readonly BetaContentBlock[]): TurnView {
   const text = replay.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('');
-  const toolCalls = replay.flatMap(block => (block.type === 'tool_use' ? [{ id: block.id, name: block.name,
-    input: block.input && typeof block.input === 'object' && !Array.isArray(block.input) ? block.input as Record<string, unknown> : {} }] : []));
+  // An oversized or non-object input is shown as {}; Express executes from its own record and its Zod check refuses it.
+  const inputOf = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) &&
+    Buffer.byteLength(JSON.stringify(value)) <= AGENT_RUN_LIMITS.maxToolInputBytes ? value as Record<string, unknown> : {};
+  const toolCalls = replay.flatMap(block => (block.type === 'tool_use' ? [{ id: block.id, name: block.name.slice(0, 128) || 'tool',
+    input: inputOf(block.input) }] : []));
   const usage = message.usage;
+  // The view must fit one OWIP frame: tool calls are capped first, then the text is shortened if still needed.
+  let limit: number = AGENT_RUN_LIMITS.maxViewTextChars;
+  const calls = toolCalls.slice(0, AGENT_RUN_LIMITS.maxToolCallsPerTurn);
+  while (limit > 0 && Buffer.byteLength(JSON.stringify(calls)) + Buffer.byteLength(text.slice(0, limit)) * 2 > AGENT_RUN_LIMITS.maxViewBytes - 4_096) limit = Math.floor(limit / 2);
   return TurnViewSchema.parse({
     turn, model, stopReason: stopReasonOf(message.stop_reason),
-    text: text.slice(0, AGENT_RUN_LIMITS.maxViewTextChars), textTruncated: text.length > AGENT_RUN_LIMITS.maxViewTextChars,
+    text: text.slice(0, limit), textTruncated: text.length > limit,
     // Beyond the per-turn cap the extra calls are not shown; Express answers them with an error result.
-    toolCalls: toolCalls.slice(0, AGENT_RUN_LIMITS.maxToolCallsPerTurn),
+    toolCalls: calls,
     usage: { inputTokens: usage.input_tokens ?? 0, outputTokens: usage.output_tokens ?? 0,
       cacheReadTokens: usage.cache_read_input_tokens ?? 0, cacheWriteTokens: usage.cache_creation_input_tokens ?? 0 },
     fallback: message.content.some(block => block.type === 'fallback'),

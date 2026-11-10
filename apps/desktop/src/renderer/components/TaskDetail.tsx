@@ -2,7 +2,7 @@ import type { TaskEvent, TaskSnapshot } from '@operation-agent/contracts';
 import { useLocale, useT } from '../locale';
 import { actions, useStore } from '../state';
 import { TASK_STATE, bytes, dateTime, relativeTime, shortId, stateLabel } from './format';
-import { IconAlert, IconChevronRight, IconClock, IconLock, IconRetry, IconTerminal } from './Icons';
+import { IconAlert, IconChat, IconChevronRight, IconClock, IconEye, IconListTree, IconLock, IconRetry, IconSparkle, IconTerminal } from './Icons';
 
 // Read-only view of one task's committed log. State comes from Express; this view never infers success.
 
@@ -28,6 +28,38 @@ function EventEntry({ event }: { event: TaskEvent }) {
           <div className="notice-text">{stateLabel(from, t)} → {stateLabel(to, t)}</div>
           {(reason || sideEffects) && <div className="notice-detail">{reason}{reason && sideEffects ? ' · ' : ''}
             {sideEffects && <span className="mono">{t('task.sideEffects', { value: sideEffects })}</span>}</div>}
+        </div>
+        {at}
+      </div>
+    );
+  }
+  if (event.type === 'user_message') {
+    return <div className="notice tone-notice-neutral timeline-entry"><IconChat size={13} /><div><div className="notice-text">{t('task.prompt')}</div>
+      <div className="notice-detail">{t('task.promptChars', { count: event.payload.chars })}</div></div>{at}</div>;
+  }
+  if (event.type === 'assistant_turn') {
+    const { turn, stopReason, toolCalls, usage, fallback } = event.payload;
+    return (
+      <div className={`notice timeline-entry ${stopReason === 'refusal' || stopReason === 'context_exhausted' ? 'tone-notice-warn' : 'tone-notice-neutral'}`}>
+        <IconSparkle size={13} />
+        <div>
+          <div className="notice-text">{t('task.turn', { turn, reason: t(`task.stop.${stopReason}` as 'task.stop.end_turn') })}</div>
+          <div className="notice-detail mono">{t('task.turnUsage', { input: usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
+            output: usage.outputTokens, calls: toolCalls })}{fallback ? ` · ${t('task.fallback')}` : ''}</div>
+        </div>
+        {at}
+      </div>
+    );
+  }
+  if (event.type === 'tool_call') {
+    const { tool, target, status, code } = event.payload;
+    const tone = status === 'ok' ? 'tone-ok' : status === 'skipped' ? 'tone-muted' : status === 'refused' ? 'tone-warn' : 'tone-danger';
+    return (
+      <div className="notice tone-notice-neutral timeline-entry">
+        {tool === 'list_directory' ? <IconListTree size={13} /> : <IconEye size={13} />}
+        <div>
+          <div className="notice-text"><span className="mono">{tool}</span> <span className="mono">{target || '—'}</span></div>
+          <div className="notice-detail"><span className={`badge ${tone}`}>{t(`task.tool.${status}` as 'task.tool.ok')}</span>{code ? <span className="mono"> {code}</span> : null}</div>
         </div>
         {at}
       </div>

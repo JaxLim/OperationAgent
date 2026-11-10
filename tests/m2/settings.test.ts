@@ -70,7 +70,7 @@ test('provider and agent contracts: fixed slots, inert ids, bounded definitions,
 });
 
 test('linked-provider and search keys are stored per slot as ciphertext only; the Anthropic slot is untouched', () => withStore(async (store, directory) => {
-  assert.equal(store.databaseVersion, 8);
+  assert.equal(store.databaseVersion, 9);
   const openai = createCredentialService(store.credentialStore('openai'), fakeBridge());
   const tavily = createCredentialService(store.credentialStore('tavily'), fakeBridge());
   const saved = await openai.set(KEY);
