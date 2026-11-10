@@ -6,7 +6,7 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 
 目标是让 Agent 在你的项目里读代码、改文件、跑命令，但始终把它当作不可信的程序：Agent 跑在由操作系统隔离的 Worker 进程里，每次调用工具都要经过控制面的校验、授权和审计；哪道安全门禁没过，对应的能力就一直关着（fail closed），绝不会退而求其次、在没有隔离的情况下运行。
 
-项目分阶段推进，每个阶段都留有可以复查的验收证据。**目前处于 M2 阶段：桌面应用、控制面、持久化和模型设置已经能用，但 Agent 还不能执行任务。**
+项目分阶段推进，每个阶段都留有可以复查的验收证据。**M2 阶段已完成：在 Windows x64 上，安装版应用可以运行只读 Agent，它会浏览你的项目、读取文件并回答关于项目的问题；目前还不能改文件或运行命令。**
 
 ![工作台](docs/screenshots/workbench-zh.png)
 
@@ -17,18 +17,19 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 - 可安装的 Windows 桌面应用（按用户安装，不需要管理员权限；暂未做代码签名）。
 - 控制面：一个独立的 Express 服务进程，由 Electron 主进程负责监管，有心跳检测，崩溃后会在限定次数内自动重启。
 - 持久化：SQLite + 版本化迁移，设置、项目和运行记录重启后都还在。
-- 项目管理：添加、切换、移除项目文件夹（只记路径，不读取文件内容）。
-- 任务基础设施：任务状态机、只追加的任务事件存储、快照与游标分页接口，以及工作台里的任务列表和事件时间线。因为执行功能还没开放，现在提交的请求都会被控制面拒绝，不会真正创建任务。
+- 项目管理：添加、切换、移除项目文件夹（只记路径）。
+- 只读 Agent（仅 Windows x64 安装版）：针对某个项目提问，Agent 会列目录、读取文本文件，流式给出回答并标出它看过的文件，运行中可以随时停止。Agent 循环跑在由 AppContainer 隔离的 Worker 里，没有文件、网络和凭据权限；会话与 API Key 由控制面持有，文件经短生命周期的只读辅助进程读取。密钥类文件（`.env`、各类 key、`.git` 内部文件）、链接以及项目之外的路径一律拒绝。
+- 任务基础设施：任务状态机、只追加的任务事件存储、快照与游标分页接口，以及工作台里的任务列表、对话和事件时间线。从源码运行的开发构建不会启动隔离 Worker，在那里提交的请求会被拒绝，不会创建任务。
 - 模型供应商设置：Anthropic、OpenAI、Google Gemini、OpenRouter 均可填写 API Key、加载模型列表并测试连接；网页搜索供应商（Exa、Tavily、Brave、Firecrawl）可以保存密钥。所有密钥都先由操作系统加密（Electron `safeStorage`）再保存，数据库里只有密文。
 - Agent 配置与 MCP 服务器定义：可以新建和编辑，但目前只保存配置，不会运行、启动或连接任何东西。
 - 界面支持简体中文、English 和日本語；主题可选跟随系统、浅色或深色，另有八套配色。
 - 诊断：查看控制面状态、做数据库自检、看运行历史，以及每项安全能力目前的状态。
-- Windows x64 上的生产 Worker 隔离门禁（SEC-W01）已经在一次性 CI runner 上实测通过。
+- Windows x64 上的生产 Worker 隔离门禁（SEC-W01）和隔离的 Agent 运行时都已在一次性 CI runner 上实测通过（证据见 `docs/evidence/`）。
 
 **还没实现的**
 
-- Agent 推理循环（Agent Loop）：提交任务会返回 `WORKER_ISOLATION_UNAVAILABLE`，不会执行任何操作。
-- Agent 调用读取工具：Read Adapter 与 SEC-08 Read Gate 测试已实现（仅 Windows x64，等待 CI 证据），但 Agent Loop 尚未接入，应用内还没有任何入口会读取项目文件。
+- 针对真实 Claude API 的运行记录：Agent 已在 CI runner 上对本机的模型服务替身端到端验证，但尚未对真实服务验证。第一次真实使用请视为未经测试。
+- 文件内搜索、按行范围读取、计划、后续追问和技能（已规划，见 [路线图](docs/ROADMAP.md)）。
 - 写文件与运行 Shell 的沙箱、审批流程、网页搜索工具、MCP Host。
 - 账号登录型供应商和自定义模型端点：方案见 [ADR-PROV-001](docs/adr/ADR-PROV-001.md)（提议中，未批准），在此之前界面中保持锁定。
 - macOS 和 Linux 的进程级验收与 SEC-W01（目前为 NOT_RUN）。
@@ -49,7 +50,7 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 | P1 | 桌面应用、控制面、持久化、Worker 启动器、安装包与安装后烟测 | 已完成（Windows x64，见 [退出报告](docs/P1-EXIT-REPORT.md)） |
 | P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体验收所需的 CI 证据还没产出 |
 | M1 | SEC-W01：Windows 生产 Worker 隔离门禁 | 已完成（Windows x64 通过） |
-| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关、多供应商设置、Agent 与 MCP 配置、界面多语言已合并；只读 Agent 的全部组件已实现（Windows x64 安装版）：Read Adapter 与 SEC-08、流式模型回合、list_directory、Agent Loop、任务执行器、隔离的生产 Worker 和对话界面；等待 CI 隔离运行证据后记录 agentReady |
+| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop、隔离 Worker、对话界面 | 已完成（Windows x64；runner 证据见 `docs/evidence/m2/win32-x64/`） |
 | M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
 | M4 | 产品化：MCP、签名与升级 | 未开始 |
 
@@ -154,4 +155,4 @@ node .tools/pnpm/bin/pnpm.cjs desktop
 - [docs/EXECUTION.md](docs/EXECUTION.md)：每次改动的执行和验证记录
 - [docs/P1-EXIT-REPORT.md](docs/P1-EXIT-REPORT.md)：P1 退出报告
 - [docs/adr/](docs/adr/)：架构决策与批准记录
-- 证据：`docs/evidence/`（P1、M1 的 runner 证据与 M2 截图）；阶段状态文件：`build/*-status.json`
+- 证据：`docs/evidence/`（P1、M1、M2 的 runner 证据与截图）；阶段状态文件：`build/*-status.json`

@@ -658,3 +658,14 @@ main CI 修正：安装后烟测的强制终止竞态（2026-11-10）
 - 根因（测试竞态，非产品缺陷）：`launch()` 只等待侧车进程出现、数据库文件存在和主窗口标题。再次启动时数据库文件早已存在，窗口也可能先于控制面就绪，因此 `launch()` 可能在侧车打开数据库并写入本次运行记录之前返回；此时强制终止整棵进程树，就没有可对账的运行记录。PR #15 让 Main 在启动侧车前多做了运行时校验，这个时间窗变宽了。
 - 修正：侧车只有在打开存储（同时写入运行记录）之后才开始监听；数据库在应用运行期间被独占，无法从外部查询。`launch()` 现在额外等待侧车进程出现监听中的 TCP 套接字（`Get-NetTCPConnection -OwningProcess … -State Listen`），之后才返回。
 - 本机验证：该探测对一个 Node 进程在监听前返回 false、监听后返回 true（每次调用约 1.4～2.5 秒）。安装后烟测本身由 CI 的 Windows runner 运行。
+
+## M2 退出：隔离运行时的 runner 证据与 agentReady（2026-11-10）
+
+授权：既有的 M1–M4 授权。PR #15（隔离的生产 Worker）、#16（对话界面）与 #17（烟测竞态修正）已合并；本次只提交证据、状态和文档，不改运行时代码。
+
+- 证据来源：main 提交 `21bc7a178f35de0f92605a49e892890d9cee6419` 的 CI 运行 <https://github.com/JaxLim/OperationAgent/actions/runs/42819726558>（Windows x64 一次性 runner，全部作业通过）。从其 `p1-evidence-windows-2025` 产物原样取出三个文件放入 `docs/evidence/m2/win32-x64/`：`integration.json`（`passed: true`、`secW01: PASS`、`agentRuntime: PASS`）、同一次运行的 `sec-w01.json`、以及隔离运行时测试的输出 `agent-runtime.txt`（原名 `10.log`）。
+- 该测试用生产启动器在真实 AppContainer 中启动生产 Agent 运行时，对本机的模型服务替身完成“列目录 + 读文件 + 回答”的任务，核对 Express 读到的文件内容交给了模型、数据库中没有文件内容与密钥、停止后清理得到确认。
+- `build/agent-status.json`：`milestones.M2` 改为 `implemented`，`agentRuntime.win32-x64` 改为 `PASS`，`agentReady` 改为 `true`，并记录证据的运行地址与源提交。macOS、Linux 仍为 `NOT_RUN`。`pnpm verify:agent` 对照已提交证据通过；去掉 M1 或 M2 任一份证据都会被拒绝（测试已覆盖）。
+- README（中、英）改为如实描述现状：安装版在 Windows x64 上可以运行只读 Agent；从源码运行的开发构建不启动隔离 Worker；**尚未有针对真实 Claude API 的运行记录**。
+- 本地验证：`pnpm check:engineering` 九项全部退出 0，单元测试 **158/158**（状态检查的测试改为同时对照 M1 与 M2 两份已提交证据）。
+- 未验证：真实 `api.anthropic.com` 上的任务；macOS 与 Linux。
