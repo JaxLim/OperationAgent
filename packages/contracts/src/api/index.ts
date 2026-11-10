@@ -7,6 +7,11 @@ export const CONTROL_POLICY = Object.freeze({ handshakeMs: 10_000, requestMs: 2_
   missedHeartbeats: 3, shutdownMs: 5_000, killWaitMs: 2_000, restartWindowMs: 60_000, maxRestarts: 3,
   // 100 records × 256 UTF-16 code units may expand to six JSON bytes per unit, plus record metadata.
   maxBodyBytes: 16_384, maxResponseBytes: 196_608, maxRequestsPerWindow: 240, maxHeartbeatsPerWindow: 60, authWindowMs: 30_000 });
+/**
+ * The whole environment Main gives the Express sidecar. LOCALAPPDATA is required by the Windows Worker launcher (the
+ * AppContainer needs its local app-data root); nothing else, in particular no PATH, NODE_OPTIONS or credentials, passes.
+ */
+export const SIDECAR_ENVIRONMENT = Object.freeze(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'LOCALAPPDATA', 'HOME', 'TMPDIR', 'LANG'] as const);
 export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '/v1/heartbeat', records: '/v1/smoke-records', taskStart: '/v1/tasks/start',
   overview: '/v1/overview', settings: '/v1/settings', projects: '/v1/projects', projectRemove: '/v1/projects/remove', runs: '/v1/runs',
   tasks: '/v1/tasks', taskSnapshot: '/v1/tasks/snapshot', taskEvents: '/v1/tasks/events',

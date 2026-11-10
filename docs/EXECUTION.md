@@ -613,3 +613,8 @@ PR #14 评审修正（2026-11-10）：
 - Codex P2：使用同一请求 ID 重试启动时，若任务仍在运行会先返回 `AGENT_BUSY`。修正：先按请求 ID 返回已创建的任务（项目不符则拒绝），再检查是否忙碌。
 - Codex P2：Agent 会话握手后未启动心跳；继承通道读取有 30 秒截止时间，长回合或空闲时会断开。修正：握手后即启动心跳。
 - 新增测试：回合进行中拒绝新回合与工具调用且无第二次模型请求；忙碌时同 ID 重试返回原任务、换项目被拒；空闲会话持续心跳；长路径摘要不超过 256 字符且保留文件名。`check:engineering` 九项退出 0，**148/148**。
+
+PR #15 评审修正（2026-11-10）：
+- Codex P1：Main 给 Express 侧车的环境白名单不含 `LOCALAPPDATA`，而原生 Worker 启动器需要它（AppContainer 的本地应用数据根），安装版中每次启动任务都会失败；runner 测试直接从测试进程启动 supervisor，未覆盖这一边界。修正：白名单改为共享契约常量 `SIDECAR_ENVIRONMENT` 并加入 `LOCALAPPDATA`；runner 端到端测试在启动前把自身环境裁剪为该白名单，从而覆盖 Main → Express 边界。
+- Codex P1：原生创建失败（`WORKER_CREATION_CLEANUP_UNCONFIRMED`）或握手失败且清理未确认时，supervisor 回到 idle，可能在旧进程/profile/ACL 未确认清理时再次启动。修正：启动失败的错误携带清理结果，未确认则 supervisor 永久不可用（`CLEANUP_UNCONFIRMED`），不再尝试启动；清理已确认的失败仍可重试。同时 agent 会话自己启动心跳，launcher 不再为工厂会话重复启动。
+- 新增测试：原生创建失败与握手失败（关闭未确认）后拒绝一切启动且不再尝试，握手失败但清理已确认时保持可重试。`check:engineering` 九项退出 0，**152/152**。

@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { request } from 'node:http';
-import { BootstrapSchema, CONTROL_POLICY, CONTROL_ROUTES, ControlFailureSchema, ControlHealthSchema, PROTOCOL_VERSION,
+import { BootstrapSchema, CONTROL_POLICY, CONTROL_ROUTES, SIDECAR_ENVIRONMENT, ControlFailureSchema, ControlHealthSchema, PROTOCOL_VERSION,
   SidecarReadySchema, SmokeBatchSchema, SmokeRecordsSchema, requestProof, responseProof } from '@operation-agent/contracts';
 import type { Bootstrap, SidecarReady, SmokeBatch, ControlHealth, SmokeRecords, DesktopStatus, CryptoBridgeResponse, ServiceTreeIdentity } from '@operation-agent/contracts';
 import { verifyStagedRuntime } from './staged-runtime.js';
@@ -47,7 +47,7 @@ export class SidecarSupervisor {
       ...(this.options.launchWorkers && runtime.worker && process.platform === 'win32' && process.arch === 'x64' ? { agentRuntime: runtime.worker } : {}) });
     // spawn avoids Electron's fork shim and ELECTRON_RUN_AS_NODE. No PATH, NODE_OPTIONS or user argv are inherited.
     const env: NodeJS.ProcessEnv = {};
-    for (const key of ['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'TMPDIR', 'LANG']) if (process.env[key]) env[key] = process.env[key];
+    for (const key of SIDECAR_ENVIRONMENT) if (process.env[key]) env[key] = process.env[key];
     const child = spawn(runtime.node, [runtime.entry], { cwd: runtime.cwd, env, windowsHide: true,
       shell: false, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
     let markExited: () => void = () => {};

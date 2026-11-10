@@ -77,7 +77,8 @@ export class FixtureWorker {
     try {
       await handshake(randomBytes(32).toString('hex'));
       if (this.state !== 'starting') throw new Error(this.failure ?? 'RPC_CLOSED');
-      session.startHeartbeat(randomUUID);
+      // A factory-built session (the agent session) starts its own heartbeat once its handshake succeeds.
+      if (!this.factory) session.startHeartbeat(randomUUID);
       this.state = 'ready';
       return this;
     } catch (error) {
@@ -85,7 +86,9 @@ export class FixtureWorker {
       const exit = await this.closed;
       const code = exit.exitCode === null ? 'unknown' : '0x' + (exit.exitCode >>> 0).toString(16);
       const stderr = exit.stderr.replace(/\s+/g, ' ').trim().slice(0, 800);
-      throw new Error(`WORKER_ISOLATION_UNAVAILABLE: ${this.failure ?? 'handshake failed'} (worker exit ${code}, cleanup ${exit.cleanup})${stderr ? ' stderr: ' + stderr : ''}`, { cause: error });
+      // The cleanup outcome travels with the error: a caller must never launch again after an unconfirmed cleanup.
+      throw Object.assign(new Error(`WORKER_ISOLATION_UNAVAILABLE: ${this.failure ?? 'handshake failed'} (worker exit ${code}, cleanup ${exit.cleanup})${stderr ? ' stderr: ' + stderr : ''}`,
+        { cause: error }), { cleanup: exit.cleanup });
     }
   }
   private async readLoop(session: RpcSession): Promise<void> {

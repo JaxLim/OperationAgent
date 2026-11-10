@@ -62,8 +62,13 @@ export class AgentWorkerSupervisor {
       this.worker = worker; this.state = 'ready'; this.lastError = null;
       void worker.closed.then(exit => this.exited(worker, exit));
     } catch (error) {
-      this.lastError = (error instanceof Error ? error.message : 'WORKER_ISOLATION_UNAVAILABLE').slice(0, 512);
-      if (this.state === 'starting') this.state = 'idle';
+      // A launch that failed without confirming its cleanup (native creation or a failed handshake) may have left a
+      // process, profile or ACL behind: no further Worker is ever launched by this control plane.
+      if (cleanupUnconfirmed(error)) this.unavailable('CLEANUP_UNCONFIRMED');
+      else {
+        this.lastError = (error instanceof Error ? error.message : 'WORKER_ISOLATION_UNAVAILABLE').slice(0, 512);
+        if (this.state === 'starting') this.state = 'idle';
+      }
       throw new Error('WORKER_ISOLATION_UNAVAILABLE', { cause: error });
     }
   }
@@ -88,4 +93,11 @@ export class AgentWorkerSupervisor {
     if (worker) await worker.stop().catch(() => {});
     if (this.state !== 'unavailable') this.state = 'idle';
   }
+}
+
+/** Native creation reports WORKER_CREATION_CLEANUP_UNCONFIRMED; a failed start reports its cleanup on the error itself. */
+function cleanupUnconfirmed(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'cleanup' in error && error.cleanup !== 'confirmed') return true;
+  const message = error instanceof Error ? error.message : '';
+  return /CLEANUP_UNCONFIRMED/.test(message) || /cleanup unconfirmed/.test(message);
 }
