@@ -48,6 +48,9 @@ function children(pid) {
 function alive(pid) { try { process.kill(pid, 0); return true; } catch (error) { return error.code === 'EPERM'; } }
 const sidecarNode = () => resolve(installDir, 'resources/sidecar/node/node.exe');
 const sidecarOf = pid => children(pid).find(child => child.path && resolve(child.path).toLowerCase() === sidecarNode().toLowerCase());
+// The sidecar listens only after it has opened the store, which is where it records its own run. The database is held
+// exclusively while the app runs, so a listening socket is the one outside sign that this run is on record.
+const listening = pid => Number(powershell(`@(Get-NetTCPConnection -OwningProcess ${pid} -State Listen -ErrorAction SilentlyContinue).Count`)) > 0;
 
 // Inspect SQLite with the installed runtime and the installed native module (read-only, app closed).
 async function inspect() {
@@ -73,6 +76,9 @@ async function launch() {
   const exited = once(child, 'exit');
   const sidecar = await until(() => sidecarOf(child.pid), 30_000, 'installed sidecar child');
   await until(() => existsSync(database), 15_000, 'database in isolated user data');
+  // On a relaunch the database file and the window can both exist before the sidecar has started its run. A forced kill
+  // in that gap leaves no run to reconcile, so every launch waits until the control plane is actually up.
+  await until(() => listening(sidecar.pid), 30_000, 'installed sidecar listening');
   const title = await until(() => powershell(`(Get-Process -Id ${child.pid}).MainWindowTitle`) || false, 20_000, 'main window');
   return { child, exited, sidecar, title };
 }
