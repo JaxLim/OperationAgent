@@ -6,7 +6,7 @@ OperationAgent is a **security-first** desktop AI coding agent built with Electr
 
 The goal is an agent that reads code, edits files and runs commands in your project while always being treated as untrusted: the agent runs in a worker process isolated by the operating system, and every tool call is validated, authorized and audited by a control plane. If a security gate has not passed, the capability behind it stays off (fail closed); nothing ever falls back to running without isolation.
 
-The project is delivered in gated phases, each with evidence that can be re-checked. **It is currently in milestone M2: the desktop app, control plane, persistence and model settings work, but the agent cannot run tasks yet.**
+The project is delivered in gated phases, each with evidence that can be re-checked. **Milestone M2 is complete: on Windows x64 the installed app runs a read-only agent that explores your project, reads its files and answers questions about it. It cannot edit files or run commands yet.**
 
 ![Workbench](docs/screenshots/workbench.png)
 
@@ -17,18 +17,19 @@ The project is delivered in gated phases, each with evidence that can be re-chec
 - An installable Windows desktop app (per-user install, no administrator rights; not code-signed yet).
 - Control plane: a separate Express service process supervised by the Electron main process, with heartbeats and a bounded automatic-restart budget.
 - Persistence: SQLite with versioned migrations; settings, projects and run history survive restarts.
-- Projects: add, switch and remove project folders (only the path is stored; file contents are never read).
-- Task infrastructure: a task state machine, an append-only task event store, snapshot and cursor-paged APIs, and the task list and event timeline in the workbench. Because execution is not enabled yet, submitted requests are refused by the control plane and no task is created.
+- Projects: add, switch and remove project folders (only the path is stored).
+- A read-only agent (Windows x64, installed app only): ask a question about a project and the agent lists directories and reads text files, streams its answer with the files it looked at, and can be stopped at any time. The agent loop runs in a worker isolated by an AppContainer with no file, network or credential access; the control plane holds the conversation and the API key, and reads files through a short-lived read-only helper process. Secrets (`.env` files, keys, `.git` internals), links and anything outside the project are refused.
+- Task infrastructure: a task state machine, an append-only task event store, snapshot and cursor-paged APIs, and the task list, conversation and event timeline in the workbench. A build run from source does not launch the isolated worker, so there a submitted request is refused and no task is created.
 - Model provider settings: for Anthropic, OpenAI, Google Gemini and OpenRouter you can enter an API key, load the model list and test the connection; keys for web-search providers (Exa, Tavily, Brave, Firecrawl) can be saved. Every key is encrypted by the operating system (Electron `safeStorage`) before it is stored, and the database holds only ciphertext.
 - Agent profiles and MCP server definitions: you can create and edit them, but for now they are configuration only; nothing runs, launches or connects.
 - The interface is available in English, Simplified Chinese and Japanese, with System, Light and Dark themes and eight colour palettes.
 - Diagnostics: control-plane state, a database self-test, run history and the current state of every security capability.
-- The production worker-isolation gate for Windows x64 (SEC-W01) has passed for real on a disposable CI runner.
+- The production worker-isolation gate for Windows x64 (SEC-W01) and the isolated agent runtime have both passed for real on a disposable CI runner (evidence in `docs/evidence/`).
 
 **Not implemented yet**
 
-- The agent loop: starting a task returns `WORKER_ISOLATION_UNAVAILABLE` and nothing runs.
-- The agent's read tool: the Read Adapter and its SEC-08 Read Gate tests are implemented (Windows x64 only, CI evidence pending), but no agent loop calls it yet, so nothing in the app reads project files.
+- A recorded run against the real Claude API: the agent has been verified end to end on the CI runner against a local stand-in for the model service, not against the real service. Treat the first real use as untested.
+- Searching inside files, reading by line range, plans, follow-up questions and skills (planned, see the [roadmap](docs/ROADMAP.md)).
 - Sandboxes for file writes and shell commands, approvals, the web-search tool, the MCP host.
 - Account sign-in providers and custom model endpoints: proposed in [ADR-PROV-001](docs/adr/ADR-PROV-001.md) (not approved) and locked in the interface until then.
 - Process-level acceptance and SEC-W01 on macOS and Linux (currently NOT_RUN).
@@ -49,7 +50,7 @@ Anything not implemented is labelled as unavailable in the interface; the app ne
 | P1 | Desktop app, control plane, persistence, worker launcher, installer and installed-app smoke test | Done (Windows x64, see the [exit report](docs/P1-EXIT-REPORT.md)) |
 | P2.0–P2.3 | Task contracts and state machine, task event store, snapshots and cursor catch-up, workbench task views | Implemented; the CI evidence for the overall P2 exit is not produced yet |
 | M1 | SEC-W01: the Windows production worker-isolation gate | Done (passes on Windows x64) |
-| M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop | In progress: credentials, model gateway, multi-provider settings, agent and MCP configuration, and interface languages are merged; every part of the read-only agent is implemented (Windows x64 installed app): Read Adapter and SEC-08, streaming model turns, list_directory, the agent loop, the task runner, the isolated production worker and the conversation view; agentReady is recorded once the CI isolation evidence is in |
+| M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop, isolated worker, conversation view | Done (Windows x64; runner evidence in `docs/evidence/m2/win32-x64/`) |
 | M3 | File writes and shell: sandbox, approvals, command normalization, stop semantics | Not started |
 | M4 | Productization: MCP, signing and updates | Not started |
 
@@ -154,4 +155,4 @@ These documents are written in Chinese.
 - [docs/EXECUTION.md](docs/EXECUTION.md): how each change was carried out and verified
 - [docs/P1-EXIT-REPORT.md](docs/P1-EXIT-REPORT.md): P1 exit report
 - [docs/adr/](docs/adr/): architecture decisions and approval records
-- Evidence: `docs/evidence/` (runner evidence for P1 and M1, M2 screenshots); phase status files: `build/*-status.json`
+- Evidence: `docs/evidence/` (runner evidence for P1, M1 and M2, screenshots); phase status files: `build/*-status.json`

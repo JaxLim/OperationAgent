@@ -22,7 +22,7 @@
   },
   "milestones": {
     "M1": "implemented",
-    "M2": "in-progress",
+    "M2": "implemented",
     "M3": "not-started",
     "M4": "not-started"
   },
@@ -31,13 +31,25 @@
     "darwin-arm64": "NOT_RUN",
     "linux-x64": "NOT_RUN"
   },
-  "agentReady": false,
+  "agentRuntime": {
+    "win32-x64": "PASS",
+    "darwin-arm64": "NOT_RUN",
+    "linux-x64": "NOT_RUN"
+  },
+  "agentReady": true,
   "productionWorkerQualified": true,
   "evidence": {
     "win32-x64": {
       "ciRun": "https://github.com/JaxLim/OperationAgent/actions/runs/41195176816",
       "sourceCommit": "7dce7c45a938a08faaab37d20bdfd358f5c2194e",
       "files": "docs/evidence/m1/win32-x64/"
+    }
+  },
+  "agentRuntimeEvidence": {
+    "win32-x64": {
+      "ciRun": "https://github.com/JaxLim/OperationAgent/actions/runs/42819726558",
+      "sourceCommit": "21bc7a178f35de0f92605a49e892890d9cee6419",
+      "files": "docs/evidence/m2/win32-x64/"
     }
   }
 }

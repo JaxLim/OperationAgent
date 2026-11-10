@@ -1,0 +1,11 @@
+✔ BLOCKED unless running on a disposable Windows x64 runner (0.695ms)
+✔ the isolated agent runtime runs a read-only task end to end and its cleanup is confirmed (369.3452ms)
+ℹ {"state":"COMPLETED","supervisor":{"state":"ready","launches":1,"lastError":null,"pid":9480},"events":["task_created","task_state_changed","user_message","task_state_changed","assistant_turn","tool_call","tool_call","assistant_turn","task_state_changed"]}
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 706.0716

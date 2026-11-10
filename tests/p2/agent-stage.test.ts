@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readJson } from '../../scripts/p0-check.ts';
-import { validateAgentStage } from '../../scripts/agent-check.ts';
+import { agentRuntimeEvidenceViolations, validateAgentStage } from '../../scripts/agent-check.ts';
 import { SEC_W01_ENV, SEC_W01_ENV_AFTER_CHANNEL, evaluateSecW01 } from '../../scripts/sec-w01-rules.ts';
 
 const stage = () => readJson('build/agent-status.json');
@@ -23,21 +23,32 @@ function report(): Record<string, unknown> {
 }
 const evidence = (overrides: { integration?: unknown; report?: unknown } = {}) =>
   ({ 'win32-x64': { integration: { secW01: 'PASS', source }, report: report(), ...overrides } });
-const qualified = () => ({ ...stage(), secW01: { ...(stage().secW01 as object), 'win32-x64': 'PASS' }, productionWorkerQualified: true,
-  milestones: { ...(stage().milestones as object), M1: 'implemented' } });
+/** The stage before the M2 exit: the starting point for tests that build a claim step by step. */
+const base = (): Record<string, unknown> => ({ ...stage(), milestones: { ...(stage().milestones as object), M2: 'in-progress' },
+  agentRuntime: { 'darwin-arm64': 'NOT_RUN', 'linux-x64': 'NOT_RUN', 'win32-x64': 'NOT_RUN' }, agentReady: false });
+const qualified = () => ({ ...base(), secW01: { ...(base().secW01 as object), 'win32-x64': 'PASS' }, productionWorkerQualified: true,
+  milestones: { ...(base().milestones as object), M1: 'implemented' } });
 const withReport = (change: (value: Record<string, unknown>) => void) => { const value = report(); change(value); return value; };
 const results = (value: Record<string, unknown>) => (value.report as { results: Record<string, unknown> }).results;
 const controls = (value: Record<string, unknown>) => (value.prepared as { controls: Record<string, unknown> }).controls;
 
-/** The runner evidence actually committed for Windows x64. */
+/** The runner evidence actually committed for Windows x64: SEC-W01 (M1) and the isolated agent runtime (M2). */
 const committed = () => ({ 'win32-x64': { integration: readJson('docs/evidence/m1/win32-x64/integration.json'),
   report: readJson('docs/evidence/m1/win32-x64/sec-w01.json') } });
+const committedRuntime = () => ({ 'win32-x64': { integration: readJson('docs/evidence/m2/win32-x64/integration.json') } });
 
-test('the recorded authorization and Windows qualification are backed by the committed runner evidence', () => {
+test('the recorded authorization, Windows qualification and M2 exit are backed by the committed runner evidence', () => {
   assert.deepEqual(evaluateSecW01(committed()['win32-x64'].report), []);
-  assert.deepEqual(validateAgentStage(stage(), committed()), []);
-  // The same claims without the committed evidence are rejected.
-  assert.notEqual(validateAgentStage(stage(), {}).length, 0);
+  assert.deepEqual(agentRuntimeEvidenceViolations(committedRuntime()['win32-x64']), []);
+  assert.deepEqual(validateAgentStage(stage(), committed(), committedRuntime()), []);
+  // The M2 run's own SEC-W01 report is committed beside it and passes the same rules, from the same source commit.
+  const run = readJson('docs/evidence/m2/win32-x64/sec-w01.json');
+  assert.deepEqual(evaluateSecW01(run), []);
+  assert.equal(run.source, (committedRuntime()['win32-x64'].integration as { source: string }).source);
+  // The same claims without either part of the committed evidence are rejected.
+  assert.notEqual(validateAgentStage(stage(), {}, committedRuntime()).length, 0);
+  assert.notEqual(validateAgentStage(stage(), committed(), {}).length, 0);
+  assert.notEqual(validateAgentStage(stage(), committed()).length, 0);
 });
 
 test('altered authorization, scope growth and unproven claims fail closed', () => {
@@ -45,9 +56,12 @@ test('altered authorization, scope growth and unproven claims fail closed', () =
   for (const change of [
     { authorizedMilestones: ['M1', 'M2', 'M3', 'M4', 'M5'] }, { authorization: { ...(stage().authorization as object), modelProvider: 'other' } },
     { authorization: { ...(stage().authorization as object), quotes: ['Yes, use Claude'] } },
-    { secW01: { ...(stage().secW01 as object), 'linux-x64': 'PASS' } }, { agentReady: true },
+    { secW01: { ...(stage().secW01 as object), 'linux-x64': 'PASS' } }, { agentRuntime: { ...(stage().agentRuntime as object), 'linux-x64': 'PASS' } },
+    // Readiness is claimed only together with a qualified Worker and an implemented, proven M2.
+    { productionWorkerQualified: false }, { milestones: { ...milestones, M2: 'in-progress' } },
+    { agentRuntime: { ...(stage().agentRuntime as object), 'win32-x64': 'NOT_RUN' } },
     { milestones: { ...milestones, M1: 'in-progress' } }, { milestones: { ...milestones, M5: 'not-started' } },
-  ]) assert.notEqual(validateAgentStage({ ...stage(), ...change }, committed()).length, 0, JSON.stringify(change).slice(0, 80));
+  ]) assert.notEqual(validateAgentStage({ ...stage(), ...change }, committed(), committedRuntime()).length, 0, JSON.stringify(change).slice(0, 80));
 });
 
 test('a complete passing runner report with matching provenance can qualify the Windows Worker', () => {
@@ -113,4 +127,22 @@ test('unreachable targets and failed host controls are inconclusive, never denia
     (value: Record<string, unknown>) => { results(value)['native.exports'] = ''; },
     (value: Record<string, unknown>) => { (value.report as { envAtStart: string[] }).envAtStart = [...SEC_W01_ENV, 'GITHUB_TOKEN']; },
   ]) assert.notEqual(evaluateSecW01(withReport(change)).length, 0, change.toString().slice(0, 90));
+});
+
+test('M2 and agentReady need committed proof that the isolated agent runtime ran a task on Windows x64', () => {
+  const runtimeRecord = (overrides: Record<string, unknown> = {}) => ({ 'win32-x64': { integration: { passed: true, secW01: 'PASS', agentRuntime: 'PASS',
+    source: 'b'.repeat(40), ...overrides } } });
+  const ready = () => ({ ...qualified(), agentRuntime: { ...(base().agentRuntime as object), 'win32-x64': 'PASS' },
+    milestones: { ...(qualified().milestones as object), M2: 'implemented' }, agentReady: true });
+  assert.deepEqual(agentRuntimeEvidenceViolations(runtimeRecord()['win32-x64']), []);
+  assert.deepEqual(validateAgentStage(ready(), evidence(), runtimeRecord()), []);
+  // Without the record, with a failed or blocked run, or without provenance, nothing can be claimed.
+  for (const runtime of [{}, runtimeRecord({ agentRuntime: 'FAILED' }), runtimeRecord({ agentRuntime: 'BLOCKED_NOT_AUTHORIZED_ON_THIS_HOST' }),
+    runtimeRecord({ secW01: 'FAILED' }), runtimeRecord({ passed: false }), runtimeRecord({ source: 'local' })]) {
+    assert.notEqual(validateAgentStage(ready(), evidence(), runtime).length, 0, JSON.stringify(runtime).slice(0, 100));
+  }
+  // M2 cannot be implemented, nor agentReady set, while the runtime claim is NOT_RUN; Windows proof never covers Linux.
+  assert.notEqual(validateAgentStage({ ...ready(), agentRuntime: base().agentRuntime }, evidence(), runtimeRecord()).length, 0);
+  assert.notEqual(validateAgentStage({ ...ready(), agentRuntime: { ...(ready().agentRuntime as object), 'linux-x64': 'PASS' } }, evidence(), runtimeRecord()).length, 0);
+  assert.notEqual(validateAgentStage({ ...stage(), agentRuntime: { 'win32-x64': 'NOT_RUN' } }, committed()).length, 0, 'the matrix covers every platform');
 });
