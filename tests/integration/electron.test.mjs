@@ -230,18 +230,21 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   const step = to => seed.transitionTask(task, to, { requestId: randomUUID(), sideEffects: to === 'COMPLETED' ? 'VERIFIED' : null,
     reason: to === 'COMPLETED' ? 'Read-only task: no files were changed' : null });
   const usage = { inputTokens: 900, outputTokens: 120, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  const context = promptTokens => ({ promptTokens, managed: true, compacted: false });
   step('QUEUED');
   const prompt = seed.addTaskMessage(task, 'user', 0, 'How is this project built?');
   seed.appendAgentEvent(task, 'user_message', { messageId: prompt.id, chars: 26 });
   step('RUNNING');
   const first = seed.addTaskMessage(task, 'assistant', 1, 'Let me look at the layout first.');
-  seed.appendAgentEvent(task, 'assistant_turn', { turn: 1, model: 'claude-sonnet-5-5', messageId: first.id, stopReason: 'tool_use', toolCalls: 2, fallback: false, usage });
-  seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_a', tool: 'list_directory', target: '.', status: 'ok', code: null, size: 12 });
-  seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_b', tool: 'read_file', target: '.env', status: 'refused', code: 'SENSITIVE_PATH', size: null });
+  seed.appendAgentEvent(task, 'assistant_turn', { turn: 1, model: 'claude-sonnet-5-5', messageId: first.id, stopReason: 'tool_use', toolCalls: 2, fallback: false, usage,
+    timing: { ttftMs: 400, durationMs: 2_100 }, context: context(900) });
+  seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_a', tool: 'list_directory', target: '.', status: 'ok', code: null, size: 12, durationMs: 80 });
+  seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_b', tool: 'read_file', target: '.env', status: 'refused', code: 'SENSITIVE_PATH', size: null, durationMs: 5 });
   const answer = ['## Build', '', 'It uses **pnpm** and `tsc -b`:', '', '```bash', 'pnpm install', 'pnpm build', '```', '',
     '- Lint with `pnpm lint`', '- Test with `pnpm test`', '', 'Injected <img src=x onerror="window.__pwned=1"> stays text.'].join('\n');
   const second = seed.addTaskMessage(task, 'assistant', 2, answer);
-  seed.appendAgentEvent(task, 'assistant_turn', { turn: 2, model: 'claude-sonnet-5-5', messageId: second.id, stopReason: 'end_turn', toolCalls: 0, fallback: false, usage });
+  seed.appendAgentEvent(task, 'assistant_turn', { turn: 2, model: 'claude-sonnet-5-5', messageId: second.id, stopReason: 'end_turn', toolCalls: 0, fallback: false,
+    usage: { inputTokens: 300, outputTokens: 120, cacheReadTokens: 900, cacheWriteTokens: 0 }, timing: { ttftMs: 600, durationMs: 3_400 }, context: context(1_200) });
   step('COMPLETED');
   seed.close(true);
 
@@ -260,6 +263,11 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.match(view.end, /Done/); assert.match(view.end, /no files were changed/);
   assert.equal(view.stop, false, 'a finished task offers no Stop');
   assert.match(view.activity, /Activity log/);
+  // The usage line is derived from the committed turn and tool events: 900 + 300 + 900 prompt tokens, 900 of them cached.
+  assert.match(view.usage, /turns 2 · tool calls 2/);
+  assert.match(view.usage, /prompt 2,100 tokens \(43% cached\)/);
+  assert.match(view.usage, /output 240 tokens/);
+  assert.match(view.usage, /model 5\.5s · first content 0\.5s \(median\) · tools 0\.1s/);
   await host.command('capture', `m2/${process.platform}-${process.arch}/conversation.png`);
 });
 

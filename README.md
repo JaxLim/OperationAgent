@@ -19,6 +19,7 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 - 持久化：SQLite + 版本化迁移，设置、项目和运行记录重启后都还在。
 - 项目管理：添加、切换、移除项目文件夹（只记路径）。
 - 只读 Agent（仅 Windows x64 安装版）：针对某个项目提问，Agent 会列目录、读取文本文件，流式给出回答并标出它看过的文件，运行中可以随时停止。Agent 循环跑在由 AppContainer 隔离的 Worker 里，没有文件、网络和凭据权限；会话与 API Key 由控制面持有，文件经短生命周期的只读辅助进程读取。密钥类文件（`.env`、各类 key、`.git` 内部文件）、链接以及项目之外的路径一律拒绝。
+- 每个任务的用量：任务视图显示模型回合数、输入与输出 Token、来自提示缓存的比例，以及模型与工具各自的耗时。长任务在上下文窗口将满时会请模型供应商对较早的内容做摘要，而不是直接失败（这一请求形状尚未在真实 API 上验证）。
 - 任务基础设施：任务状态机、只追加的任务事件存储、快照与游标分页接口，以及工作台里的任务列表、对话和事件时间线。从源码运行的开发构建不会启动隔离 Worker，在那里提交的请求会被拒绝，不会创建任务。
 - 模型供应商设置：Anthropic、OpenAI、Google Gemini、OpenRouter 均可填写 API Key、加载模型列表并测试连接；网页搜索供应商（Exa、Tavily、Brave、Firecrawl）可以保存密钥。所有密钥都先由操作系统加密（Electron `safeStorage`）再保存，数据库里只有密文。
 - Agent 配置与 MCP 服务器定义：可以新建和编辑，但目前只保存配置，不会运行、启动或连接任何东西。
@@ -53,6 +54,8 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 | M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop、隔离 Worker、对话界面 | 已完成（Windows x64；runner 证据见 `docs/evidence/m2/win32-x64/`） |
 | M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
 | M4 | 产品化：MCP、签名与升级 | 未开始 |
+| M5 | 平台基础（[ADR-PLAT-001](docs/adr/ADR-PLAT-001.md)）：上下文引擎与度量、选择性检索、计划 | 进行中：上下文引擎、任务用量和离线基准已实现；文件内搜索、按行读取和计划是下一步 |
+| M6–M8 | 会话与检查点、技能；子 Agent 与目标驱动运行；MCP Host 与插件 | 未开始（子 Agent、无人值守续接、MCP 与插件各自需要先批准 ADR 中的具体决策） |
 
 详细计划见 [路线图](docs/ROADMAP.md)，每次变更的验证记录见 [执行记录](docs/EXECUTION.md)。
 
@@ -143,6 +146,7 @@ node .tools/pnpm/bin/pnpm.cjs desktop
 | `package` | 构建 NSIS 安装包，输出到 `dist/installers/` |
 | `test:smoke` | 静默安装到 `.cache`，检查启动、重启和强制结束后能否恢复，最后静默卸载 |
 | `verify:agent` | 根据已提交的 runner 证据核对 M1–M4 和各平台的 SEC-W01 状态 |
+| `bench:agent` | 离线基准：控制面每回合开销、只读工具调用耗时、一次脚本化任务的请求增长，以及上下文策略的成本模型（不调用真实模型） |
 
 ## 文档
 

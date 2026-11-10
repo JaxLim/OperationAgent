@@ -103,7 +103,8 @@ process.on('message', async message => {
             images: section.querySelectorAll('img').length, scripts: section.querySelectorAll('script').length, pwned: window.__pwned !== undefined,
             end: section.querySelector('.conv-end')?.textContent ?? null,
             stop: Boolean([...detail.querySelectorAll('.task-actions button')].find(button => /Stop/.test(button.textContent))),
-            activity: detail.querySelector('details.activity summary')?.textContent ?? null };
+            activity: detail.querySelector('details.activity summary')?.textContent ?? null,
+            usage: detail.querySelector('[data-task-usage]')?.textContent ?? null };
         })()`);
         break;
       }

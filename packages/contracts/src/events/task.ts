@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ToolOutputSummarySchema } from './tool-output.js';
 import { ClaudeModelSchema } from '../api/model.js';
 import { AGENT_RUN_LIMITS, ToolCallViewSchema, TurnStopReasonSchema, TurnUsageSchema } from '../agent/turn.js';
+import { TurnContextSchema, TurnTimingSchema } from '../agent/context.js';
 import { ToolCallStatusSchema } from '../rpc/agent.js';
 
 // ARCHITECTURE §7.2/§7.3/§8.1. Express is the only writer: it checks a transition here, then commits the
@@ -66,13 +67,17 @@ export const TaskUserMessageEventSchema = z.strictObject({ ...eventBase, type: z
   payload: z.strictObject({ messageId: z.uuid(), chars: count }) });
 export const TaskAssistantTurnEventSchema = z.strictObject({ ...eventBase, type: z.literal('assistant_turn'),
   payload: z.strictObject({ turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns), model: ClaudeModelSchema,
-    messageId: z.uuid().nullable(), stopReason: TurnStopReasonSchema, toolCalls: count, fallback: z.boolean(), usage: TurnUsageSchema }) });
+    messageId: z.uuid().nullable(), stopReason: TurnStopReasonSchema, toolCalls: count, fallback: z.boolean(), usage: TurnUsageSchema,
+    // Added with the context engine (ADR-PLAT-001 D1/D2). Optional: turns recorded before it carry neither.
+    timing: TurnTimingSchema.optional(), context: TurnContextSchema.optional() }) });
 export const TaskToolCallEventSchema = z.strictObject({ ...eventBase, type: z.literal('tool_call'),
   payload: z.strictObject({ turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns), callId: ToolCallViewSchema.shape.id,
     tool: z.string().min(1).max(128), target: z.string().max(512), status: ToolCallStatusSchema,
     code: z.string().min(1).max(64).regex(/^[A-Z_]+$/).nullable(),
     /** Bytes returned (read_file) or entries listed (list_directory). */
-    size: count.nullable() }) });
+    size: count.nullable(),
+    /** How long Express spent on the call, child process included. Optional: older events do not carry it. */
+    durationMs: count.max(86_400_000).optional() }) });
 export const TaskEventSchema = z.union([TaskCreatedEventSchema, TaskStateChangedEventSchema, TaskToolSummaryEventSchema,
   TaskUserMessageEventSchema, TaskAssistantTurnEventSchema, TaskToolCallEventSchema]);
 export const AGENT_EVENT_TYPES = Object.freeze(['user_message', 'assistant_turn', 'tool_call'] as const);

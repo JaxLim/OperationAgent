@@ -19,6 +19,7 @@ The project is delivered in gated phases, each with evidence that can be re-chec
 - Persistence: SQLite with versioned migrations; settings, projects and run history survive restarts.
 - Projects: add, switch and remove project folders (only the path is stored).
 - A read-only agent (Windows x64, installed app only): ask a question about a project and the agent lists directories and reads text files, streams its answer with the files it looked at, and can be stopped at any time. The agent loop runs in a worker isolated by an AppContainer with no file, network or credential access; the control plane holds the conversation and the API key, and reads files through a short-lived read-only helper process. Secrets (`.env` files, keys, `.git` internals), links and anything outside the project are refused.
+- Usage per task: the task view shows model turns, prompt and output tokens, the share served from the prompt cache, and time spent in the model and in tools. Long tasks ask the model provider to summarize earlier context instead of failing when the context window fills up (this request shape has not been exercised against the real API yet).
 - Task infrastructure: a task state machine, an append-only task event store, snapshot and cursor-paged APIs, and the task list, conversation and event timeline in the workbench. A build run from source does not launch the isolated worker, so there a submitted request is refused and no task is created.
 - Model provider settings: for Anthropic, OpenAI, Google Gemini and OpenRouter you can enter an API key, load the model list and test the connection; keys for web-search providers (Exa, Tavily, Brave, Firecrawl) can be saved. Every key is encrypted by the operating system (Electron `safeStorage`) before it is stored, and the database holds only ciphertext.
 - Agent profiles and MCP server definitions: you can create and edit them, but for now they are configuration only; nothing runs, launches or connects.
@@ -53,6 +54,8 @@ Anything not implemented is labelled as unavailable in the interface; the app ne
 | M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop, isolated worker, conversation view | Done (Windows x64; runner evidence in `docs/evidence/m2/win32-x64/`) |
 | M3 | File writes and shell: sandbox, approvals, command normalization, stop semantics | Not started |
 | M4 | Productization: MCP, signing and updates | Not started |
+| M5 | Platform foundations ([ADR-PLAT-001](docs/adr/ADR-PLAT-001.md)): context engine and metrics, selective retrieval, plans | In progress: context engine, per-task usage and the offline benchmark are implemented; search and line-range reads, and plans, are next |
+| M6–M8 | Sessions and checkpoints, skills; sub-agents and goal-driven runs; MCP host and plugins | Not started (sub-agents, unattended continuation, MCP and plugins each need approval of a specific decision in the ADR) |
 
 See the [roadmap](docs/ROADMAP.md) for the plan and the [execution log](docs/EXECUTION.md) for how each change was verified.
 
@@ -143,6 +146,7 @@ Run each command as `node .tools/pnpm/bin/pnpm.cjs <command>`:
 | `package` | Builds the NSIS installer into `dist/installers/` |
 | `test:smoke` | Silently installs into `.cache`, checks start, restart and recovery after a forced kill, then silently uninstalls |
 | `verify:agent` | Checks M1–M4 and per-platform SEC-W01 status against the committed runner evidence |
+| `bench:agent` | Offline benchmark: control-plane overhead per turn, read-tool latency, request growth over a scripted task, and a cost model of the context policy (no real model is called) |
 
 ## Documentation
 

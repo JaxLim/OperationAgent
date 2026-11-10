@@ -1,3 +1,4 @@
+import { summarizeTaskUsage } from '@operation-agent/contracts';
 import type { TaskEvent, TaskSnapshot } from '@operation-agent/contracts';
 import { useLocale, useT } from '../locale';
 import { actions, useStore } from '../state';
@@ -85,6 +86,25 @@ function EventEntry({ event }: { event: TaskEvent }) {
   );
 }
 
+/** What the task has used so far, computed from its committed turn and tool events; shown only once a turn exists. */
+function TaskUsage({ events }: { events: readonly TaskEvent[] }) {
+  const t = useT(); const locale = useLocale();
+  const usage = summarizeTaskUsage(events);
+  if (!usage.turns) return null;
+  const count = (value: number): string => value.toLocaleString(locale);
+  const seconds = (milliseconds: number): string => `${(milliseconds / 1000).toFixed(1)}s`;
+  const items = [
+    t('taskUsage.turns', { turns: count(usage.turns), calls: count(usage.toolCalls) }),
+    usage.cacheHitRatio === null ? t('taskUsage.prompt', { tokens: count(usage.promptTokens) })
+      : t('taskUsage.promptCached', { tokens: count(usage.promptTokens), percent: Math.round(usage.cacheHitRatio * 100) }),
+    t('taskUsage.output', { tokens: count(usage.outputTokens) }),
+    ...(usage.medianTtftMs !== null ? [t('taskUsage.time', { model: seconds(usage.modelMs), first: seconds(usage.medianTtftMs), tools: seconds(usage.toolMs) })] : []),
+    ...(usage.compactions > 0 ? [t('taskUsage.summarized', { compactions: usage.compactions })] : []),
+    ...(usage.contextManaged === false ? [t('taskUsage.unmanaged')] : []),
+  ];
+  return <p className="task-usage" data-task-usage aria-label={t('taskUsage.label')}>{items.map((item, index) => <span key={index} className="meta-item mono">{item}</span>)}</p>;
+}
+
 export function TaskDetail({ task }: { task: TaskSnapshot }) {
   const t = useT(); const locale = useLocale();
   const view = useStore(s => s.taskViews[task.id]);
@@ -123,6 +143,7 @@ export function TaskDetail({ task }: { task: TaskSnapshot }) {
           </div><IconLock size={13} /></div>
         )}
         {agentTask && <Conversation task={task} />}
+        {agentTask && <TaskUsage events={events} />}
         {agentTask
           ? <details className="activity"><summary>{t('conv.activity', { count: events.length })}</summary>
               <div className="timeline" aria-label={t('task.eventsLabel')}>{events.map(event => <EventEntry key={event.eventId} event={event} />)}</div></details>
