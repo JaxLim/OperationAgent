@@ -26,6 +26,33 @@
     "M3": "not-started",
     "M4": "not-started"
   },
+  "platform": {
+    "adr": "docs/adr/ADR-PLAT-001.md",
+    "authorizedMilestones": [
+      "M5",
+      "M6",
+      "M7",
+      "M8"
+    ],
+    "authorization": {
+      "kind": "user-message",
+      "date": "2026-11-10",
+      "quotes": [
+        "I want you to take full ownership of the continued development of OperationAgent, with the long-term ambition of building a world-class, production-grade autonomous AI agent platform comparable to the best capabilities of OpenAI Codex, Claude Code, and other leading agent systems.",
+        "Establish a technically realistic architecture and a prioritized development roadmap.",
+        "Then implement the roadmap yourself, incrementally, with real working functionality rather than prototypes, mock implementations, or settings-only features.",
+        "Manage branches, pull requests, CI failures, code reviews, and merges independently whenever checks and safety requirements are satisfied.",
+        "Autonomous execution must remain subject to appropriate user approvals and security boundaries."
+      ]
+    },
+    "milestones": {
+      "M5": "not-started",
+      "M6": "not-started",
+      "M7": "blocked",
+      "M8": "blocked"
+    },
+    "approvedDecisions": []
+  },
   "secW01": {
     "win32-x64": "PASS",
     "darwin-arm64": "NOT_RUN",
