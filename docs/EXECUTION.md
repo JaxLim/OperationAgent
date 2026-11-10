@@ -619,6 +619,12 @@ PR #15 评审修正（2026-11-10）：
 - Codex P1：原生创建失败（`WORKER_CREATION_CLEANUP_UNCONFIRMED`）或握手失败且清理未确认时，supervisor 回到 idle，可能在旧进程/profile/ACL 未确认清理时再次启动。修正：启动失败的错误携带清理结果，未确认则 supervisor 永久不可用（`CLEANUP_UNCONFIRMED`），不再尝试启动；清理已确认的失败仍可重试。同时 agent 会话自己启动心跳，launcher 不再为工厂会话重复启动。
 - 新增测试：原生创建失败与握手失败（关闭未确认）后拒绝一切启动且不再尝试，握手失败但清理已确认时保持可重试。`check:engineering` 九项退出 0，**152/152**。
 
+PR #15 CI 修正（2026-11-10）：
+- 现象：`f134b3c` 的 Windows runner 上 `agent-runtime.test.mjs` 失败，任务 COMPLETED 但 `list_directory`、`read_file` 均为 `failed`（上一提交 `f458b3a` 通过）。
+- 根因（测试缺陷，非产品缺陷）：CI 步骤用 Git Bash 启动，环境变量拼写为 `SYSTEMROOT`。测试按**精确名称**过滤 `Object.keys(process.env)`，`SYSTEMROOT` 不在 `SIDECAR_ENVIRONMENT`（`SystemRoot`）中而被删除；Read Adapter 子进程的环境因此没有 `SystemRoot`，Node 子进程无法启动，返回 `ADAPTER_FAILED`。Main 的做法是逐个按名称读取 `process.env[key]`（Windows 上不区分大小写）再以契约拼写写入，不受影响。
+- 本机复现：在 Git Bash 下对同一 Read Adapter 用旧裁剪方式得到 `ADAPTER_FAILED`，改为 Main 的构造方式后得到 `ok`。
+- 修正：测试按 Main 的方式构造侧车环境（逐个读取、清空、按契约拼写写回），并断言 `SystemRoot` 与 `LOCALAPPDATA` 存在。隔离运行本身仍只能在一次性 runner 上验证。
+
 ## M2 第七切片：对话界面（2026-11-10）
 
 授权：同上。本切片让 Agent 在界面中真正可用：在输入框提交问题后，任务视图显示提问、每一轮的回答（Markdown 渲染）、模型读取或列出的文件、正在生成的内容和最终结果，运行中可随时停止。
