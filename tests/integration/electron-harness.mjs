@@ -83,6 +83,30 @@ process.on('message', async message => {
         })()`);
         break;
       }
+      case 'conversation-ui': {
+        // M2 conversation view of a committed agent task, through the real Preload → Main → Express message and event reads.
+        const { taskId, answers } = message.input;
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const wait = async (check, ms = 15000) => { const end = Date.now() + ms;
+            while (Date.now() < end) { const found = check(); if (found) return found; await new Promise(done => setTimeout(done, 50)); }
+            throw new Error('UI_TIMEOUT'); };
+          const id = ${JSON.stringify(taskId)};
+          (await wait(() => document.querySelector('.task-row[data-task-id="' + id + '"]'))).click();
+          const section = await wait(() => document.querySelector('section[data-task-id="' + id + '"] .conversation'));
+          await wait(() => section.querySelectorAll('.conv-answer').length >= ${JSON.stringify(answers)} && section.querySelector('.conv-end'));
+          const detail = document.querySelector('section[data-task-id="' + id + '"]');
+          return { prompt: section.querySelector('.conv-prompt')?.textContent ?? null,
+            answers: [...section.querySelectorAll('.conv-answer')].map(node => node.textContent),
+            code: [...section.querySelectorAll('.md-pre code')].map(node => node.textContent),
+            headings: section.querySelectorAll('.md-heading').length, listItems: section.querySelectorAll('.md-list li').length,
+            tools: [...section.querySelectorAll('.conv-tool')].map(node => node.textContent),
+            images: section.querySelectorAll('img').length, scripts: section.querySelectorAll('script').length, pwned: window.__pwned !== undefined,
+            end: section.querySelector('.conv-end')?.textContent ?? null,
+            stop: Boolean([...detail.querySelectorAll('.task-actions button')].find(button => /Stop/.test(button.textContent))),
+            activity: detail.querySelector('details.activity summary')?.textContent ?? null };
+        })()`);
+        break;
+      }
       case 'model-api': {
         // M2 model settings through the real Preload → Main → Express → Crypto Bridge path.
         value = await host.window.webContents.executeJavaScript(`(async () => {

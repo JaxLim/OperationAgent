@@ -10,6 +10,8 @@ export const CONTROL_POLICY = Object.freeze({ handshakeMs: 10_000, requestMs: 2_
 export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '/v1/heartbeat', records: '/v1/smoke-records', taskStart: '/v1/tasks/start',
   overview: '/v1/overview', settings: '/v1/settings', projects: '/v1/projects', projectRemove: '/v1/projects/remove', runs: '/v1/runs',
   tasks: '/v1/tasks', taskSnapshot: '/v1/tasks/snapshot', taskEvents: '/v1/tasks/events',
+  // M2 conversation: committed prompt/answer text, transient live deltas, and the user's Stop.
+  taskMessages: '/v1/tasks/messages', taskLive: '/v1/tasks/live', taskStop: '/v1/tasks/stop',
   // M2 model settings: fixed operations only; there is no generic provider proxy.
   modelSettings: '/v1/model/settings', modelCredential: '/v1/model/credential', modelCredentialClear: '/v1/model/credential/clear',
   modelTest: '/v1/model/test',

@@ -2,7 +2,8 @@ import type { TaskEvent, TaskSnapshot } from '@operation-agent/contracts';
 import { useLocale, useT } from '../locale';
 import { actions, useStore } from '../state';
 import { TASK_STATE, bytes, dateTime, relativeTime, shortId, stateLabel } from './format';
-import { IconAlert, IconChat, IconChevronRight, IconClock, IconEye, IconListTree, IconLock, IconRetry, IconSparkle, IconTerminal } from './Icons';
+import { IconAlert, IconChat, IconChevronRight, IconClock, IconEye, IconListTree, IconLock, IconRetry, IconSparkle, IconStop, IconTerminal } from './Icons';
+import { Conversation } from './Conversation';
 
 // Read-only view of one task's committed log. State comes from Express; this view never infers success.
 
@@ -87,7 +88,10 @@ function EventEntry({ event }: { event: TaskEvent }) {
 export function TaskDetail({ task }: { task: TaskSnapshot }) {
   const t = useT(); const locale = useLocale();
   const view = useStore(s => s.taskViews[task.id]);
+  const stopping = useStore(s => s.conversations[task.id]?.stopping ?? false);
   const events = view?.events ?? [];
+  const stoppable = task.state === 'QUEUED' || task.state === 'RUNNING' || task.state === 'STOPPING';
+  const agentTask = events.some(event => event.type === 'user_message');
   const last = [...events].reverse().find(event => event.type === 'task_state_changed');
   const unknown = last?.type === 'task_state_changed' && last.payload.sideEffects === 'UNKNOWN';
   return (
@@ -105,6 +109,8 @@ export function TaskDetail({ task }: { task: TaskSnapshot }) {
           </div>
         </div>
         <div className="task-actions">
+          {stoppable && <button className="btn btn-xs" disabled={stopping || task.state === 'STOPPING'} onClick={() => void actions.stopTask(task.id)}
+            title={t('conv.stopHint')}><IconStop size={12} /> {task.state === 'STOPPING' || stopping ? t('conv.stopping') : t('conv.stop')}</button>}
           {view?.sync === 'error' && <button className="btn btn-xs" onClick={() => void actions.resyncTask(task.id)}><IconRetry size={12} /> {t('task.resync')}</button>}
           <button className="btn btn-xs" onClick={() => actions.selectTask(null)}>{t('common.close')}</button>
         </div>
@@ -113,10 +119,14 @@ export function TaskDetail({ task }: { task: TaskSnapshot }) {
         {task.state === 'INTERRUPTED' && (
           <div className="notice tone-notice-warn task-banner"><IconAlert size={14} /><div>
             <div className="notice-text">{t(unknown ? 'task.interruptedUnknown' : 'task.interrupted')}</div>
-            <div className="notice-detail">{t('task.interruptedText')} <span className="mono">WORKER_ISOLATION_UNAVAILABLE</span></div>
+            <div className="notice-detail">{t('task.interruptedText')}</div>
           </div><IconLock size={13} /></div>
         )}
-        <div className="timeline" aria-label={t('task.eventsLabel')}>{events.map(event => <EventEntry key={event.eventId} event={event} />)}</div>
+        {agentTask && <Conversation task={task} />}
+        {agentTask
+          ? <details className="activity"><summary>{t('conv.activity', { count: events.length })}</summary>
+              <div className="timeline" aria-label={t('task.eventsLabel')}>{events.map(event => <EventEntry key={event.eventId} event={event} />)}</div></details>
+          : <div className="timeline" aria-label={t('task.eventsLabel')}>{events.map(event => <EventEntry key={event.eventId} event={event} />)}</div>}
         {view?.sync === 'syncing' && events.length === 0 && <p className="muted small">{t('task.loading')}</p>}
       </div></div>
     </section>

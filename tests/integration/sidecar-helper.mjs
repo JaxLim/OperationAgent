@@ -4,7 +4,7 @@ import { request } from 'node:http';
 import { resolve } from 'node:path';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { CONTROL_ROUTES, PROTOCOL_VERSION, SidecarReadySchema, requestProof, responseProof } from '../../packages/contracts/dist/index.js';
+import { CONTROL_POLICY, CONTROL_ROUTES, PROTOCOL_VERSION, SidecarReadySchema, requestProof, responseProof } from '../../packages/contracts/dist/index.js';
 
 export const root = resolve(import.meta.dirname, '../..');
 // OA_SIDECAR_STAGE lets the installer smoke test run this suite against an installed resources/sidecar.
@@ -32,7 +32,7 @@ export function httpCall(port, bootstrap, method = 'GET', path = CONTROL_ROUTES.
     'x-oa-signature': createHmac('sha256', bootstrap.token).update(requestProof(auth, method, path, body)).digest('hex'), ...overrides.headers };
   return new Promise((resolve, reject) => {
     const req = request({ hostname: '127.0.0.1', port, method, path, headers, timeout: 2000, agent: false }, res => {
-      let result = ''; res.setEncoding('utf8'); res.on('data', chunk => { result += chunk; if (result.length > 65536) req.destroy(new Error('RESPONSE_LIMIT')); });
+      let result = ''; res.setEncoding('utf8'); res.on('data', chunk => { result += chunk; if (Buffer.byteLength(result) > CONTROL_POLICY.maxResponseBytes) req.destroy(new Error('RESPONSE_LIMIT')); });
       res.on('end', () => {
         const expected = createHmac('sha256', bootstrap.token).update(responseProof(auth, res.statusCode, result)).digest('hex');
         const proof = res.headers['x-oa-proof'];

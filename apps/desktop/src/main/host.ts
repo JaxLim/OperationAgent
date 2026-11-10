@@ -8,7 +8,8 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, CO
   IPC_CHANNELS, ProjectAddResultSchema, ProjectInputSchema, ProjectListSchema, ProjectRefSchema, ProjectSchema, ProviderKeyInputSchema,
   ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema, ProviderOverviewViewSchema, ProviderRefSchema, ProviderTestResultSchema,
   SmokeBatchSchema, THEME_CANVAS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema,
-  TaskStartRefusalSchema, TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS } from '@operation-agent/contracts';
+  TaskStartRefusalSchema, TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS, TASK_VIEW_LIMITS, TaskLivePageSchema, TaskLiveQuerySchema,
+  TaskMessagePageSchema, TaskMessagesQuerySchema } from '@operation-agent/contracts';
 import type { DesktopStatus, ModelSettings, ModelSettingsView, ProjectAddResult, ProviderOverview, ProviderOverviewView, TaskStartResult, ThemeId,
   WorkbenchSettings } from '@operation-agent/contracts';
 import { SidecarSupervisor } from './sidecar.js';
@@ -132,7 +133,7 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   register(IPC_CHANNELS.removeProject, async input => supervisor.call('POST', CONTROL_ROUTES.projectRemove, ProjectListSchema, ProjectRefSchema.parse(input)));
   register(IPC_CHANNELS.listRuns, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.runs, ControlRunListSchema); });
   register(IPC_CHANNELS.startTask, async (input): Promise<TaskStartResult> => {
-    try { return await supervisor.call('POST', CONTROL_ROUTES.taskStart, TaskStartResultSchema, TaskStartInputSchema.parse(input)); }
+    try { return await supervisor.call('POST', CONTROL_ROUTES.taskStart, TaskStartResultSchema, TaskStartInputSchema.parse(input), TASK_VIEW_LIMITS.startRequestMs); }
     catch (error) {
       // Refusals are answers, not failures: the Renderer shows why nothing was started.
       const refusal = TaskStartRefusalSchema.safeParse(error instanceof Error ? error.message : '');
@@ -142,6 +143,12 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   });
   register(IPC_CHANNELS.listTasks, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.tasks, TaskListSchema); });
   register(IPC_CHANNELS.getTask, async input => supervisor.call('POST', CONTROL_ROUTES.taskSnapshot, TaskSnapshotSchema, TaskRefSchema.parse(input)));
+  register(IPC_CHANNELS.listTaskMessages, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.taskMessages, TaskMessagePageSchema, TaskMessagesQuerySchema.parse(input)));
+  register(IPC_CHANNELS.readTaskLive, async input => supervisor.call('POST', CONTROL_ROUTES.taskLive, TaskLivePageSchema, TaskLiveQuerySchema.parse(input)));
+  // Stop waits for the Worker to confirm within the configured grace period (at most 30 s).
+  register(IPC_CHANNELS.stopTask, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.taskStop, TaskSnapshotSchema, TaskRefSchema.parse(input), TASK_VIEW_LIMITS.stopRequestMs));
   register(IPC_CHANNELS.listTaskEvents, async input =>
     supervisor.call('POST', CONTROL_ROUTES.taskEvents, TaskEventPageSchema, TaskEventsQuerySchema.parse(input)));
   register(IPC_CHANNELS.getModelSettings, async input => { empty(input); return modelView(await supervisor.call('GET', CONTROL_ROUTES.modelSettings, ModelSettingsSchema)); });

@@ -91,3 +91,23 @@ export const TaskLivePageSchema = z.strictObject({
   done: z.boolean(),
 }).refine(page => page.deltas.every((item, index) => item.seq > page.afterSeq && (index === 0 || item.seq > page.deltas[index - 1]!.seq)), 'PAGE_UNORDERED');
 export type TaskLivePage = z.infer<typeof TaskLivePageSchema>;
+
+// Conversation reads and Stop (M2). Pages are byte-budgeted to stay inside one control-plane response; a single message
+// larger than the view budget is shown clipped, with `textTruncated`, and never split across pages.
+export const TASK_VIEW_LIMITS = Object.freeze({ maxMessagePageBytes: 150_000, maxMessageViewBytes: 140_000, maxLivePageBytes: 150_000,
+  /** Starting may launch the isolated Worker; Stop may wait for the whole grace period (at most 30 s). */
+  startRequestMs: 45_000, stopRequestMs: 40_000 });
+export const TaskMessagesQuerySchema = z.strictObject({ taskId: z.uuid(), after: z.number().int().nonnegative().max(TASK_MESSAGE_LIMITS.maxMessages) });
+export type TaskMessagesQuery = z.infer<typeof TaskMessagesQuerySchema>;
+export const TaskMessageViewSchema = TaskMessageSchema.extend({
+  text: z.string().refine(value => utf8ByteLength(value) <= TASK_VIEW_LIMITS.maxMessageViewBytes, 'MESSAGE_VIEW_TOO_LARGE'),
+  textTruncated: z.boolean(),
+});
+export type TaskMessageView = z.infer<typeof TaskMessageViewSchema>;
+export const TaskMessagePageSchema = z.strictObject({ taskId: z.uuid(), after: z.number().int().nonnegative(),
+  messages: z.array(TaskMessageViewSchema).max(TASK_MESSAGE_LIMITS.maxMessages), hasMore: z.boolean() })
+  .refine(page => !page.hasMore || page.messages.length > 0, 'PAGE_NO_PROGRESS');
+export type TaskMessagePage = z.infer<typeof TaskMessagePageSchema>;
+export const TaskLiveQuerySchema = z.strictObject({ taskId: z.uuid(), afterSeq: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) });
+export type TaskLiveQuery = z.infer<typeof TaskLiveQuerySchema>;
+export const TaskStopRefusalSchema = z.enum(['NOT_FOUND', 'INVALID_TRANSITION', 'WORKER_ISOLATION_UNAVAILABLE']);

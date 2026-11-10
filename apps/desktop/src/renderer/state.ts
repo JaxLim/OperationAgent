@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { catchUpTaskEvents } from '@operation-agent/contracts';
 import type { Agent, AgentSave, ClaudeModel, ControlOverview, ControlRun, CredentialSlot, DesktopApi, DesktopStatus, LinkedProvider, McpServer, McpServerSave,
-  ModelSettingsView, ModelTestResult, Project, ProviderModelList, ProviderOverviewView, ProviderTestResult, TaskEvent, TaskSnapshot, TaskState,
-  WorkbenchSettings } from '@operation-agent/contracts';
+  ModelSettingsView, ModelTestResult, Project, ProviderModelList, ProviderOverviewView, ProviderTestResult, TaskEvent, TaskMessageView, TaskSnapshot,
+  TaskState, WorkbenchSettings } from '@operation-agent/contracts';
 import { resolveLocale, translate } from './i18n';
 import type { MessageKey, Vars } from './i18n';
 
@@ -29,6 +29,19 @@ export interface TaskView {
   /** When the last successful catch-up finished (diagnostic only). */
   readonly syncedAt: number;
 }
+/** What the model is producing right now for one turn: transient stream deltas, replaced by the committed answer. */
+export interface LiveTurn { readonly turn: number; readonly text: string; readonly thinking: string; readonly tools: readonly { id: string; name: string }[] }
+/**
+ * One task's conversation as this window shows it: the committed prompt and answers (from Express), and the stream
+ * of the turn in progress. `gap` means some live deltas were missed; the committed answer is still complete.
+ */
+export interface ConversationView {
+  readonly messages: readonly TaskMessageView[];
+  readonly liveSeq: number;
+  readonly live: LiveTurn | null;
+  readonly gap: boolean;
+  readonly stopping: boolean;
+}
 export interface AppState {
   connection: Connection;
   desktop: DesktopStatus | null;
@@ -41,6 +54,7 @@ export interface AppState {
   loaded: boolean;
   tasks: TaskSnapshot[];
   taskViews: Readonly<Record<string, TaskView>>;
+  conversations: Readonly<Record<string, ConversationView>>;
   selectedTaskId: string | null;
   /** Model choice and credential status as Express reports them; never key material. */
   model: ModelSettingsView | null;
@@ -54,7 +68,7 @@ export interface AppState {
 }
 
 let state: AppState = { connection: 'connecting', desktop: null, overview: null, settings: null, projects: [], runs: [],
-  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' },
+  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, conversations: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' },
   providers: null, agents: null, mcpServers: null, saveStatus: { state: 'idle' } };
 const listeners = new Set<() => void>();
 function set(next: Partial<AppState>): void { state = { ...state, ...next }; for (const listener of listeners) listener(); }
@@ -134,7 +148,55 @@ async function loadTasks(): Promise<void> {
   const { tasks } = await api().listTasks();
   set({ tasks });
   const selected = tasks.find(task => task.id === state.selectedTaskId);
-  if (selected && selected.lastSeq !== (state.taskViews[selected.id]?.appliedSeq ?? -1)) await syncTask(selected.id);
+  if (selected && selected.lastSeq !== (state.taskViews[selected.id]?.appliedSeq ?? -1)) { await syncTask(selected.id); await syncMessages(selected.id); }
+}
+
+const EMPTY_CONVERSATION: ConversationView = { messages: [], liveSeq: 0, live: null, gap: false, stopping: false };
+const ACTIVE: readonly TaskState[] = ['CREATED', 'QUEUED', 'RUNNING', 'STOPPING'];
+const MAX_LIVE_CHARS = 200_000;
+const putConversation = (taskId: string, patch: Partial<ConversationView>): void =>
+  set({ conversations: { ...state.conversations, [taskId]: { ...(state.conversations[taskId] ?? EMPTY_CONVERSATION), ...patch } } });
+const messageSync = new Set<string>();
+/** Pulls committed messages after the ones already shown; a turn's live stream gives way to its committed answer. */
+async function syncMessages(taskId: string): Promise<void> {
+  if (messageSync.has(taskId)) return;
+  messageSync.add(taskId);
+  try {
+    for (let page = 0; page < 20; page++) {
+      const current = state.conversations[taskId] ?? EMPTY_CONVERSATION;
+      const result = await api().listTaskMessages({ taskId, after: current.messages.length });
+      const messages = [...current.messages, ...result.messages];
+      const answered = Math.max(0, ...messages.filter(message => message.role === 'assistant').map(message => message.turn));
+      const turns = (state.taskViews[taskId]?.events ?? []).flatMap(event => event.type === 'assistant_turn' ? [event.payload.turn] : []);
+      const committed = Math.max(answered, ...turns, 0);
+      putConversation(taskId, { messages, live: current.live && current.live.turn <= committed ? null : current.live });
+      if (!result.hasMore) return;
+    }
+  } catch { /* The next poll retries; the committed log stays the source of truth. */ }
+  finally { messageSync.delete(taskId); }
+}
+let liveBusy = false;
+/** Reads stream deltas for the selected task while it runs; a new turn or a tool call also refreshes the committed views. */
+async function pollLive(): Promise<void> {
+  const taskId = state.selectedTaskId;
+  const task = state.tasks.find(item => item.id === taskId);
+  if (liveBusy || !taskId || !task || !ACTIVE.includes(task.state) || state.connection !== 'ready') return;
+  liveBusy = true;
+  try {
+    const current = state.conversations[taskId] ?? EMPTY_CONVERSATION;
+    const page = await api().readTaskLive({ taskId, afterSeq: current.liveSeq });
+    let live = current.live; let refresh = page.done && page.deltas.length === 0;
+    for (const { turn, delta } of page.deltas) {
+      if (!live || turn > live.turn) { live = { turn, text: '', thinking: '', tools: [] }; refresh = true; }
+      if (turn < live.turn) continue;
+      if (delta.kind === 'text') live = { ...live, text: (live.text + delta.text).slice(-MAX_LIVE_CHARS) };
+      else if (delta.kind === 'thinking') live = { ...live, thinking: (live.thinking + delta.text).slice(-MAX_LIVE_CHARS) };
+      else { live = { ...live, tools: [...live.tools, { id: delta.id, name: delta.name }].slice(-64) }; refresh = true; }
+    }
+    putConversation(taskId, { live, liveSeq: page.nextSeq, gap: current.gap || page.gap });
+    if (refresh) { await syncTask(taskId); await syncMessages(taskId); }
+  } catch { /* Live deltas are best effort; the committed views are polled independently. */ }
+  finally { liveBusy = false; }
 }
 
 let lastRunId: string | null = null;
@@ -166,14 +228,28 @@ async function poll(): Promise<void> {
   } catch { if (state.connection === 'ready') set({ connection: 'unavailable' }); }
   finally { polling = false; }
 }
-export function startPolling(): void { void poll(); setInterval(() => { void poll(); }, 2_000); }
+export function startPolling(): void {
+  void poll(); setInterval(() => { void poll(); }, 2_000);
+  // Fast, cheap reads of the stream only while the selected task is active.
+  setInterval(() => { void pollLive(); }, 350);
+}
 
 /** Bumped on every model or key change; a connection test result only lands if nothing changed while it ran. */
 let modelRevision = 0;
 export const actions = {
   selectTask(taskId: string | null): void {
     set({ selectedTaskId: taskId });
-    if (taskId) void syncTask(taskId);
+    if (taskId) void syncTask(taskId).then(() => syncMessages(taskId));
+  },
+  /** Asks Express to stop the task; the view then follows the committed state (STOPPED, or INTERRUPTED if unconfirmed). */
+  async stopTask(taskId: string): Promise<void> {
+    if (state.conversations[taskId]?.stopping) return;
+    putConversation(taskId, { stopping: true });
+    try {
+      const snapshot = await api().stopTask({ taskId });
+      set({ tasks: state.tasks.map(task => task.id === taskId ? snapshot : task) });
+    } catch (error) { notify('danger', tr('notice.stopFailed', { code: errorCode(error) })); }
+    finally { putConversation(taskId, { stopping: false }); await syncTask(taskId); await syncMessages(taskId); }
   },
   async resyncTask(taskId: string): Promise<void> {
     set({ taskViews: { ...state.taskViews, [taskId]: EMPTY_VIEW } });
