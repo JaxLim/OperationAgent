@@ -18,6 +18,7 @@ import { createToolRouter } from '../../apps/server/dist/tools/router.js';
 import { LiveFeed } from '../../apps/server/dist/agent/live.js';
 import { TaskRunner } from '../../apps/server/dist/agent/runner.js';
 import { createAgentSession } from '../../apps/server/dist/agent/host.js';
+import { formatListResult, formatReadResult } from '../../apps/server/dist/agent/tool-results.js';
 import { runAgentRuntime } from '../../apps/agent-worker/dist/runtime.js';
 import type { AgentResult } from '../../apps/agent-worker/dist/agent.js';
 
@@ -83,7 +84,7 @@ class Inbox {
 }
 
 interface Harness { store: Store; runner: TaskRunner; projectId: string; root: string; base: string; live: LiveFeed; finished: Map<string, AgentResult>;
-  crash(): void; workerDone: Promise<void> }
+  crash(): void; workerDone: Promise<void>; framesToWorker(): number }
 async function withAgent(endpoint: string, run: (harness: Harness) => Promise<void>, options: { configured?: boolean } = {}): Promise<void> {
   const cache = resolve('.cache'); mkdirSync(cache, { recursive: true });
   const base = mkdtempSync(resolve(cache, 'agent-loop-'));
@@ -110,10 +111,11 @@ async function withAgent(endpoint: string, run: (harness: Harness) => Promise<vo
       close: async () => { toWorker.close(); return true; },
     }, clock, newId: () => randomUUID(), onFinished: (taskId, result) => finished.set(taskId, result) });
   void toExpress;
-  const agent = createAgentSession({ identity, clock, runner, transport: { write: async frame => { if (!crashed) toWorker.push(frame.slice()); }, close: () => toWorker.close() } });
+  let frames = 0;
+  const agent = createAgentSession({ identity, clock, runner, transport: { write: async frame => { if (!crashed) { frames++; toWorker.push(frame.slice()); } }, close: () => toWorker.close() } });
   express.session = agent.session;
   await agent.handshake('b'.repeat(64));
-  const harness: Harness = { store, runner, projectId, root, base, live, finished, workerDone,
+  const harness: Harness = { store, runner, projectId, root, base, live, finished, workerDone, framesToWorker: () => frames,
     crash: () => { crashed = true; toWorker.close(); agent.session.disconnect(); } };
   try { await run(harness); }
   finally {
@@ -177,26 +179,51 @@ test('agent loop: a read-only task explores, reads, answers and completes; Expre
 });
 
 test('agent loop: a Worker can neither forge tool calls nor reach another task, turn or tool', async () => {
-  // Turn 1 asks for a tool; turn 2 then streams forever, so the task is known to sit in turn 2 with no pending calls.
+  // Turn 1 asks for a tool; turn 2 then streams forever, so the task is known to sit in a running turn 2.
   await withProvider([res => sse(res, [start, ...tool(0, 'toolu_one', 'read_file', { path: 'README.md' }), ...stop('tool_use')]),
     res => sse(res, [start, ...text(0, 'Still working')], false)], async (endpoint, bodies) => {
     await withAgent(endpoint, async ({ store, runner, projectId }) => {
       const reject = (method: string, params: unknown) => runner.handle({ jsonrpc: '2.0', protocolVersion: PROTOCOL_VERSION,
         expressRunId: randomUUID(), workerRunId: randomUUID(), id: randomUUID(), requestId: randomUUID(), role: 'worker', method, params } as RpcRequest);
       assert.equal(await reject('model.turn', { taskId: randomUUID(), turn: 1 }), null, 'unknown task');
-      const task = await runner.start(projectId, 'Read the README', randomUUID());
+      const requestId = randomUUID();
+      const task = await runner.start(projectId, 'Read the README', requestId);
       await until(() => bodies.length === 2);
       const auditBefore = store.listToolAudit().length;
       assert.equal(await reject('model.turn', { taskId: task.id, turn: 2 }), null, 'a turn already requested cannot be requested again');
+      assert.equal(await reject('model.turn', { taskId: task.id, turn: 3 }), null, 'no second turn while one is in flight');
       assert.equal(await reject('model.turn', { taskId: task.id, turn: 7 }), null, 'turns cannot be skipped');
       assert.equal(await reject('tool.call', { taskId: task.id, turn: 1, toolCallId: 'toolu_one' }), null, 'a past turn is refused');
       assert.equal(await reject('tool.call', { taskId: task.id, turn: 9, toolCallId: 'toolu_one' }), null, 'a future turn is refused');
-      assert.deepEqual(await reject('tool.call', { taskId: task.id, turn: 2, toolCallId: 'toolu_forged' }),
-        { kind: 'tool.call', status: 'skipped', summary: 'Unknown tool call' }, 'a call the model never made is never run');
+      assert.equal(await reject('tool.call', { taskId: task.id, turn: 2, toolCallId: 'toolu_forged' }), null, 'no tool runs while a model turn runs');
       assert.equal(store.listToolAudit().length, auditBefore, 'nothing reached the Read Adapter');
+      assert.equal(bodies.length, 2, 'no second model request was made');
+      // A retried start returns the committed task even while the runner is busy; a reused id for another project is refused.
+      assert.equal((await runner.start(projectId, 'Read the README', requestId)).id, task.id);
+      const other = store.addProject({ name: 'other', path: 'C:\\work\\other' }).id;
+      await assert.rejects(runner.start(other, 'Read the README', requestId), /VALIDATION_ERROR/);
+      await assert.rejects(runner.start(projectId, 'Another task', randomUUID()), /AGENT_BUSY/);
       assert.equal((await runner.stop(task.id)).state, 'STOPPED');
     });
   });
+});
+
+test('agent session: heartbeats keep an idle session alive; tool summaries always fit the reply contract', async () => {
+  await withProvider([res => sse(res, [start, ...text(0, 'ok'), ...stop('end_turn')])], async endpoint => {
+    await withAgent(endpoint, async ({ framesToWorker }) => {
+      const before = framesToWorker();
+      await new Promise(resolve => setTimeout(resolve, 2_300));
+      assert.ok(framesToWorker() - before >= 2, 'Express keeps probing the Worker while nothing else happens');
+    });
+  });
+  const long = Array.from({ length: 60 }, () => 'directory').join('/') + '/file.ts';
+  const read = formatReadResult({ status: 'ok', path: long, content: 'x', bytes: 1, size: 1, truncated: false, sha256: 'a'.repeat(64) }, long);
+  const listed = formatListResult({ status: 'ok', path: long, entries: [], truncated: false, unlisted: [] }, long);
+  const refused = formatReadResult({ status: 'refused', code: 'NOT_FOUND' }, long);
+  for (const summary of [read.summary, listed.summary, refused.summary]) {
+    assert.ok(summary.length <= 256, summary);
+    assert.match(summary, /file\.ts/, 'the file name stays visible');
+  }
 });
 
 test('agent loop: Stop aborts a streaming turn, the loop confirms, and the task is STOPPED with cleanup confirmed', async () => {
