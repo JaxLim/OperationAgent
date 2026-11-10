@@ -65,7 +65,7 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
   assert.equal(first.renderer.health.controlPlaneReady, true); assert.equal(first.renderer.health.agentReady, false);
   assert.equal(first.renderer.node, 'undefined'); assert.equal(first.renderer.require, 'undefined');
   assert.deepEqual(first.renderer.keys.sort(), ['getFoundationInfo', 'getControlPlaneHealth', 'listSmokeRecords', 'writeSmokeRecords', 'getDesktopStatus',
-    'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask',
+    'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask', 'stopTask', 'listTaskMessages', 'readTaskLive',
     'listTasks', 'getTask', 'listTaskEvents', 'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
     'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel',
     'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'].sort());
@@ -220,6 +220,47 @@ test('the Workbench lists committed tasks, replays their events and resyncs afte
   // The new Express instance serves the same committed log; the view resumes from its cursor.
   const after = await host.command('task-ui', { taskId: running, entries: 4, fresh: true });
   assert.deepEqual([after.entries, after.rows], [4, 2]); assert.match(after.meta, /4 ?\/ ?4 events/);
+});
+
+test('M2 conversation: a committed agent task shows its prompt, Markdown answers, tool calls and outcome; model text stays inert', { timeout: 90_000 }, async t => {
+  const create = await fixture(t);
+  const seed = openStore(resolve(create.directory, 'database'), randomUUID());
+  const projectId = seed.addProject({ name: 'agent', path: 'C:/OperationAgentM2/agent' }).id;
+  const task = seed.createTask(projectId, randomUUID()).task.id;
+  const step = to => seed.transitionTask(task, to, { requestId: randomUUID(), sideEffects: to === 'COMPLETED' ? 'VERIFIED' : null,
+    reason: to === 'COMPLETED' ? 'Read-only task: no files were changed' : null });
+  const usage = { inputTokens: 900, outputTokens: 120, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  step('QUEUED');
+  const prompt = seed.addTaskMessage(task, 'user', 0, 'How is this project built?');
+  seed.appendAgentEvent(task, 'user_message', { messageId: prompt.id, chars: 26 });
+  step('RUNNING');
+  const first = seed.addTaskMessage(task, 'assistant', 1, 'Let me look at the layout first.');
+  seed.appendAgentEvent(task, 'assistant_turn', { turn: 1, model: 'claude-sonnet-5-5', messageId: first.id, stopReason: 'tool_use', toolCalls: 2, fallback: false, usage });
+  seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_a', tool: 'list_directory', target: '.', status: 'ok', code: null, size: 12 });
+  seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_b', tool: 'read_file', target: '.env', status: 'refused', code: 'SENSITIVE_PATH', size: null });
+  const answer = ['## Build', '', 'It uses **pnpm** and `tsc -b`:', '', '```bash', 'pnpm install', 'pnpm build', '```', '',
+    '- Lint with `pnpm lint`', '- Test with `pnpm test`', '', 'Injected <img src=x onerror="window.__pwned=1"> stays text.'].join('\n');
+  const second = seed.addTaskMessage(task, 'assistant', 2, answer);
+  seed.appendAgentEvent(task, 'assistant_turn', { turn: 2, model: 'claude-sonnet-5-5', messageId: second.id, stopReason: 'end_turn', toolCalls: 0, fallback: false, usage });
+  step('COMPLETED');
+  seed.close(true);
+
+  const host = await create();
+  const view = await host.command('conversation-ui', { taskId: task, answers: 2 });
+  assert.equal(view.prompt, 'How is this project built?');
+  assert.equal(view.answers.length, 2);
+  assert.match(view.answers[0], /Let me look at the layout first/);
+  assert.deepEqual(view.code, ['pnpm install\npnpm build']);
+  assert.equal(view.headings, 1); assert.equal(view.listItems, 2);
+  assert.equal(view.tools.length, 2);
+  assert.match(view.tools[0], /Listed/); assert.match(view.tools[1], /\.env/); assert.match(view.tools[1], /SENSITIVE_PATH/);
+  assert.match(view.answers[1], /<img src=x onerror=/, 'markup in model output is shown as text');
+  assert.equal(view.images, 0); assert.equal(view.scripts, 0);
+  assert.equal(view.pwned, false, 'no handler from model output ever ran');
+  assert.match(view.end, /Done/); assert.match(view.end, /no files were changed/);
+  assert.equal(view.stop, false, 'a finished task offers no Stop');
+  assert.match(view.activity, /Activity log/);
+  await host.command('capture', `m2/${process.platform}-${process.arch}/conversation.png`);
 });
 
 /** Every file under a directory, for a plaintext scan of everything Electron, Express and SQLite left on disk. */

@@ -3,7 +3,7 @@ import { PROTOCOL_VERSION } from '../version/index.js';
 import type { ControlHealth, SmokeBatch, SmokeRecords } from '../api/index.js';
 import type { ControlOverview, ControlRunList, ProjectList, ProjectRef, TaskStartInput, TaskStartResult, WorkbenchSettings } from '../api/workbench.js';
 import { ProjectSchema } from '../api/workbench.js';
-import type { TaskEventPage, TaskEventsQuery, TaskList, TaskRef } from '../api/tasks.js';
+import type { TaskEventPage, TaskEventsQuery, TaskList, TaskLivePage, TaskLiveQuery, TaskMessagePage, TaskMessagesQuery, TaskRef } from '../api/tasks.js';
 import type { TaskSnapshot } from '../events/task.js';
 import type { ApiKeyInput, ModelChoice, ModelSettingsView, ModelTestResult } from '../api/model.js';
 import type { LinkedProviderRef, ProviderKeyInput, ProviderModelChoice, ProviderModelList, ProviderOverviewView, ProviderRef,
@@ -25,6 +25,7 @@ export const IPC_CHANNELS = Object.freeze({
   getSettings: 'oa:settings-get', saveSettings: 'oa:settings-save', listProjects: 'oa:projects-list',
   addProject: 'oa:projects-add', removeProject: 'oa:projects-remove', listRuns: 'oa:runs-list', startTask: 'oa:tasks-start',
   listTasks: 'oa:tasks-list', getTask: 'oa:tasks-snapshot', listTaskEvents: 'oa:tasks-events',
+  listTaskMessages: 'oa:tasks-messages', readTaskLive: 'oa:tasks-live', stopTask: 'oa:tasks-stop',
   getModelSettings: 'oa:model-settings-get', saveModelChoice: 'oa:model-choice-save', setApiKey: 'oa:model-key-set',
   clearApiKey: 'oa:model-key-clear', testModelConnection: 'oa:model-test',
   getProviders: 'oa:providers-get', setProviderKey: 'oa:provider-key-set', clearProviderKey: 'oa:provider-key-clear',
@@ -70,6 +71,10 @@ export interface DesktopApi {
   listTasks(): Promise<TaskList>;
   getTask(input: TaskRef): Promise<TaskSnapshot>;
   listTaskEvents(input: TaskEventsQuery): Promise<TaskEventPage>;
+  /** M2 conversation: prompt and answer text (never tool results), live stream deltas, and the user's Stop. */
+  listTaskMessages(input: TaskMessagesQuery): Promise<TaskMessagePage>;
+  readTaskLive(input: TaskLiveQuery): Promise<TaskLivePage>;
+  stopTask(input: TaskRef): Promise<TaskSnapshot>;
   /** M2 model settings. A key goes in once and never comes back: replies carry only "configured" and a hint. */
   getModelSettings(): Promise<ModelSettingsView>;
   saveModelChoice(input: ModelChoice): Promise<ModelSettingsView>;

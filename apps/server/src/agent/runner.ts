@@ -77,6 +77,8 @@ export class TaskRunner {
   constructor(private readonly options: TaskRunnerOptions) {}
 
   get busy(): boolean { return this.runs.size > 0; }
+  /** The live delta feed of this runner's tasks (transient; never persisted). */
+  get live(): LiveFeed { return this.options.live; }
   get available(): boolean { return this.link !== undefined; }
   activeTask(): string | null { return this.runs.keys().next().value ?? null; }
 

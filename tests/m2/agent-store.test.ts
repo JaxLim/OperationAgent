@@ -94,6 +94,13 @@ test('live feed: ordered cursors, byte-bounded eviction with an explicit gap, do
   now += TASK_LIVE_LIMITS.retainFinishedMs + 1;
   const released = feed.read(task, 0);
   assert.deepEqual([released.deltas.length, released.done], [0, true]);
+  // A byte budget bounds a page but always makes progress by at least one delta.
+  const budgeted = new LiveFeed(() => 0);
+  const big = randomUUID();
+  for (let index = 0; index < 5; index++) budgeted.push(big, 1, { kind: 'text', text: 'x'.repeat(1_000) });
+  const small = budgeted.read(big, 0, 2_500);
+  assert.deepEqual(small.deltas.map(item => item.seq), [1, 2]);
+  assert.deepEqual(budgeted.read(big, small.nextSeq, 10).deltas.map(item => item.seq), [3]);
   const unknown = randomUUID();
   assert.deepEqual(feed.read(unknown, 5), { taskId: unknown, afterSeq: 5, nextSeq: 5, deltas: [], gap: false, done: true });
 });

@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import { catchUpTaskEvents } from '@operation-agent/contracts';
 import type { Agent, AgentSave, ClaudeModel, ControlOverview, ControlRun, CredentialSlot, DesktopApi, DesktopStatus, LinkedProvider, McpServer, McpServerSave,
-  ModelSettingsView, ModelTestResult, Project, ProviderModelList, ProviderOverviewView, ProviderTestResult, TaskEvent, TaskSnapshot, TaskState,
-  WorkbenchSettings } from '@operation-agent/contracts';
+  ModelSettingsView, ModelTestResult, Project, ProviderModelList, ProviderOverviewView, ProviderTestResult, TaskEvent, TaskSnapshot,
+  TaskState, WorkbenchSettings } from '@operation-agent/contracts';
+import { EMPTY_CONVERSATION, withLivePage, withMessages } from './conversation';
+import type { ConversationView } from './conversation';
 import { resolveLocale, translate } from './i18n';
 import type { MessageKey, Vars } from './i18n';
 
@@ -41,6 +43,7 @@ export interface AppState {
   loaded: boolean;
   tasks: TaskSnapshot[];
   taskViews: Readonly<Record<string, TaskView>>;
+  conversations: Readonly<Record<string, ConversationView>>;
   selectedTaskId: string | null;
   /** Model choice and credential status as Express reports them; never key material. */
   model: ModelSettingsView | null;
@@ -54,7 +57,7 @@ export interface AppState {
 }
 
 let state: AppState = { connection: 'connecting', desktop: null, overview: null, settings: null, projects: [], runs: [],
-  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' },
+  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, conversations: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' },
   providers: null, agents: null, mcpServers: null, saveStatus: { state: 'idle' } };
 const listeners = new Set<() => void>();
 function set(next: Partial<AppState>): void { state = { ...state, ...next }; for (const listener of listeners) listener(); }
@@ -134,7 +137,60 @@ async function loadTasks(): Promise<void> {
   const { tasks } = await api().listTasks();
   set({ tasks });
   const selected = tasks.find(task => task.id === state.selectedTaskId);
-  if (selected && selected.lastSeq !== (state.taskViews[selected.id]?.appliedSeq ?? -1)) await syncTask(selected.id);
+  if (!selected) return;
+  if (selected.lastSeq !== (state.taskViews[selected.id]?.appliedSeq ?? -1)) { await syncTask(selected.id); await syncMessages(selected.id); }
+  // A message pull that failed or was overtaken is retried here even when the event cursor is already current
+  // (a finished task commits no further events, so nothing else would ask again).
+  else if (messagesWanted.has(selected.id)) await syncMessages(selected.id);
+}
+
+const ACTIVE: readonly TaskState[] = ['CREATED', 'QUEUED', 'RUNNING', 'STOPPING'];
+/**
+ * Every conversation change is applied to the view as it is at that moment, never to a copy read before an await: the
+ * message pull and the live poll overlap, and writing back an older copy would undo the other one's progress.
+ */
+const updateConversation = (taskId: string, update: (current: ConversationView) => ConversationView): void =>
+  set({ conversations: { ...state.conversations, [taskId]: update(state.conversations[taskId] ?? EMPTY_CONVERSATION) } });
+const taskEvents = (taskId: string): readonly TaskEvent[] => state.taskViews[taskId]?.events ?? [];
+const messageSync = new Set<string>();
+/**
+ * Tasks whose committed messages still have to be pulled, with the generation of the latest request. An entry stays
+ * until a pull that started after that request has read to the end, so a failed pull, or one overtaken by a newer
+ * request while it was in flight, is retried by the next poll instead of being forgotten.
+ */
+const messagesWanted = new Map<string, number>();
+let messageGeneration = 0;
+/** Pulls committed messages after the ones already shown; a turn's live stream gives way to its committed answer. */
+async function syncMessages(taskId: string): Promise<void> {
+  messagesWanted.set(taskId, ++messageGeneration);
+  if (messageSync.has(taskId)) return;
+  messageSync.add(taskId);
+  try {
+    for (let page = 0; page < 20; page++) {
+      const asked = messagesWanted.get(taskId);
+      const shown = (state.conversations[taskId] ?? EMPTY_CONVERSATION).messages.length;
+      const result = await api().listTaskMessages({ taskId, after: shown });
+      updateConversation(taskId, current => withMessages(current, shown, result.messages, taskEvents(taskId)));
+      if (!result.hasMore && messagesWanted.get(taskId) === asked) { messagesWanted.delete(taskId); return; }
+    }
+  } catch { /* Still wanted: the next poll retries. The committed log stays the source of truth. */ }
+  finally { messageSync.delete(taskId); }
+}
+let liveBusy = false;
+/** Reads stream deltas for the selected task while it runs; a new turn or a tool call also refreshes the committed views. */
+async function pollLive(): Promise<void> {
+  const taskId = state.selectedTaskId;
+  const task = state.tasks.find(item => item.id === taskId);
+  if (liveBusy || !taskId || !task || !ACTIVE.includes(task.state) || state.connection !== 'ready') return;
+  liveBusy = true;
+  try {
+    const afterSeq = (state.conversations[taskId] ?? EMPTY_CONVERSATION).liveSeq;
+    const page = await api().readTaskLive({ taskId, afterSeq });
+    let refresh = false;
+    updateConversation(taskId, current => { const next = withLivePage(current, page, taskEvents(taskId)); refresh = next.refresh; return next.view; });
+    if (refresh) { await syncTask(taskId); await syncMessages(taskId); }
+  } catch { /* Live deltas are best effort; the committed views are polled independently. */ }
+  finally { liveBusy = false; }
 }
 
 let lastRunId: string | null = null;
@@ -166,14 +222,28 @@ async function poll(): Promise<void> {
   } catch { if (state.connection === 'ready') set({ connection: 'unavailable' }); }
   finally { polling = false; }
 }
-export function startPolling(): void { void poll(); setInterval(() => { void poll(); }, 2_000); }
+export function startPolling(): void {
+  void poll(); setInterval(() => { void poll(); }, 2_000);
+  // Fast, cheap reads of the stream only while the selected task is active.
+  setInterval(() => { void pollLive(); }, 350);
+}
 
 /** Bumped on every model or key change; a connection test result only lands if nothing changed while it ran. */
 let modelRevision = 0;
 export const actions = {
   selectTask(taskId: string | null): void {
     set({ selectedTaskId: taskId });
-    if (taskId) void syncTask(taskId);
+    if (taskId) void syncTask(taskId).then(() => syncMessages(taskId));
+  },
+  /** Asks Express to stop the task; the view then follows the committed state (STOPPED, or INTERRUPTED if unconfirmed). */
+  async stopTask(taskId: string): Promise<void> {
+    if (state.conversations[taskId]?.stopping) return;
+    updateConversation(taskId, current => ({ ...current, stopping: true }));
+    try {
+      const snapshot = await api().stopTask({ taskId });
+      set({ tasks: state.tasks.map(task => task.id === taskId ? snapshot : task) });
+    } catch (error) { notify('danger', tr('notice.stopFailed', { code: errorCode(error) })); }
+    finally { updateConversation(taskId, current => ({ ...current, stopping: false })); await syncTask(taskId); await syncMessages(taskId); }
   },
   async resyncTask(taskId: string): Promise<void> {
     set({ taskViews: { ...state.taskViews, [taskId]: EMPTY_VIEW } });

@@ -49,7 +49,7 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 | P1 | 桌面应用、控制面、持久化、Worker 启动器、安装包与安装后烟测 | 已完成（Windows x64，见 [退出报告](docs/P1-EXIT-REPORT.md)） |
 | P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体验收所需的 CI 证据还没产出 |
 | M1 | SEC-W01：Windows 生产 Worker 隔离门禁 | 已完成（Windows x64 通过） |
-| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关、多供应商设置、Agent 与 MCP 配置、界面多语言已合并；Read Adapter、SEC-08 测试、流式模型回合、list_directory、Agent Loop、任务执行器与隔离的生产 Worker 运行时已实现（Windows x64，安装版）；对话实时界面尚未接入 |
+| M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop | 进行中：凭据、模型网关、多供应商设置、Agent 与 MCP 配置、界面多语言已合并；只读 Agent 的全部组件已实现（Windows x64 安装版）：Read Adapter 与 SEC-08、流式模型回合、list_directory、Agent Loop、任务执行器、隔离的生产 Worker 和对话界面；等待 CI 隔离运行证据后记录 agentReady |
 | M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
 | M4 | 产品化：MCP、签名与升级 | 未开始 |
 

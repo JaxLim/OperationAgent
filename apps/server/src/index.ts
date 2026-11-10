@@ -6,7 +6,8 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, Au
   McpServerSaveSchema, MODEL_PROVIDER, ModelChoiceSchema, ProviderKeyInputSchema, ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema,
   ProviderRefSchema, ProviderTestResultSchema, SEARCH_PROVIDERS, ModelSettingsSchema, ModelTestResultSchema, PROTOCOL_VERSION,
   ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
-  TaskStartInputSchema, TaskStartResultSchema, WorkbenchSettingsSchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
+  TaskStartInputSchema, TaskStartResultSchema, WorkbenchSettingsSchema, TASK_VIEW_LIMITS, TaskLivePageSchema, TaskLiveQuerySchema,
+  TaskMessagePageSchema, TaskMessagesQuerySchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
 import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
 import { UNAVAILABLE_BRIDGE } from './credentials/bridge.js';
@@ -17,6 +18,7 @@ import { createModelGateway } from './models/gateway.js';
 import type { ModelGateway } from './models/gateway.js';
 import { createProviderGateway } from './models/providers.js';
 import type { ProviderGateway } from './models/providers.js';
+import { clipMessage } from './agent/message-view.js';
 import type { TaskRunner } from './agent/runner.js';
 import type { AgentWorkerSnapshot } from './agent/supervisor.js';
 
@@ -336,6 +338,48 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
         else if (code === 'VALIDATION_ERROR') validationError(res);
         else failure(res, error);
       });
+  });
+  // Conversation text, page by page under a byte budget. A message larger than the view budget is shown clipped.
+  app.post(CONTROL_ROUTES.taskMessages, (req, res) => {
+    const input = TaskMessagesQuerySchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try {
+      if (!store.getTask(input.data.taskId)) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
+      const all = store.listTaskMessages(input.data.taskId);
+      const messages = []; let bytes = 0;
+      for (const message of all.slice(input.data.after)) {
+        const view = clipMessage(message);
+        const size = Buffer.byteLength(JSON.stringify(view));
+        if (messages.length && bytes + size > TASK_VIEW_LIMITS.maxMessagePageBytes) break;
+        messages.push(view); bytes += size;
+      }
+      res.json(TaskMessagePageSchema.parse({ taskId: input.data.taskId, after: input.data.after, messages,
+        hasMore: input.data.after + messages.length < all.length }));
+    } catch (error) { failure(res, error); }
+  });
+  // Live deltas exist only for tasks this Express instance is running or ran recently; anything else is simply done.
+  app.post(CONTROL_ROUTES.taskLive, (req, res) => {
+    const input = TaskLiveQuerySchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    const page = services.runner?.live.read(input.data.taskId, input.data.afterSeq, TASK_VIEW_LIMITS.maxLivePageBytes) ??
+      { taskId: input.data.taskId, afterSeq: input.data.afterSeq, nextSeq: input.data.afterSeq, deltas: [], gap: false, done: true };
+    res.json(TaskLivePageSchema.parse(page));
+  });
+  app.post(CONTROL_ROUTES.taskStop, (req, res) => {
+    const input = TaskRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    const runner = services.runner;
+    if (!runner) {
+      // Without a runner nothing can be running here; a task left over from an earlier instance is already INTERRUPTED.
+      res.status(store.getTask(input.data.taskId) ? 409 : 404).json({ error: store.getTask(input.data.taskId) ? 'INVALID_TRANSITION' : 'NOT_FOUND' });
+      return;
+    }
+    void runner.stop(input.data.taskId).then(task => res.json(TaskSnapshotSchema.parse(task)), (error: unknown) => {
+      const code = error instanceof Error ? error.message : '';
+      if (code === 'NOT_FOUND') res.status(404).json({ error: code });
+      else if (code === 'INVALID_TRANSITION' || code === 'CLEANUP_UNCONFIRMED') res.status(409).json({ error: 'INVALID_TRANSITION' });
+      else failure(res, error);
+    });
   });
   app.use((_req, res) => { res.status(404).json({ error: 'NOT_FOUND' }); });
   const fail: ErrorRequestHandler = (_error, _req, res, next) => { void next; res.status(400).json({ error: 'VALIDATION_ERROR' }); };

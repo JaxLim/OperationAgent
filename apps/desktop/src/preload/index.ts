@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { ApiKeyInputSchema, ControlHealthSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, FoundationInfoSchema, IPC_CHANNELS,
   PROTOCOL_VERSION, ProjectAddResultSchema, ProjectListSchema, ProjectRefSchema, SmokeBatchSchema, SmokeRecordsSchema,
-  TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
+  TaskEventPageSchema, TaskEventsQuerySchema, TaskLivePageSchema, TaskLiveQuerySchema, TaskMessagePageSchema, TaskMessagesQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
   WorkbenchSettingsSchema, ModelChoiceSchema, ModelSettingsViewSchema, ModelTestResultSchema, ProviderKeyInputSchema, ProviderOverviewViewSchema,
   ProviderRefSchema, LinkedProviderRefSchema, ProviderTestResultSchema, ProviderModelListSchema, ProviderModelChoiceSchema, AgentListSchema, AgentSaveSchema,
   AgentRefSchema, McpServerListSchema, McpServerSaveSchema, McpServerRefSchema } from '@operation-agent/contracts';
@@ -27,6 +27,9 @@ const api: DesktopApi = {
   startTask: async input => TaskStartResultSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.startTask, TaskStartInputSchema.parse(input))),
   listTasks: async () => TaskListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listTasks, {})),
   getTask: async input => TaskSnapshotSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.getTask, TaskRefSchema.parse(input))),
+  listTaskMessages: async input => TaskMessagePageSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listTaskMessages, TaskMessagesQuerySchema.parse(input))),
+  readTaskLive: async input => TaskLivePageSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.readTaskLive, TaskLiveQuerySchema.parse(input))),
+  stopTask: async input => TaskSnapshotSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.stopTask, TaskRefSchema.parse(input))),
   listTaskEvents: async input => TaskEventPageSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listTaskEvents, TaskEventsQuerySchema.parse(input))),
   getModelSettings: async () => ModelSettingsViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.getModelSettings, {})),
   saveModelChoice: async input => ModelSettingsViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.saveModelChoice, ModelChoiceSchema.parse(input))),

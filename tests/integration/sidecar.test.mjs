@@ -181,3 +181,49 @@ test('task snapshots and byte-bounded event pages rebuild a committed task over 
   }
   assert.equal((await live.call('POST', CONTROL_ROUTES.taskSnapshot, { taskId: task.id, state: 'RUNNING' })).status, 400);
 });
+
+test('M2 conversation routes: byte-bounded message pages, clipped oversized answers, inert live and Stop without a runner', { timeout: 30_000 }, async t => {
+  const data = await directory(t);
+  const seed = openStore(data, randomUUID());
+  const projectId = seed.addProject({ name: 'conv', path: 'C:/OperationAgentM2/conv' }).id;
+  const task = seed.createTask(projectId, randomUUID()).task;
+  seed.transitionTask(task.id, 'QUEUED', { requestId: randomUUID() });
+  seed.addTaskMessage(task.id, 'user', 0, 'Summarise the project');
+  // One answer far larger than a view, then several that each fill most of a page.
+  const huge = 'é'.repeat(200_000) + 'TAIL';
+  seed.addTaskMessage(task.id, 'assistant', 1, huge);
+  for (let turn = 2; turn <= 5; turn++) seed.addTaskMessage(task.id, 'assistant', turn, String(turn).repeat(90_000));
+  // Under the view budget as raw text, but twice that once JSON-escaped: it must be clipped by its serialized size.
+  seed.addTaskMessage(task.id, 'assistant', 6, '\\'.repeat(139_000));
+  seed.close(true);
+  const sidecar = await launchSidecar(data); t.after(() => sidecar.close());
+  const pages = []; let after = 0;
+  for (;;) {
+    const page = await sidecar.call('POST', CONTROL_ROUTES.taskMessages, { taskId: task.id, after });
+    assert.equal(page.status, 200);
+    assert.ok(Buffer.byteLength(JSON.stringify(page.body)) <= CONTROL_POLICY.maxResponseBytes);
+    pages.push(page.body.messages.length); after += page.body.messages.length;
+    if (!page.body.hasMore) break;
+  }
+  assert.equal(after, 7); assert.ok(pages.length >= 3, `several pages expected, got ${pages}`);
+  const all = [];
+  for (let start = 0; start < 7;) { const page = (await sidecar.call('POST', CONTROL_ROUTES.taskMessages, { taskId: task.id, after: start })).body; all.push(...page.messages); start += page.messages.length; }
+  assert.deepEqual(all.map(message => [message.role, message.turn, message.textTruncated]),
+    [['user', 0, false], ['assistant', 1, true], ['assistant', 2, false], ['assistant', 3, false], ['assistant', 4, false], ['assistant', 5, false],
+      ['assistant', 6, true]]);
+  assert.ok(all[1].text.startsWith('é') && !all[1].text.includes('TAIL') && Buffer.byteLength(all[1].text) <= 140_000, 'clipped on a character boundary');
+  assert.equal(all[2].text, '2'.repeat(90_000));
+  assert.ok(/^\\+$/.test(all[6].text) && Buffer.byteLength(JSON.stringify(all[6].text)) <= 140_000, 'an escape-heavy answer is clipped by its serialized size');
+  assert.deepEqual((await sidecar.call('POST', CONTROL_ROUTES.taskMessages, { taskId: task.id, after: 7 })).body,
+    { taskId: task.id, after: 7, messages: [], hasMore: false });
+  assert.equal((await sidecar.call('POST', CONTROL_ROUTES.taskMessages, { taskId: randomUUID(), after: 0 })).status, 404);
+  for (const body of [{ taskId: task.id }, { taskId: task.id, after: -1 }, { taskId: task.id, after: 0, extra: 1 }]) {
+    assert.equal((await sidecar.call('POST', CONTROL_ROUTES.taskMessages, body)).status, 400, JSON.stringify(body));
+  }
+  // Without an isolated Worker runtime there is no runner: nothing is live and nothing can be stopped.
+  assert.deepEqual((await sidecar.call('POST', CONTROL_ROUTES.taskLive, { taskId: task.id, afterSeq: 3 })).body,
+    { taskId: task.id, afterSeq: 3, nextSeq: 3, deltas: [], gap: false, done: true });
+  const stop = await sidecar.call('POST', CONTROL_ROUTES.taskStop, { taskId: task.id });
+  assert.deepEqual([stop.status, stop.body.error], [409, 'INVALID_TRANSITION']);
+  assert.equal((await sidecar.call('POST', CONTROL_ROUTES.taskStop, { taskId: randomUUID() })).status, 404);
+});

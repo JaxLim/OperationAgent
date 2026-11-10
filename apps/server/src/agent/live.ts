@@ -34,15 +34,26 @@ export class LiveFeed {
     feed.done = true; feed.doneAt = this.now();
   }
 
-  read(taskId: string, afterSeq: number): TaskLivePage {
+  /** At most `maxBytes` of serialized deltas per page (always at least one when any is pending). */
+  read(taskId: string, afterSeq: number, maxBytes: number = Number.MAX_SAFE_INTEGER): TaskLivePage {
     this.sweep();
     const feed = this.feeds.get(taskId);
     if (!feed) return TaskLivePageSchema.parse({ taskId, afterSeq, nextSeq: afterSeq, deltas: [], gap: false, done: true });
-    const deltas = feed.deltas.filter(entry => entry.seq > afterSeq).slice(0, TASK_LIVE_LIMITS.maxDeltasPerPage)
-      .map(({ seq, turn, delta }) => ({ seq, turn, delta }));
+    const deltas: LiveDelta[] = []; let bytes = 0;
+    for (const entry of feed.deltas) {
+      if (entry.seq <= afterSeq) continue;
+      if (deltas.length >= TASK_LIVE_LIMITS.maxDeltasPerPage || (deltas.length && bytes + entry.bytes > maxBytes)) break;
+      deltas.push({ seq: entry.seq, turn: entry.turn, delta: entry.delta }); bytes += entry.bytes;
+    }
     const nextSeq = deltas.length ? deltas[deltas.length - 1]!.seq : Math.max(afterSeq, feed.nextSeq - 1);
     return TaskLivePageSchema.parse({ taskId, afterSeq, nextSeq, deltas, gap: afterSeq < feed.evictedThrough,
       done: feed.done && nextSeq >= feed.nextSeq - 1 });
+  }
+
+  /** Whether a feed exists (a task that started in this Express instance). */
+  has(taskId: string): boolean {
+    this.sweep();
+    return this.feeds.has(taskId);
   }
 
   /** Releases buffers of tasks that finished more than the retention window ago. */
