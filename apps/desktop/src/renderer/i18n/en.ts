@@ -80,6 +80,7 @@ export const en = {
   'conv.starting': 'Starting the isolated agent…',
   'conv.stopping': 'Stopping…',
   'conv.gap': 'Some live output was skipped; the full answer appears when the turn finishes.',
+  'conv.partial': 'This turn was cut short before it finished. What had been streamed is shown below; it is not saved.',
   'conv.stop': 'Stop',
   'conv.stopHint': 'Stop the agent. Nothing has been changed: this agent can only read.',
   'conv.activity': 'Activity log ({count} events)',

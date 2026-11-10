@@ -60,7 +60,10 @@ export function Conversation({ task }: { task: TaskSnapshot }) {
         );
       })}
       {live && (
-        <article className="conv-turn conv-live" aria-live="polite">
+        // Only a task that is still running has live activity. Once it has ended, an uncommitted turn is what was
+        // streamed before it was cut short: shown as partial, unsaved output, with no spinner or "working" line.
+        <article className={`conv-turn ${active ? 'conv-live' : 'conv-partial'}`} aria-live={active ? 'polite' : undefined}>
+          {!active && <p className="muted small conv-partial-note">{t('conv.partial')}</p>}
           {live.thinking && (
             <details className="conv-thinking"><summary><IconSparkle size={12} /> {t('conv.thinking')}</summary>
               <p className="conv-thinking-text">{live.thinking.slice(-4_000)}</p></details>
@@ -68,8 +71,8 @@ export function Conversation({ task }: { task: TaskSnapshot }) {
           {live.text ? <div className="conv-answer"><Markdown text={live.text} /></div> : null}
           {live.tools.length > 0 && <ul className="conv-tools">{live.tools.map(item => (
             <li key={item.id} className="conv-tool tone-muted">{item.name === 'list_directory' ? <IconListTree size={12} /> : <IconEye size={12} />}
-              <span className="conv-tool-name">{item.name}</span><span className="dot dot-live" /></li>))}</ul>}
-          <p className="conv-working"><span className="dot dot-live" />{task.state === 'STOPPING' ? t('conv.stopping') : t('conv.working')}</p>
+              <span className="conv-tool-name">{item.name}</span>{active && <span className="dot dot-live" />}</li>))}</ul>}
+          {active && <p className="conv-working"><span className="dot dot-live" />{task.state === 'STOPPING' ? t('conv.stopping') : t('conv.working')}</p>}
         </article>
       )}
       {active && !live && task.state !== 'CREATED' && (

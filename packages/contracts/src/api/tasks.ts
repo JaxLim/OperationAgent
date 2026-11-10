@@ -93,7 +93,9 @@ export const TaskLivePageSchema = z.strictObject({
 export type TaskLivePage = z.infer<typeof TaskLivePageSchema>;
 
 // Conversation reads and Stop (M2). Pages are byte-budgeted to stay inside one control-plane response; a single message
-// larger than the view budget is shown clipped, with `textTruncated`, and never split across pages.
+// larger than the view budget is shown clipped, with `textTruncated`, and never split across pages. Express applies
+// `maxMessageViewBytes` to the text as serialized in the JSON response (escaping included), since that is what the
+// response limit counts; the schema below can only bound the raw text, which is never larger.
 export const TASK_VIEW_LIMITS = Object.freeze({ maxMessagePageBytes: 150_000, maxMessageViewBytes: 140_000, maxLivePageBytes: 150_000,
   /** Starting may launch the isolated Worker; Stop may wait for the whole grace period (at most 30 s). */
   startRequestMs: 45_000, stopRequestMs: 40_000 });

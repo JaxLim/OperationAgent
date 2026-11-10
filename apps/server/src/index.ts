@@ -8,8 +8,7 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, Au
   ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
   TaskStartInputSchema, TaskStartResultSchema, WorkbenchSettingsSchema, TASK_VIEW_LIMITS, TaskLivePageSchema, TaskLiveQuerySchema,
   TaskMessagePageSchema, TaskMessagesQuerySchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
-import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview, TaskMessage,
-  TaskMessageView } from '@operation-agent/contracts';
+import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
 import { UNAVAILABLE_BRIDGE } from './credentials/bridge.js';
 import type { CryptoBridge } from './credentials/bridge.js';
@@ -19,6 +18,7 @@ import { createModelGateway } from './models/gateway.js';
 import type { ModelGateway } from './models/gateway.js';
 import { createProviderGateway } from './models/providers.js';
 import type { ProviderGateway } from './models/providers.js';
+import { clipMessage } from './agent/message-view.js';
 import type { TaskRunner } from './agent/runner.js';
 import type { AgentWorkerSnapshot } from './agent/supervisor.js';
 
@@ -385,15 +385,4 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   const fail: ErrorRequestHandler = (_error, _req, res, next) => { void next; res.status(400).json({ error: 'VALIDATION_ERROR' }); };
   app.use(fail);
   return app;
-}
-
-/** A message as shown: whole when it fits the view budget, otherwise clipped on a character boundary and flagged. */
-function clipMessage(message: TaskMessage): TaskMessageView {
-  const limit = TASK_VIEW_LIMITS.maxMessageViewBytes - 64;
-  if (Buffer.byteLength(message.text) <= limit) return { ...message, textTruncated: false };
-  let end = Math.min(message.text.length, limit);
-  while (end > 0 && Buffer.byteLength(message.text.slice(0, end)) > limit) end = Math.floor(end * 0.95);
-  // Never leave a lone high surrogate at the cut.
-  if (end > 0 && /[\uD800-\uDBFF]/.test(message.text[end - 1]!)) end--;
-  return { ...message, text: message.text.slice(0, end), textTruncated: true };
 }

@@ -80,6 +80,7 @@ export const zhCN: Readonly<Record<MessageKey, string>> = {
   'conv.starting': '正在启动隔离的 Agent…',
   'conv.stopping': '正在停止…',
   'conv.gap': '部分实时输出被跳过；本轮结束后会显示完整回答。',
+  'conv.partial': '这一轮在完成前被中断。下面是当时已输出的部分内容，不会保存。',
   'conv.stop': '停止',
   'conv.stopHint': '停止 Agent。没有任何文件被修改：这个 Agent 只能读取。',
   'conv.activity': '活动记录（{count} 条事件）',

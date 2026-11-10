@@ -80,6 +80,7 @@ export const ja: Readonly<Record<MessageKey, string>> = {
   'conv.starting': '隔離されたエージェントを起動しています…',
   'conv.stopping': '停止しています…',
   'conv.gap': 'ライブ出力の一部が省略されました。ターン終了後に完全な回答が表示されます。',
+  'conv.partial': 'このターンは完了前に中断されました。以下はそれまでに出力された内容で、保存されません。',
   'conv.stop': '停止',
   'conv.stopHint': 'エージェントを停止します。ファイルは変更されていません（このエージェントは読み取り専用です）。',
   'conv.activity': 'アクティビティ ログ（{count} 件）',
