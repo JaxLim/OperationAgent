@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { AGENT_RUN_LIMITS, AgentToolNameSchema, ListDirectoryArgsSchema, ReadFileArgsSchema } from '@operation-agent/contracts';
-import type { AgentFinishOutcome, AgentFinishReason, AgentToolName, ClaudeModel, Project, RpcRequest, TaskSnapshot, TaskState,
+import { AGENT_RUN_LIMITS, AgentToolNameSchema, CONTEXT_POLICIES, ListDirectoryArgsSchema, ReadFileArgsSchema } from '@operation-agent/contracts';
+import type { AgentFinishOutcome, AgentFinishReason, AgentToolName, ClaudeModel, ContextPolicy, Project, RpcRequest, TaskSnapshot, TaskState,
   TurnOutcome } from '@operation-agent/contracts';
 import type { CredentialService } from '../credentials/service.js';
 import type { TaskLog } from '../persistence/tasks.js';
@@ -32,10 +32,16 @@ export interface TaskRunnerOptions {
   stopGraceMs: () => number;
   /** Launches and attaches a qualified Worker on demand; absent or rejecting, starts fail closed. */
   ensureWorker?: () => Promise<void>;
+  /** The context policy for a model (ADR-PLAT-001 D1); null sends every request unmanaged. Defaults to the fixed table. */
+  contextPolicy?: (model: ClaudeModel) => ContextPolicy | null;
+  /** A monotonic clock in milliseconds for tool timing; tests substitute a deterministic one. */
+  now?: () => number;
 }
 export type RunnerReply = { kind: string; [key: string]: unknown } | null;
 
 const AGENT_TOOLS: AgentToolName[] = [...AgentToolNameSchema.options];
+/** Failures that say the provider refused the request itself (HTTP 400, 403, 404), as opposed to load, limits or the key. */
+const REJECTED_OUTRIGHT: readonly string[] = ['invalid_request', 'permission_denied', 'model_unavailable'];
 const READ_ONLY = 'Read-only task: no files were changed';
 const REASONS: Readonly<Record<AgentFinishReason, string>> = Object.freeze({
   end_turn: 'Completed', max_tokens: 'The answer reached the output limit and may be incomplete',
@@ -60,6 +66,10 @@ interface Run {
   model: ClaudeModel;
   tools: AgentToolName[];
   conversation: Conversation;
+  /** The policy this task's requests are managed under; null once it has been switched off (or was never on). */
+  context: ContextPolicy | null;
+  /** The history holds a summary block (even one whose summarization failed): it can only be sent with the feature on. */
+  summaryInHistory: boolean;
   turn: number;
   abort: AbortController | undefined;
   /** At most one Worker request acts on a task at a time: a model turn, or that turn's tool calls (each at most once). */
@@ -129,8 +139,9 @@ export class TaskRunner {
     if (created.task.state !== 'CREATED' || this.runs.has(created.task.id)) return created.task;
     const taskId = created.task.id;
     let settle!: () => void;
-    const run: Run = { taskId, project, model: this.options.model(), tools: AGENT_TOOLS, conversation: new Conversation(systemPrompt(project), prompt),
-      turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
+    const model = this.options.model();
+    const run: Run = { taskId, project, model, tools: AGENT_TOOLS, conversation: new Conversation(systemPrompt(project), prompt),
+      context: (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(model), summaryInHistory: false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
     this.runs.set(taskId, run);
     this.transition(taskId, 'QUEUED', null);
     const message = this.options.store.addTaskMessage(taskId, 'user', 0, prompt);
@@ -189,9 +200,19 @@ export class TaskRunner {
     if (run.stopping) return failed('cancelled');
     if (run.conversation.status === 'awaiting_tools') run.conversation.closeRound();
     const abort = new AbortController(); run.abort = abort;
-    const used = await this.options.credentials.withKey(apiKey => this.options.gateway.runTurn({ apiKey, model: run.model, turn,
-      system: run.conversation.system, messages: run.conversation.history(), tools: run.tools, signal: abort.signal,
+    const request = (context: ContextPolicy | null) => this.options.credentials.withKey(apiKey => this.options.gateway.runTurn({ apiKey, model: run.model, turn,
+      system: run.conversation.system, messages: run.conversation.history(), tools: run.tools, signal: abort.signal, context,
       onDelta: delta => this.options.live.push(taskId, turn, delta) }));
+    let used = await request(run.context);
+    // Context management relies on a provider beta. If the provider rejects a managed request outright (as invalid, or
+    // as something this key or model may not use), the task goes on unmanaged: this turn is retried once, exactly as it
+    // would have been sent without the feature, and no later request is managed. A rejection that had another cause
+    // simply fails the same way again. Not once a summary block is part of the history, though: that block needs the
+    // feature to be sent.
+    if (used.ok && used.value.status === 'failed' && REJECTED_OUTRIGHT.includes(used.value.code) && run.context && !run.summaryInHistory && !run.done && !run.stopping) {
+      run.context = null;
+      used = await request(null);
+    }
     // This turn owned the controller until it settled; Stop and detach always reach the request that is actually running.
     if (run.abort === abort) run.abort = undefined;
     if (run.done) return failed('cancelled');
@@ -200,10 +221,12 @@ export class TaskRunner {
     if (result.status === 'failed') return { kind: 'model.turn', outcome: { status: 'failed', code: result.code, retryable: result.retryable, httpStatus: result.httpStatus } };
     try {
       run.conversation.acceptTurn(result.replay, result.view.stopReason);
+      run.summaryInHistory ||= result.replay.some(block => block.type === 'compaction');
       const text = result.replay.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('');
       const message = text ? this.options.store.addTaskMessage(taskId, 'assistant', turn, clip(text)) : null;
       this.options.store.appendAgentEvent(taskId, 'assistant_turn', { turn, model: result.view.model, messageId: message?.id ?? null,
-        stopReason: result.view.stopReason, toolCalls: result.view.toolCalls.length, fallback: result.view.fallback, usage: result.view.usage });
+        stopReason: result.view.stopReason, toolCalls: result.view.toolCalls.length, fallback: result.view.fallback, usage: result.view.usage,
+        timing: result.timing, context: { ...result.context, managed: run.context !== null } });
     } catch { return failed('response_invalid'); }
     return { kind: 'model.turn', outcome: { status: 'ok', view: result.view } };
   }
@@ -220,6 +243,8 @@ export class TaskRunner {
 
   private async runToolCall(run: Run, taskId: string, turn: number, call: NonNullable<ReturnType<Conversation['pendingCall']>>): Promise<RunnerReply> {
     const name = AgentToolNameSchema.safeParse(call.name);
+    const now = this.options.now ?? (() => performance.now());
+    const startedAt = now();
     let formatted: FormattedToolResult;
     let target = '';
     if (run.stopping) formatted = skippedResult('the task is stopping');
@@ -237,7 +262,8 @@ export class TaskRunner {
     if (run.done) return { kind: 'tool.call', status: 'skipped', summary: 'The task has ended' };
     if (call.executable && run.conversation.pendingCall(call.id)) run.conversation.recordResult(call.id, formatted.content, formatted.isError);
     this.options.store.appendAgentEvent(taskId, 'tool_call', { turn, callId: call.id, tool: call.name.slice(0, 128) || 'tool',
-      target: target.slice(0, 512), status: formatted.status, code: formatted.code, size: formatted.size });
+      target: target.slice(0, 512), status: formatted.status, code: formatted.code, size: formatted.size,
+      durationMs: Math.max(0, Math.round(now() - startedAt)) });
     return { kind: 'tool.call', status: formatted.status, summary: clipSummary(formatted.summary) };
   }
 
