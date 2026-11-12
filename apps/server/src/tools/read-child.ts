@@ -42,7 +42,6 @@ const MAX_SEARCH_FILE_BYTES = 1_048_576;
 const MAX_SEARCH_SCAN_BYTES = 64 * 1024 * 1024;
 const MAX_MATCH_CHARS = 240;
 /** A regular expression is only ever run against this much of one line, so a minified file cannot stall the search. */
-const MAX_REGEX_LINE_CHARS = 10_000;
 
 type Refusal = 'INVALID_PATH' | 'INVALID_QUERY' | 'NOT_FOUND' | 'NOT_A_FILE' | 'LINK_REJECTED' | 'MULTIPLE_LINKS' | 'BINARY_FILE' |
   'CHANGED_DURING_READ' | 'ACCESS_DENIED' | 'WORKSPACE_UNAVAILABLE';
@@ -156,7 +155,7 @@ function walk(root: string, segments: readonly string[], target: 'file' | 'direc
   }
   return { path, chain, file: file!, kind };
 }
-function readBounded(fd: number, maxBytes: number): { data: Buffer; truncated: boolean } {
+function readBounded(fd: number, maxBytes: number): { data: Buffer; truncated: boolean; bytes: number } {
   // One extra byte tells whether the file continues past the limit, even if it grew after fstat.
   const buffer = Buffer.alloc(maxBytes + 1);
   let total = 0;
@@ -177,7 +176,7 @@ function readBounded(fd: number, maxBytes: number): { data: Buffer; truncated: b
       if (width > 1 && start - 1 + width > end) end = start - 1;
     }
   }
-  return { data: buffer.subarray(0, end), truncated };
+  return { data: buffer.subarray(0, end), truncated, bytes: total };
 }
 
 /** Re-walks root and chain; any component that changed identity or became a link means the result cannot be trusted. */
@@ -400,7 +399,7 @@ function lineMatcher(request: Extract<Request, { op: 'search' }>): (line: string
   if (request.regex) {
     let pattern: RegExp;
     try { pattern = new RegExp(request.query, request.ignoreCase ? 'i' : ''); } catch { throw new Refused('INVALID_QUERY'); }
-    return line => { const found = pattern.exec(line.length > MAX_REGEX_LINE_CHARS ? line.slice(0, MAX_REGEX_LINE_CHARS) : line); return found ? found.index : -1; };
+    return line => { const found = pattern.exec(line); return found ? found.index : -1; };
   }
   if (!request.ignoreCase) return line => line.indexOf(request.query);
   const needle = request.query.toLowerCase();
@@ -422,10 +421,10 @@ function sensitiveName(policy: SensitivePolicy, name: string): boolean {
 }
 
 /** The text of a file whose handle is already verified, or null when it is not searchable (too large, binary, not UTF-8). */
-function searchableText(fd: number): { text: string; bytes: number } | null {
-  const { data, truncated } = readBounded(fd, MAX_SEARCH_FILE_BYTES);
-  if (truncated || data.includes(0)) return null;
-  try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(data), bytes: data.length }; } catch { return null; }
+function searchableText(fd: number, budget: number = MAX_SEARCH_SCAN_BYTES): { text: string | null; bytes: number } {
+  const { data, truncated, bytes } = readBounded(fd, Math.min(MAX_SEARCH_FILE_BYTES, budget - 1));
+  if (truncated || data.includes(0)) return { text: null, bytes };
+  try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(data), bytes }; } catch { return { text: null, bytes }; }
 }
 
 function matchesIn(text: string, segments: string[], matchAt: (line: string) => number, room: number): { matches: Match[]; more: boolean } {
@@ -459,15 +458,19 @@ function search(root: string, request: Extract<Request, { op: 'search' }>): void
   const nameMatches = request.glob === null ? () => true : globMatcher(request.glob);
   const checked = request.segments.length ? walk(root, request.segments, 'any') : { path: root, chain: [] as Identity[], kind: 'directory' as const };
   const matches: Match[] = [];
-  let truncated = false, filesScanned = 0, filesSkipped = 0, scannedBytes = 0;
+  let truncated = false, filesScanned = 0, filesSkipped = 0, scannedBytes = 0, attemptedFiles = 0;
 
   if (checked.kind === 'file') {
+    if (!nameMatches(request.segments[request.segments.length - 1]!)) {
+      reply({ status: 'matched', matches, truncated, filesScanned, filesSkipped });
+      return;
+    }
     // One named file: the same checked open as `read`, then the same search.
     const fd = openChecked(checked.path, checked.chain[checked.chain.length - 1]!);
     try {
       verifyChain(root, rootStats, request.segments, checked.chain, 'file');
       const content = searchableText(fd);
-      if (!content) filesSkipped = 1;
+      if (content.text === null) filesSkipped = 1;
       else { filesScanned = 1; const found = matchesIn(content.text, [], matchAt, request.maxResults); matches.push(...found.matches); truncated = found.more; }
     } finally { closeSync(fd); }
     reply({ status: 'matched', matches, truncated, filesScanned, filesSkipped });
@@ -478,13 +481,13 @@ function search(root: string, request: Extract<Request, { op: 'search' }>): void
   const deadline = Date.now() + request.budgetMs;
   const walked = traverse(root, rootStats, startOf(root, request.segments, checked), MAX_WALK_DEPTH, deadline, (_directory, names, itemOf) => {
     const found: Match[] = []; const children: Item[] = [];
-    let scanned = 0, skipped = 0, bytes = 0, stop = false;
+    let scanned = 0, skipped = 0, stop = false;
     for (const name of names) {
       const item = itemOf(name);
       if (!item) continue;
       if (item.type === 'directory') { if (enter(item)) children.push(item); continue; }
       if (item.type !== 'file' || !nameMatches(name) || sensitiveName(request.sensitive, name)) continue;
-      if (matches.length + found.length >= request.maxResults || filesScanned + scanned >= MAX_SEARCH_FILES || scannedBytes + bytes >= MAX_SEARCH_SCAN_BYTES || Date.now() > deadline) { stop = true; break; }
+      if (matches.length + found.length >= request.maxResults || attemptedFiles >= MAX_SEARCH_FILES || scannedBytes >= MAX_SEARCH_SCAN_BYTES || Date.now() > deadline) { stop = true; break; }
       if (item.stats.nlink !== 1n || item.stats.size > BigInt(MAX_SEARCH_FILE_BYTES)) { skipped++; continue; }
       let fd: number;
       try { fd = openSync(item.path, 'r'); } catch { skipped++; continue; }
@@ -492,16 +495,18 @@ function search(root: string, request: Extract<Request, { op: 'search' }>): void
         // The directory is pinned, so only the file itself could have been replaced since lstat; if it was, it is not read.
         const opened = fstatSync(fd, { bigint: true });
         if (!opened.isFile() || opened.nlink !== 1n || !equal(identityOf(opened), identityOf(item.stats))) { skipped++; continue; }
-        const content = searchableText(fd);
-        if (!content) { skipped++; continue; }
-        scanned++; bytes += content.bytes;
+        attemptedFiles++;
+        const content = searchableText(fd, MAX_SEARCH_SCAN_BYTES - scannedBytes);
+        scannedBytes += content.bytes;
+        if (content.text === null) { skipped++; continue; }
+        scanned++;
         const result = matchesIn(content.text, item.segments, matchAt, request.maxResults - matches.length - found.length);
         found.push(...result.matches);
         if (result.more) { stop = true; break; }
       } catch { skipped++; }
       finally { closeSync(fd); }
     }
-    return { commit: () => { matches.push(...found); filesScanned += scanned; filesSkipped += skipped; scannedBytes += bytes; truncated ||= stop; }, children, stop };
+    return { commit: () => { matches.push(...found); filesScanned += scanned; filesSkipped += skipped; truncated ||= stop; }, children, stop };
   });
   reply({ status: 'matched', matches, truncated: truncated || walked.expired, filesScanned, filesSkipped });
 }
@@ -569,7 +574,7 @@ function readLines(fd: number, start: number, count: number, maxBytes: number): 
   if (data.length && data[data.length - 1] !== 10) lines++;
   // `line` is one more than the newlines seen; a file that ends with a newline has no further line after it.
   const totalLines = !ended ? null : scanned === 0 ? 0 : lastByte === 10 ? line - 1 : line;
-  return { data, truncated, lines, totalLines };
+  return { data, truncated: truncated || (!ended && line < start + count), lines, totalLines };
 }
 
 function read(root: string, request: Extract<Request, { op: 'read' }>): void {

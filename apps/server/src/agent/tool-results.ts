@@ -41,8 +41,10 @@ export function formatReadResult(result: ReadFileResult, requested: string): For
     const { startLine, lines, totalLines } = result.range;
     const last = startLine + Math.max(lines, 1) - 1;
     const total = totalLines === null ? 'more lines than can be counted in one call' : `${totalLines} lines`;
-    const header = lines ? `[Lines ${startLine}-${last} of ${result.path}; the file has ${total}]\n` : `[${result.path} has no line ${startLine}; it has ${total}]`;
-    const cut = result.truncated ? `\n[Stopped at ${kib(result.bytes)}: the range continues past the byte limit.]` : '';
+    const header = lines ? `[Lines ${startLine}-${last} of ${result.path}; the file has ${total}]\n`
+      : totalLines === null ? `[Could not reach line ${startLine} of ${result.path} within the scan limit.]`
+        : `[${result.path} has no line ${startLine}; it has ${total}]`;
+    const cut = result.truncated ? `\n[Returned ${kib(result.bytes)}: the requested range is incomplete at the byte or scan limit.]` : '';
     return { content: header + result.content + cut, isError: false, status: 'ok', code: null, size: result.bytes,
       summary: bound(`Read ${short(result.path)} lines ${startLine}-${last}`) };
   }

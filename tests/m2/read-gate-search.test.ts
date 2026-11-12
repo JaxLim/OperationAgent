@@ -276,6 +276,39 @@ test('SEC-08 Windows: search_text and find_files read a directory only while it 
     });
   });
 
+test('SEC-08 ranges beyond the scan budget are incomplete, never evidence of a missing line', { skip: !WINDOWS }, async () => {
+  await withFixture(async ({ root, store, projectId }) => {
+    writeFileSync(resolve(root, 'huge.txt'), 'x'.repeat(16 * 1024 * 1024) + '\nACTUAL SECOND LINE\n');
+    const result = await createToolRouter({ store }).readFile({ projectId, args: { path: 'huge.txt', startLine: 2, lineCount: 1 } });
+    assert.ok(result.status === 'ok' && result.truncated && result.range?.totalLines === null);
+    assert.doesNotMatch(formatReadResult(result, 'huge.txt').content, /has no line/);
+  });
+});
+
+test('SEC-08 regex uses the full line and single-file searches honor fileNames', { skip: !WINDOWS }, async () => {
+  await withFixture(async ({ root, store, projectId }) => {
+    writeFileSync(resolve(root, 'long.ts'), 'a'.repeat(10_000) + 'b\n');
+    const router = createToolRouter({ store });
+    const falseEnd = await router.searchText({ projectId, args: { path: 'long.ts', query: 'a$', regex: true } });
+    assert.ok(falseEnd.status === 'ok' && falseEnd.matches.length === 0 && !falseEnd.truncated);
+    const trueEnd = await router.searchText({ projectId, args: { path: 'long.ts', query: 'b$', regex: true } });
+    assert.ok(trueEnd.status === 'ok' && trueEnd.matches.length === 1);
+    const filtered = await router.searchText({ projectId, args: { path: 'long.ts', query: 'a', fileNames: '*.md' } });
+    assert.ok(filtered.status === 'ok' && filtered.matches.length === 0 && filtered.filesScanned === 0);
+  });
+});
+
+test('SEC-08 binary and invalid UTF-8 reads consume the search byte budget', { skip: !WINDOWS }, async () => {
+  await withFixture(async ({ root, store, projectId }) => {
+    for (const [dir, byte] of [['binary', 0], ['invalid', 255]] as const) {
+      mkdirSync(resolve(root, dir));
+      for (let i = 0; i < 80; i++) writeFileSync(resolve(root, dir, `${i}.bin`), Buffer.alloc(1024 * 1024, byte));
+      const result = await createToolRouter({ store }).searchText({ projectId, args: { path: dir, query: NEEDLE } });
+      assert.ok(result.status === 'ok' && result.truncated && result.filesScanned === 0 && result.filesSkipped <= 64, JSON.stringify(result));
+    }
+  });
+});
+
 test('M5.2 results for the model: matches as path:line: text, limits stated, refusals explained', () => {
   const search = formatSearchResult({ status: 'ok', path: '.', matches: [{ path: 'src/a.ts', line: 3, text: 'needle()' }], truncated: true, filesScanned: 4,
     filesSkipped: 1 }, 'needle');
