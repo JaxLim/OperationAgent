@@ -96,6 +96,30 @@ export function insideSensitiveDirectory(segments: readonly string[]): boolean {
 /** Single-segment sensitive directories the Read Adapter child must never descend into while listing. */
 export const LIST_SKIP_DIRECTORIES: readonly string[] = Object.freeze(SENSITIVE_DIRECTORIES.filter(directory => !directory.includes('/')));
 
+/**
+ * The file-name rules of `sensitive` as data, for the Read Adapter child to apply while it walks a tree: it must never
+ * open such a file, and it cannot import this module. A name that is a sensitive directory is equally sensitive as a
+ * file. Express still checks every path the child returns with `normalizeReadPath`.
+ */
+export const SENSITIVE_FILE_POLICY = Object.freeze({
+  names: Object.freeze([...SENSITIVE_FILES, ...SENSITIVE_DIRECTORIES.filter(directory => !directory.includes('/'))]),
+  suffixes: SENSITIVE_EXTENSIONS, prefixes: Object.freeze([...SENSITIVE_PREFIXES]), envAllow: Object.freeze([...ENV_TEMPLATES]),
+});
+/** Sensitive directories that are a sequence of names (`.config/gcloud`): a tree walk never enters a path that ends with one. */
+export const TREE_SKIP_SEQUENCES: readonly (readonly string[])[] = Object.freeze(SENSITIVE_DIRECTORIES.filter(directory => directory.includes('/'))
+  .map(directory => Object.freeze(directory.split('/'))));
+
+// A file-name pattern for search_text and find_files: `*` and `?` wildcards on the name only. A leading "any depth"
+// prefix (two stars and a slash, which is what a tree search does anyway) is dropped; any other directory part is
+// refused, because silently ignoring it would search somewhere the caller did not ask for.
+export function normalizeFileNamePattern(input: string): { ok: true; glob: string } | { ok: false } {
+  if (typeof input !== 'string') return { ok: false };
+  let glob = input.trim();
+  while (glob.startsWith('**/')) glob = glob.slice(3);
+  if (!glob || glob.length > READ_FILE_LIMITS.maxGlobChars || /[\\/]|\p{Cc}/u.test(glob)) return { ok: false };
+  return { ok: true, glob };
+}
+
 /** A directory to list: "", "." or "./" is the workspace root; anything else follows the read_file path rules. */
 export function normalizeListPath(input: string): PathDecision {
   if (typeof input !== 'string') return { ok: false, code: 'INVALID_PATH' };

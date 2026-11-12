@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AGENT_RUN_LIMITS, AgentToolNameSchema, CONTEXT_POLICIES, ListDirectoryArgsSchema, ReadFileArgsSchema } from '@operation-agent/contracts';
+import { AGENT_RUN_LIMITS, AgentToolNameSchema, CONTEXT_POLICIES, FindFilesArgsSchema, ListDirectoryArgsSchema, ReadFileArgsSchema, SearchTextArgsSchema } from '@operation-agent/contracts';
 import type { AgentFinishOutcome, AgentFinishReason, AgentToolName, ClaudeModel, ContextPolicy, Project, RpcRequest, TaskSnapshot, TaskState,
   TurnOutcome } from '@operation-agent/contracts';
 import type { CredentialService } from '../credentials/service.js';
@@ -8,7 +8,7 @@ import type { TurnGateway } from '../models/turns.js';
 import type { ToolRouter } from '../tools/router.js';
 import { Conversation } from './conversation.js';
 import type { LiveFeed } from './live.js';
-import { formatListResult, formatReadResult, skippedResult } from './tool-results.js';
+import { formatFindResult, formatListResult, formatReadResult, formatSearchResult, skippedResult } from './tool-results.js';
 import type { FormattedToolResult } from './tool-results.js';
 
 // Express Task Runner (ARCHITECTURE §4.1 TaskService, §6, §8). Express owns the task: its state machine, conversation,
@@ -53,8 +53,9 @@ const REASONS: Readonly<Record<AgentFinishReason, string>> = Object.freeze({
 export function systemPrompt(project: Project): string {
   return [
     `You are OperationAgent, a careful assistant that answers questions about the user's software project "${project.name}".`,
-    'You can only read the project: use list_directory to explore it and read_file to read text files. You cannot modify files, run commands or use the network.',
-    'Paths are relative to the project root and use / separators; start with list_directory on "." when you do not know the layout.',
+    'You can only read the project. You cannot modify files, run commands or use the network.',
+    'Find before you read: use search_text to locate where something is defined or used, find_files to locate files by name, and list_directory to see the layout. Then read just the part you need with read_file and startLine/lineCount; read a whole file only when you need all of it. Each call costs time, so ask for several independent things in one turn.',
+    'Paths are relative to the project root and use / separators.',
     'Some paths are deliberately unreadable (secrets, keys, .env files, .git internals, anything outside the project). When a tool refuses, accept it and do not look for another way in.',
     'Base your answer on what you actually read, name the files you relied on, and say plainly when the project does not contain the answer.',
   ].join('\n');
@@ -250,14 +251,36 @@ export class TaskRunner {
     if (run.stopping) formatted = skippedResult('the task is stopping');
     else if (!call.executable) formatted = skippedResult('the model output was cut off before this call was complete');
     else if (!name.success || !run.tools.includes(name.data)) formatted = skippedResult(`no tool named ${call.name.slice(0, 64)} is available`);
-    else if (name.data === 'read_file') {
-      const args = ReadFileArgsSchema.safeParse(call.input);
-      target = args.success ? args.data.path : '';
-      formatted = formatReadResult(await this.options.tools.readFile({ projectId: run.project.id, taskId, toolCallId: randomUUID(), args: call.input }), target);
-    } else {
-      const args = ListDirectoryArgsSchema.safeParse(call.input);
-      target = args.success ? args.data.path || '.' : '';
-      formatted = formatListResult(await this.options.tools.listDirectory({ projectId: run.project.id, taskId, toolCallId: randomUUID(), args: call.input }), target);
+    else {
+      // Express runs the call from its own record of what the model asked for; correlation ids are its own as well.
+      const request = { projectId: run.project.id, taskId, toolCallId: randomUUID(), args: call.input };
+      switch (name.data) {
+        case 'read_file': {
+          const args = ReadFileArgsSchema.safeParse(call.input);
+          target = args.success ? args.data.path : '';
+          formatted = formatReadResult(await this.options.tools.readFile(request), target);
+          break;
+        }
+        case 'list_directory': {
+          const args = ListDirectoryArgsSchema.safeParse(call.input);
+          target = args.success ? args.data.path || '.' : '';
+          formatted = formatListResult(await this.options.tools.listDirectory(request), target);
+          break;
+        }
+        case 'search_text': {
+          // The timeline shows where the search ran, never the query: it is model text, like the prompt.
+          const args = SearchTextArgsSchema.safeParse(call.input);
+          target = args.success ? args.data.path || '.' : '';
+          formatted = formatSearchResult(await this.options.tools.searchText(request), args.success ? args.data.query : '');
+          break;
+        }
+        case 'find_files': {
+          const args = FindFilesArgsSchema.safeParse(call.input);
+          target = args.success ? `${args.data.path || '.'} (${args.data.pattern.slice(0, 128)})` : '';
+          formatted = formatFindResult(await this.options.tools.findFiles(request), args.success ? args.data.pattern : '');
+          break;
+        }
+      }
     }
     if (run.done) return { kind: 'tool.call', status: 'skipped', summary: 'The task has ended' };
     if (call.executable && run.conversation.pendingCall(call.id)) run.conversation.recordResult(call.id, formatted.content, formatted.isError);

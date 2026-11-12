@@ -134,6 +134,58 @@ async function benchTask(rounds: number) {
   } finally { fake.close(); }
 }
 
+/**
+ * Selective retrieval (M5.2): one definition in a project of `files` files of about 16 KiB each. "Read everything" is
+ * what a model with only list_directory and read_file has to do in the worst case; "search, then read the lines" is the
+ * path the new tools give it. Both run through the real router and Read Adapter children. What is measured is the cost
+ * of each path, not which path a model would choose.
+ */
+async function benchRetrieval(files: number) {
+  const fake = await provider(res => sse(res, [messageStart(), ...messageStop('end_turn')]));
+  try {
+    const target = Math.floor(files / 2);
+    const body = (index: number) => Array.from({ length: 400 }, (_, line) => line === 200 && index === target
+      ? 'export function targetDefinition() { return 42; }' : `export const value_${index}_${line} = ${line}; // filler`).join('\n') + '\n';
+    const workspace = Object.fromEntries(Array.from({ length: files }, (_, index) => [`src/module${index}.ts`, body(index)])) as Record<string, string>;
+    let report: Record<string, unknown> = {};
+    await withAgentHarness(fake.endpoint, async harness => {
+      const router = createToolRouter({ store: harness.store });
+      const timed = async <T>(run: () => Promise<T>): Promise<{ value: T; ms: number }> => { const started = performance.now(); const value = await run(); return { value, ms: performance.now() - started }; };
+      // Read everything: list, then every file (four at a time, as the agent loop does).
+      const everything = await timed(async () => {
+        let bytes = 0, calls = 1;
+        await router.listDirectory({ projectId: harness.projectId, args: { path: 'src' } });
+        for (let index = 0; index < files; index += 4) {
+          const reads = await Promise.all(Array.from({ length: Math.min(4, files - index) }, (_, offset) =>
+            router.readFile({ projectId: harness.projectId, args: { path: `src/module${index + offset}.ts` } })));
+          for (const read of reads) { calls++; if (read.status === 'ok') bytes += read.bytes; }
+        }
+        return { bytes, calls };
+      });
+      // Search, then read twenty lines around the match.
+      const selective = await timed(async () => {
+        const search = await router.searchText({ projectId: harness.projectId, args: { query: 'function targetDefinition' } });
+        if (search.status !== 'ok' || search.matches.length !== 1) throw new Error('search did not find the definition');
+        const match = search.matches[0]!;
+        const read = await router.readFile({ projectId: harness.projectId, args: { path: match.path, startLine: Math.max(1, match.line - 10), lineCount: 20 } });
+        if (read.status !== 'ok') throw new Error('range read failed');
+        return { bytes: Buffer.byteLength(match.text) + match.path.length + read.bytes, calls: 2, filesScanned: search.filesScanned };
+      });
+      // A whole-project search alone, repeated, for its latency distribution.
+      const searches: number[] = [];
+      for (let round = 0; round < 10; round++) searches.push((await timed(() => router.searchText({ projectId: harness.projectId, args: { query: 'targetDefinition' } }))).ms);
+      const finds: number[] = [];
+      for (let round = 0; round < 10; round++) finds.push((await timed(() => router.findFiles({ projectId: harness.projectId, args: { pattern: '*.ts' } }))).ms);
+      report = { files, projectBytes: Object.values(workspace).reduce((sum, text) => sum + Buffer.byteLength(text), 0),
+        readEverything: { calls: everything.value.calls, toolResultBytes: everything.value.bytes, ms: +everything.ms.toFixed(1) },
+        searchThenRange: { calls: selective.value.calls, toolResultBytes: selective.value.bytes, filesScanned: selective.value.filesScanned, ms: +selective.ms.toFixed(1) },
+        bytesRatio: +(selective.value.bytes / everything.value.bytes).toFixed(4),
+        searchProjectMs: stats(searches), findProjectMs: stats(finds) };
+    }, { files: workspace });
+    return report;
+  } finally { fake.close(); }
+}
+
 // --- cost model (arithmetic, not a measurement) -------------------------------------------------------------------
 // Prices per input token relative to a model's base input price, from the provider's published rules: a cache read
 // costs `read`, a 5-minute cache write 1.25, and Haiku 5.5 bills a request five times higher once its prompt exceeds
@@ -206,7 +258,7 @@ export function costModel() {
 async function main(): Promise<void> {
   const target = `${process.platform}-${process.arch}`;
   const report = { check: 'AGENT_BENCH', target, node: process.version, measuredAt: new Date().toISOString(),
-    gateway: await benchGateway(200), tools: await benchTools(30), task: await benchTask(24),
+    gateway: await benchGateway(200), tools: await benchTools(30), task: await benchTask(24), retrieval: await benchRetrieval(40),
     costModel: { note: 'Arithmetic model of documented provider pricing and context editing; not measured against the provider.', scenarios: costModel() } };
   const output = resolve('artifacts/bench', target); mkdirSync(output, { recursive: true });
   writeFileSync(resolve(output, 'agent.json'), JSON.stringify(report, null, 2) + '\n');
