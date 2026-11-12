@@ -15,10 +15,21 @@ const EXIT_CONFIRM_MS = 2_000;
 const MAX_STDERR_BYTES = 8_192;
 
 type Rejected = { status: 'refused'; code: ReadRefusalCode } | { status: 'failed'; code: ReadFailureCode; retryable: boolean };
-export type AdapterOutcome = { status: 'ok'; content: Buffer; size: number; truncated: boolean } | Rejected;
+/** A range of lines: the first line asked for, how many came back, and the file's line count when it could be counted. */
+export interface LineRange { startLine: number; lines: number; totalLines: number | null }
+export type AdapterOutcome = { status: 'ok'; content: Buffer; size: number; truncated: boolean; range?: LineRange } | Rejected;
 export interface ListedEntry { segments: string[]; type: 'file' | 'directory' | 'link' | 'other'; size: number | null }
 export type ListOutcome = { status: 'listed'; entries: ListedEntry[]; truncated: boolean; unlisted: string[][] } | Rejected;
 export interface ListRequest { depth: number; maxEntries: number; skip: readonly string[] }
+/** What a tree walk must never enter (directory names, and name sequences such as `.config/gcloud`) and how much it may return. */
+export interface WalkRequest { maxResults: number; skip: readonly string[]; skipSequences: readonly (readonly string[])[] }
+export interface SearchRequest extends WalkRequest { query: string; regex: boolean; ignoreCase: boolean; glob: string | null;
+  /** File names the child must never open. */
+  sensitive: { names: readonly string[]; suffixes: readonly string[]; prefixes: readonly string[]; envAllow: readonly string[] } }
+export interface FindRequest extends WalkRequest { glob: string }
+export interface SearchedMatch { segments: string[]; line: number; text: string }
+export type SearchOutcome = { status: 'matched'; matches: SearchedMatch[]; truncated: boolean; filesScanned: number; filesSkipped: number } | Rejected;
+export type FindOutcome = { status: 'found'; entries: ListedEntry[]; truncated: boolean } | Rejected;
 
 export interface ReadAdapterOptions {
   /** Defaults to this process's runtime, which must be official Node (never Electron). */
@@ -26,14 +37,21 @@ export interface ReadAdapterOptions {
   /** Tests substitute a misbehaving child here to exercise deadlines and caps; production always uses the fixed script. */
   childScript?: string;
   timeoutMs?: number;
+  /** Deadline for a child that walks a tree (search, find). The child is told to stop itself well before it. */
+  walkTimeoutMs?: number;
   maxConcurrent?: number;
   maxQueued?: number;
 }
 export interface ReadAdapterSnapshot { available: boolean; active: number; queued: number; launched: number; killed: number; activePids: number[] }
 export interface ReadAdapter {
-  read(root: string, segments: readonly string[], maxBytes: number): Promise<AdapterOutcome>;
+  /** Reads a file from its start, or `lines.count` lines from line `lines.start`; at most `maxBytes` either way. */
+  read(root: string, segments: readonly string[], maxBytes: number, lines?: { start: number; count: number }): Promise<AdapterOutcome>;
   /** Lists a directory below the root; an empty segment list is the root itself. */
   list(root: string, segments: readonly string[], request: ListRequest): Promise<ListOutcome>;
+  /** Searches the text of the files below a directory (an empty segment list is the root), or of one named file. */
+  search(root: string, segments: readonly string[], request: SearchRequest): Promise<SearchOutcome>;
+  /** Finds entries by name below a directory. Nothing is opened. */
+  find(root: string, segments: readonly string[], request: FindRequest): Promise<FindOutcome>;
   snapshot(): ReadAdapterSnapshot;
 }
 
@@ -58,6 +76,12 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
   if (!Number.isInteger(timeoutMs) || timeoutMs < READ_FILE_LIMITS.minTimeoutMs || timeoutMs > READ_FILE_LIMITS.maxTimeoutMs) {
     throw new Error('TOOL_REGISTRATION_REJECTED');
   }
+  const walkTimeoutMs = options.walkTimeoutMs ?? READ_FILE_LIMITS.searchTimeoutMs;
+  if (!Number.isInteger(walkTimeoutMs) || walkTimeoutMs < READ_FILE_LIMITS.minTimeoutMs || walkTimeoutMs > READ_FILE_LIMITS.maxTimeoutMs) {
+    throw new Error('TOOL_REGISTRATION_REJECTED');
+  }
+  // The child stops a tree walk itself and returns what it has; its budget always ends before the deadline that kills it.
+  const walkBudgetMs = Math.max(1, Math.min(READ_FILE_LIMITS.searchBudgetMs, Math.floor(walkTimeoutMs * 0.6)));
   const maxConcurrent = options.maxConcurrent ?? READ_FILE_LIMITS.maxConcurrent;
   const maxQueued = options.maxQueued ?? READ_FILE_LIMITS.maxQueued;
   const nodePath = options.nodePath ?? process.execPath;
@@ -77,7 +101,7 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
 
   type ChildReply = Exclude<ReturnType<typeof ReadChildReplySchema.parse>, { status: 'refused' }>;
   /** One child, one request line, one validated reply; `accept` turns a non-refusal reply into the caller's outcome. */
-  function launch<T>(root: string, request: Record<string, unknown>, accept: (reply: ChildReply) => T | Rejected): Promise<T | Rejected> {
+  function launch<T>(root: string, request: Record<string, unknown>, accept: (reply: ChildReply) => T | Rejected, deadlineMs = timeoutMs): Promise<T | Rejected> {
     return new Promise(resolve => {
       let child: ReturnType<typeof spawn>;
       try {
@@ -102,7 +126,7 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
           resolve({ status: 'failed', code: 'CLEANUP_UNCONFIRMED', retryable: false });
         }, EXIT_CONFIRM_MS);
       };
-      const deadline = setTimeout(() => kill('TIMED_OUT'), timeoutMs);
+      const deadline = setTimeout(() => kill('TIMED_OUT'), deadlineMs);
       child.stdout!.on('data', (chunk: Buffer) => {
         stdoutBytes += chunk.length;
         if (stdoutBytes > READ_CHILD_MAX_REPLY_BYTES) { kill('ADAPTER_FAILED'); return; }
@@ -143,12 +167,36 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
   }
 
   return {
-    read(root, segments, maxBytes) {
-      return guarded(() => launch<AdapterOutcome>(root, { op: 'read', segments, maxBytes }, value => {
+    read(root, segments, maxBytes, lines) {
+      const request = lines ? { op: 'read', segments, maxBytes, startLine: lines.start, lineCount: lines.count } : { op: 'read', segments, maxBytes };
+      return guarded(() => launch<AdapterOutcome>(root, request, value => {
         if (value.status !== 'ok') return MALFORMED;
         const content = Buffer.from(value.content, 'base64');
-        return content.length > maxBytes ? MALFORMED : { status: 'ok', content, size: value.size, truncated: value.truncated };
+        if (content.length > maxBytes) return MALFORMED;
+        const ranged = value.startLine !== undefined && value.lines !== undefined && value.totalLines !== undefined;
+        // A range comes back exactly when one was asked for, starts where it was asked to and is no longer than asked.
+        if (ranged !== Boolean(lines) || (value.startLine === undefined) !== (value.lines === undefined) || (value.lines === undefined) !== (value.totalLines === undefined)) return MALFORMED;
+        if (!lines || !ranged) return { status: 'ok', content, size: value.size, truncated: value.truncated };
+        if (value.startLine !== lines.start || value.lines! > lines.count) return MALFORMED;
+        return { status: 'ok', content, size: value.size, truncated: value.truncated,
+          range: { startLine: value.startLine, lines: value.lines!, totalLines: value.totalLines! } };
       }));
+    },
+    search(root, segments, request) {
+      return guarded(() => launch<SearchOutcome>(root, { op: 'search', segments, budgetMs: walkBudgetMs, maxResults: request.maxResults, skip: [...request.skip],
+        skipSequences: request.skipSequences.map(sequence => [...sequence]), query: request.query, regex: request.regex, ignoreCase: request.ignoreCase,
+        glob: request.glob, sensitive: { names: [...request.sensitive.names], suffixes: [...request.sensitive.suffixes],
+          prefixes: [...request.sensitive.prefixes], envAllow: [...request.sensitive.envAllow] } }, value => {
+        if (value.status !== 'matched' || value.matches.length > request.maxResults) return MALFORMED;
+        return { status: 'matched', matches: value.matches, truncated: value.truncated, filesScanned: value.filesScanned, filesSkipped: value.filesSkipped };
+      }, walkTimeoutMs));
+    },
+    find(root, segments, request) {
+      return guarded(() => launch<FindOutcome>(root, { op: 'find', segments, budgetMs: walkBudgetMs, maxResults: request.maxResults, skip: [...request.skip],
+        skipSequences: request.skipSequences.map(sequence => [...sequence]), glob: request.glob }, value => {
+        if (value.status !== 'found' || value.entries.length > request.maxResults) return MALFORMED;
+        return { status: 'found', entries: value.entries, truncated: value.truncated };
+      }, walkTimeoutMs));
     },
     list(root, segments, request) {
       return guarded(() => launch<ListOutcome>(root, { op: 'list', segments, depth: request.depth, maxEntries: request.maxEntries,

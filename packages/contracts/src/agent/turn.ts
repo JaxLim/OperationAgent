@@ -26,7 +26,7 @@ export const AGENT_RUN_LIMITS = Object.freeze({
   maxConversationBytes: 16 * 1024 * 1024,
 });
 
-export const AgentToolNameSchema = z.enum(['read_file', 'list_directory']);
+export const AgentToolNameSchema = z.enum(['read_file', 'list_directory', 'search_text', 'find_files']);
 export type AgentToolName = z.infer<typeof AgentToolNameSchema>;
 
 /** Why a turn ended, normalized from the provider's stop_reason. `refusal` is a policy decline (HTTP 200). */
@@ -91,12 +91,47 @@ export const AGENT_TOOL_DEFINITIONS = Object.freeze({
   read_file: Object.freeze({
     name: 'read_file',
     description: 'Read a UTF-8 text file in the current project. `path` is relative to the project root and uses / separators. ' +
-      'Returns at most `maxBytes` bytes (default 65536, up to 262144) and says when the file was truncated. Binary files, ' +
-      'files outside the project, links, and secrets such as .env files, keys and .git internals are refused.',
+      'Returns at most `maxBytes` bytes (default 65536, up to 262144) and says when the file was truncated. To read only part of ' +
+      'a file, give `startLine` (1-based) and optionally `lineCount` (default 200, up to 2000): prefer this after search_text has ' +
+      'told you where to look, instead of reading a whole file. Binary files, files outside the project, links, and secrets such ' +
+      'as .env files, keys and .git internals are refused.',
     input_schema: { type: 'object', additionalProperties: false, required: ['path'],
       properties: {
         path: { type: 'string', description: 'Project-relative file path, for example src/index.ts' },
         maxBytes: { type: 'integer', minimum: 1, maximum: 262_144, description: 'Upper bound on bytes returned' },
+        startLine: { type: 'integer', minimum: 1, maximum: 10_000_000, description: 'First line to read (1-based)' },
+        lineCount: { type: 'integer', minimum: 1, maximum: 2_000, description: 'How many lines to read from startLine' },
+      } },
+  }),
+  search_text: Object.freeze({
+    name: 'search_text',
+    description: 'Search the text of files in the current project and get back the matching lines as path:line: text. `query` is a ' +
+      'plain string unless `regex` is true (JavaScript regular expression, matched within one line). `path` limits the search to ' +
+      'a directory or a single file (default: the whole project); `fileNames` limits it to files whose name matches a pattern such ' +
+      'as *.ts. Returns up to `maxResults` matches (default 50, up to 200) and says when it stopped early. .git, node_modules, ' +
+      'secrets, links, binary files and files over 1 MiB are not searched. Use this to find where something is defined or used, ' +
+      'then read just those lines with read_file.',
+    input_schema: { type: 'object', additionalProperties: false, required: ['query'],
+      properties: {
+        query: { type: 'string', description: 'Text to find on a single line; a regular expression when regex is true' },
+        path: { type: 'string', description: 'Project-relative directory or file to search; omit for the whole project' },
+        regex: { type: 'boolean', description: 'Treat query as a regular expression (default false)' },
+        ignoreCase: { type: 'boolean', description: 'Match letters regardless of case (default false)' },
+        fileNames: { type: 'string', description: 'File-name pattern with * and ? wildcards, for example *.ts or *.test.*' },
+        maxResults: { type: 'integer', minimum: 1, maximum: 200, description: 'Upper bound on matches returned (default 50)' },
+      } },
+  }),
+  find_files: Object.freeze({
+    name: 'find_files',
+    description: 'Find files and directories in the current project by name. `pattern` is a file-name pattern with * and ? ' +
+      'wildcards, matched against the name only and ignoring case, for example *.test.ts, Dockerfile* or package.json; put the ' +
+      'directory in `path` (default: the whole project), not in the pattern. Returns up to `maxResults` paths (default 200, up ' +
+      'to 500). .git, node_modules and secret directories are not entered and links are never followed.',
+    input_schema: { type: 'object', additionalProperties: false, required: ['pattern'],
+      properties: {
+        pattern: { type: 'string', description: 'File-name pattern, for example *.config.ts' },
+        path: { type: 'string', description: 'Project-relative directory to look in; omit for the whole project' },
+        maxResults: { type: 'integer', minimum: 1, maximum: 500, description: 'Upper bound on paths returned (default 200)' },
       } },
   }),
   list_directory: Object.freeze({
