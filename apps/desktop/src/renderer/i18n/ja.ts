@@ -177,7 +177,7 @@ export const ja: Readonly<Record<MessageKey, string>> = {
   'meter.tokens': '約 {tokens} トークン',
   'meter.tokensNote': '約 4 文字で 1 トークン。モデルのトークナイザーでは数え方が異なる場合があります。',
   'meter.usage': 'コンテキストとトークンの使用量',
-  'meter.usageNote': '各タスクのトークン使用量はそのタスクの画面に表示されます。タスクをまたぐ合計はまだ集計されません。',
+  'meter.usageNote': 'タスク画面で個別の使用量を、設定画面でプロバイダー・モデル別の合計を確認できます。',
   'meter.quota': 'プロバイダーのクォータ',
   'meter.quotaNote': 'プロバイダーは API キーに対してプランのクォータを報告しません。',
   'meter.settings': '使用量の設定',

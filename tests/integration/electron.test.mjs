@@ -269,6 +269,10 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.match(view.usage, /output 240 tokens/);
   assert.match(view.usage, /model 5\.5s · first content 0\.5s \(median\) · tools 0\.1s/);
   await host.command('capture', `m2/${process.platform}-${process.arch}/conversation.png`);
+  const [provider, model, ...counts] = await host.command('usage-ui');
+  assert.equal(provider, 'Anthropic');
+  assert.equal(model, 'claude-sonnet-5-5');
+  assert.deepEqual(counts.map(value => Number(value.replace(/\D/g, ''))), [2, 2100, 900, 0, 240, 2340]);
 });
 
 /** Every file under a directory, for a plaintext scan of everything Electron, Express and SQLite left on disk. */

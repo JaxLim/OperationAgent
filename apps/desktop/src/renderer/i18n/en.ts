@@ -177,7 +177,7 @@ export const en = {
   'meter.tokens': '≈ {tokens} tokens',
   'meter.tokensNote': 'About 4 characters per token; the model’s tokenizer may count differently.',
   'meter.usage': 'Context and token usage',
-  'meter.usageNote': 'Each task reports the tokens it used in its own view. A total across tasks isn’t kept yet.',
+  'meter.usageNote': 'Open a task for its token usage or see totals by provider and model in Settings.',
   'meter.quota': 'Provider quota',
   'meter.quotaNote': 'Providers don’t report plan quota to an API key.',
   'meter.settings': 'Usage settings',

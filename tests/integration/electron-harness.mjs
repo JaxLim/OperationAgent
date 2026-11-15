@@ -146,6 +146,20 @@ process.on('message', async message => {
         })()`);
         break;
       case 'model-test': value = await host.window.webContents.executeJavaScript('window.operationAgent.testModelConnection()'); break;
+      case 'usage-ui':
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));
+          let opened = false;
+          for (let attempt = 0; attempt < 300; attempt++) {
+            const nav = document.querySelector('.settings-nav button[data-section="usage"]');
+            if (!opened && nav) { nav.click(); opened = true; }
+            const cells = document.querySelectorAll('.usage-table-wrap tbody tr:first-child td');
+            if (cells.length) return Array.from(cells, cell => cell.textContent);
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          throw new Error('USAGE_TABLE_TIMEOUT');
+        })()`);
+        break;
       case 'model-ui':
         // Drives the real Settings → Providers → Anthropic DOM: types a key, saves it, then runs Test connection.
         value = await host.window.webContents.executeJavaScript(`(async () => {

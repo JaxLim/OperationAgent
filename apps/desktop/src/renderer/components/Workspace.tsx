@@ -137,7 +137,7 @@ function ContextMeter({ chars, onOpenSettings }: { chars: number; onOpenSettings
             <span className="meter-note">{t('meter.tokensNote')}</span>
           </div>
           <div className="meter-row">
-            <span className="meter-label">{t('meter.usage')}</span><span className="data-tag data-unavailable">{t('data.unavailable')}</span>
+            <span className="meter-label">{t('meter.usage')}</span>
             <span className="meter-note">{t('meter.usageNote')}</span>
           </div>
           <div className="meter-row">

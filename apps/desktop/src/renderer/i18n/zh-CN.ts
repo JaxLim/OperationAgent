@@ -177,7 +177,7 @@ export const zhCN: Readonly<Record<MessageKey, string>> = {
   'meter.tokens': '≈ {tokens} 个 Token',
   'meter.tokensNote': '约每 4 个字符 1 个 Token；模型的分词器计数可能不同。',
   'meter.usage': '上下文与 Token 用量',
-  'meter.usageNote': '每个任务的 Token 用量显示在该任务的视图中；暂不统计跨任务的总量。',
+  'meter.usageNote': '任务详情显示本次用量。在设置中可以按渠道和模型查看全部任务的合计。',
   'meter.quota': '供应商配额',
   'meter.quotaNote': '供应商不会向 API 密钥报告套餐配额。',
   'meter.settings': '用量设置',
