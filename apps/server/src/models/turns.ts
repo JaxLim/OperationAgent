@@ -43,6 +43,7 @@ export type TurnResult =
   | { status: 'failed'; code: TurnFailureCode; retryable: boolean; httpStatus: number | null };
 
 export interface TurnGateway { runTurn(input: TurnInput): Promise<TurnResult> }
+export type AgentTurnResult = Omit<Extract<TurnResult, { status: 'ok' }>, 'message'> | Extract<TurnResult, { status: 'failed' }>;
 export interface TurnGatewayOptions {
   endpoint?: string | undefined;
   maxRetries?: number;

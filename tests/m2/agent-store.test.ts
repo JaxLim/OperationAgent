@@ -20,6 +20,36 @@ function withStore(run: (store: Store, directory: string) => void): void {
 }
 const usage = { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
+test('historical usage groups committed turns across tasks by provider and model, including legacy turns', () => {
+  withStore((store, directory) => {
+    const project = store.addProject({ name: 'usage', path: directory });
+    const tasks = [store.createTask(project.id, randomUUID()).task, store.createTask(project.id, randomUUID()).task];
+    assert.deepEqual(store.listUsage({ after: null }), { rows: [], hasMore: false });
+    store.close(true);
+    // Seed the on-disk event formats directly so this read-side test also exercises pre-provider history.
+    const raw = new DatabaseSync(resolve(directory, 'control-plane.sqlite'));
+    const model = 'claude-sonnet-5-5';
+    const tokens = { inputTokens: 7, outputTokens: 5, cacheReadTokens: 3, cacheWriteTokens: 2 };
+    try {
+      const insert = raw.prepare(`INSERT INTO task_events(task_id, seq, event_id, type, occurred_at, payload)
+        VALUES (?, ?, ?, 'assistant_turn', ?, ?)`);
+      for (const [index, task] of tasks.entries()) {
+        const payload = { turn: 1, model, messageId: null, stopReason: 'end_turn', toolCalls: 0, fallback: false, usage: tokens };
+        insert.run(task.id, 2, randomUUID(), task.createdAt, JSON.stringify(index ? { ...payload, provider: 'anthropic' } : payload));
+        insert.run(task.id, 3, randomUUID(), task.createdAt, JSON.stringify({ ...payload, turn: 2, provider: 'openrouter' }));
+        raw.prepare('UPDATE tasks SET last_seq = 3 WHERE id = ?').run(task.id);
+      }
+    } finally { raw.close(); }
+    const reopened = openStore(directory, randomUUID());
+    try {
+      const counts = { model, turns: 2, inputTokens: 14, outputTokens: 10, cacheReadTokens: 6, cacheWriteTokens: 4 };
+      const second = { provider: 'openrouter', ...counts };
+      assert.deepEqual(reopened.listUsage({ after: null }), { rows: [{ provider: 'anthropic', ...counts }, second], hasMore: false });
+      assert.deepEqual(reopened.listUsage({ after: { provider: 'anthropic', model } }), { rows: [second], hasMore: false });
+    } finally { reopened.close(true); }
+  });
+});
+
 test('migration 009: agent events are metadata only, replay keeps state, and finished tasks accept nothing more', () => {
   withStore((store, directory) => {
     const projectId = store.addProject({ name: 'p', path: 'C:\\work\\p' }).id;

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
+import { USAGE_PAGE_SIZE, UsagePageSchema } from '@operation-agent/contracts';
+import type { UsagePage, UsageQuery } from '@operation-agent/contracts';
 import { AGENT_EVENT_TYPES, TASK_MESSAGE_LIMITS, TERMINAL_TASK_STATES, TaskEventSchema, TaskMessageSchema, TaskSnapshotSchema, TaskStateSchema,
   ToolOutputSummarySchema, checkTaskTransition } from '@operation-agent/contracts';
 import type { AgentEventType, SideEffectStatus, TaskEvent, TaskMessage, TaskSnapshot, TaskState, ToolOutputSummary,
@@ -16,6 +18,7 @@ export interface TransitionInput extends TransitionContext {
   reason?: string | null;
 }
 export interface TaskLog {
+  listUsage(input: UsageQuery): UsagePage;
   /** Creates the task and its seq-1 task_created event together. Throws NOT_FOUND for an unregistered project. */
   createTask(projectId: string, requestId: string): TaskCommit;
   /** Throws NOT_FOUND, INVALID_TRANSITION, USER_CONFIRMATION_REQUIRED or CLEANUP_UNCONFIRMED; nothing is written. */
@@ -56,6 +59,15 @@ export function createTaskLog(db: Database.Database): TaskLog {
   const selectRecent = db.prepare<[number], TaskRow>(`SELECT id, project_id AS projectId, state, last_seq AS lastSeq,
     created_at AS createdAt, updated_at AS updatedAt FROM tasks ORDER BY created_at DESC, id LIMIT ?`);
   const selectByRequest = db.prepare<[string], EventRow>(`SELECT ${eventColumns} FROM task_events WHERE request_id = ?`);
+  const selectUsage = db.prepare<[string, string, number], UsagePage['rows'][number]>(`
+    WITH turns AS (
+      SELECT coalesce(payload ->> '$.provider', 'anthropic') AS provider, payload ->> '$.model' AS model, payload
+      FROM task_events WHERE type = 'assistant_turn'
+    )
+    SELECT provider, model, count(*) AS turns,
+      sum(payload ->> '$.usage.inputTokens') AS inputTokens, sum(payload ->> '$.usage.outputTokens') AS outputTokens,
+      sum(payload ->> '$.usage.cacheReadTokens') AS cacheReadTokens, sum(payload ->> '$.usage.cacheWriteTokens') AS cacheWriteTokens
+    FROM turns WHERE (provider, model) > (?, ?) GROUP BY provider, model ORDER BY provider, model LIMIT ?`);
   const selectPage = db.prepare<[string, number, number], EventRow>(`SELECT ${eventColumns} FROM task_events
     WHERE task_id = ? AND seq > ? ORDER BY seq LIMIT ?`);
   const insertEvent = db.prepare(`INSERT INTO task_events(task_id, seq, event_id, type, request_id, occurred_at, payload)
@@ -94,6 +106,10 @@ export function createTaskLog(db: Database.Database): TaskLog {
   };
 
   return {
+    listUsage({ after }) {
+      const rows = selectUsage.all(after?.provider ?? '', after?.model ?? '', USAGE_PAGE_SIZE + 1);
+      return UsagePageSchema.parse({ rows: rows.slice(0, USAGE_PAGE_SIZE), hasMore: rows.length > USAGE_PAGE_SIZE });
+    },
     createTask(projectId, requestId) {
       return db.transaction(() => {
         const repeated = replay(requestId, event => event.type === 'task_created' && event.payload.projectId === projectId);

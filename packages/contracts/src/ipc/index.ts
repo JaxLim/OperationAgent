@@ -5,6 +5,7 @@ import type { ControlOverview, ControlRunList, ProjectList, ProjectRef, TaskStar
 import { ProjectSchema } from '../api/workbench.js';
 import type { TaskEventPage, TaskEventsQuery, TaskList, TaskLivePage, TaskLiveQuery, TaskMessagePage, TaskMessagesQuery, TaskRef } from '../api/tasks.js';
 import type { TaskSnapshot } from '../events/task.js';
+import type { UsagePage, UsageQuery } from '../agent/usage.js';
 import type { ApiKeyInput, ModelChoice, ModelSettingsView, ModelTestResult } from '../api/model.js';
 import type { LinkedProviderRef, ProviderKeyInput, ProviderModelChoice, ProviderModelList, ProviderOverviewView, ProviderRef,
   ProviderTestResult } from '../api/providers.js';
@@ -23,6 +24,7 @@ export const IPC_CHANNELS = Object.freeze({
   health: 'oa:control-health', listRecords: 'oa:smoke-list', writeRecords: 'oa:smoke-write',
   desktopStatus: 'oa:desktop-status', retryControlPlane: 'oa:control-retry', overview: 'oa:control-overview',
   getSettings: 'oa:settings-get', saveSettings: 'oa:settings-save', listProjects: 'oa:projects-list',
+  listUsage: 'oa:settings-usage',
   addProject: 'oa:projects-add', removeProject: 'oa:projects-remove', listRuns: 'oa:runs-list', startTask: 'oa:tasks-start',
   listTasks: 'oa:tasks-list', getTask: 'oa:tasks-snapshot', listTaskEvents: 'oa:tasks-events',
   listTaskMessages: 'oa:tasks-messages', readTaskLive: 'oa:tasks-live', stopTask: 'oa:tasks-stop',
@@ -61,6 +63,7 @@ export interface DesktopApi {
   retryControlPlane(): Promise<DesktopStatus>;
   getOverview(): Promise<ControlOverview>;
   getSettings(): Promise<WorkbenchSettings>;
+  listUsage(input: UsageQuery): Promise<UsagePage>;
   saveSettings(input: WorkbenchSettings): Promise<WorkbenchSettings>;
   listProjects(): Promise<ProjectList>;
   addProject(): Promise<ProjectAddResult>;

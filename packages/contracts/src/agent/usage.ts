@@ -1,4 +1,16 @@
 import type { TaskEvent } from '../events/task.js';
+import { z } from 'zod';
+import { ModelIdSchema, ModelProviderSchema } from '../api/providers.js';
+import { TurnUsageSchema } from './turn.js';
+
+// Bound each local control-plane reply independently of the number of models in historical events.
+export const USAGE_PAGE_SIZE = 50;
+const usageGroup = z.strictObject({ provider: ModelProviderSchema, model: ModelIdSchema });
+export const UsageQuerySchema = z.strictObject({ after: usageGroup.nullable() });
+export type UsageQuery = z.infer<typeof UsageQuerySchema>;
+const usageRow = TurnUsageSchema.extend({ ...usageGroup.shape, turns: z.int().positive() });
+export const UsagePageSchema = z.strictObject({ rows: z.array(usageRow).max(USAGE_PAGE_SIZE), hasMore: z.boolean() });
+export type UsagePage = z.infer<typeof UsagePageSchema>;
 
 // What a task cost and how fast it ran, derived from its committed events (ADR-PLAT-001 D2). A pure function of the log:
 // Express, the Renderer and the benchmark all compute the same numbers from the same events, and nothing new is stored.

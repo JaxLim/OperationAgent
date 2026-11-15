@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ClaudeModelSchema } from '../api/model.js';
+import { ModelIdSchema } from '../api/providers.js';
 import { utf8ByteLength } from '../events/tool-output.js';
 
 // M2 agent turns (ARCHITECTURE §6.1/§6.2). Express holds the authoritative conversation: the provider's content blocks
@@ -54,7 +54,7 @@ export type ToolCallView = z.infer<typeof ToolCallViewSchema>;
 
 export const TurnViewSchema = z.strictObject({
   turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns),
-  model: ClaudeModelSchema,
+  model: ModelIdSchema,
   stopReason: TurnStopReasonSchema,
   /** Text the model wrote this turn, truncated to `maxViewTextChars`; `textTruncated` says whether it was. */
   text: z.string().max(AGENT_RUN_LIMITS.maxViewTextChars),

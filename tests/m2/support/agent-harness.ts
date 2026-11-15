@@ -45,6 +45,7 @@ export interface AgentHarnessOptions {
   contextPolicy?: (model: ClaudeModel) => ContextPolicy | null;
   /** Workspace files to create, by project-relative path. */
   files?: Record<string, string>;
+  linkedKey?: string;
 }
 export interface AgentHarness { store: Store; runner: TaskRunner; projectId: string; root: string;
   /** Starts a task and resolves once it has reached a final state; returns its committed events. */
@@ -62,9 +63,15 @@ export async function withAgentHarness(endpoint: string, run: (harness: AgentHar
   const store = openStore(resolve(base, 'data'), randomUUID());
   const projectId = store.addProject({ name: 'harness', path: root }).id;
   const credentials = createCredentialService(store, fakeBridge());
-  await credentials.set(AGENT_HARNESS_KEY);
+  if (options.linkedKey) await createCredentialService(store.credentialStore('openrouter'), fakeBridge()).set(options.linkedKey);
+  else await credentials.set(AGENT_HARNESS_KEY);
   const model = options.model ?? 'claude-sonnet-5-5';
   const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store }),
+    linkedRoute: () => {
+      const provider = store.getSettings().defaultProvider;
+      return provider === 'anthropic' ? null : { provider, model: store.getProviderModel(provider),
+        credentials: createCredentialService(store.credentialStore(provider), fakeBridge()) };
+    },
     model: () => model, live: new LiveFeed(), stopGraceMs: () => 5_000, ...(options.contextPolicy ? { contextPolicy: options.contextPolicy } : {}) });
   const identity = { expressRunId: randomUUID(), workerRunId: randomUUID() };
   const toWorker = new Inbox();

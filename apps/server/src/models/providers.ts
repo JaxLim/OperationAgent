@@ -48,7 +48,7 @@ const ADAPTERS: Readonly<Record<LinkedProvider, Adapter>> = {
 };
 
 /** Reads at most `maxBytes` of a reply, so a hostile or broken endpoint cannot exhaust memory. */
-async function readBounded(response: Response, maxBytes: number): Promise<string | null> {
+export async function readBounded(response: Response, maxBytes: number): Promise<string | null> {
   const reader = response.body?.getReader();
   if (!reader) return null;
   const chunks: Uint8Array[] = []; let size = 0;

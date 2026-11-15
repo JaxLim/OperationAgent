@@ -4,7 +4,9 @@ import type { AgentFinishOutcome, AgentFinishReason, AgentToolName, ClaudeModel,
   TurnOutcome } from '@operation-agent/contracts';
 import type { CredentialService } from '../credentials/service.js';
 import type { TaskLog } from '../persistence/tasks.js';
-import type { TurnGateway } from '../models/turns.js';
+import type { AgentTurnResult, TurnInput, TurnGateway } from '../models/turns.js';
+import { runLinkedTurn } from '../models/linked-turn.js';
+import type { LinkedProvider } from '@operation-agent/contracts';
 import type { ToolRouter } from '../tools/router.js';
 import { Conversation } from './conversation.js';
 import type { LiveFeed } from './live.js';
@@ -28,6 +30,7 @@ export interface TaskRunnerOptions {
   gateway: TurnGateway;
   tools: ToolRouter;
   model: () => ClaudeModel;
+  linkedRoute?: () => { provider: LinkedProvider; model: string | null; credentials: CredentialService } | null;
   live: LiveFeed;
   stopGraceMs: () => number;
   /** Launches and attaches a qualified Worker on demand; absent or rejecting, starts fail closed. */
@@ -64,7 +67,8 @@ export function systemPrompt(project: Project): string {
 interface Run {
   taskId: string;
   project: Project;
-  model: ClaudeModel;
+  route: { provider: 'anthropic'; model: ClaudeModel } | { provider: LinkedProvider; model: string };
+  credentials: CredentialService;
   tools: AgentToolName[];
   conversation: Conversation;
   /** The policy this task's requests are managed under; null once it has been switched off (or was never on). */
@@ -129,7 +133,10 @@ export class TaskRunner {
     const project = this.options.store.getProject(projectId);
     if (!project) throw new Error('NOT_FOUND');
     // Cheap preconditions first: an isolated Worker is never launched for a start that would be refused anyway.
-    if (!this.options.credentials.status().configured) throw new Error('MODEL_NOT_CONFIGURED');
+    const linked = this.options.linkedRoute?.();
+    const credentials = linked?.credentials ?? this.options.credentials;
+    if (!credentials.status().configured || (linked && !linked.model)) throw new Error('MODEL_NOT_CONFIGURED');
+    const route: Run['route'] = linked ? { provider: linked.provider, model: linked.model! } : { provider: 'anthropic', model: this.options.model() };
     if (this.busy) throw new Error('AGENT_BUSY');
     if (!this.link && this.options.ensureWorker) await this.options.ensureWorker().catch(() => undefined);
     const link = this.link;
@@ -140,9 +147,9 @@ export class TaskRunner {
     if (created.task.state !== 'CREATED' || this.runs.has(created.task.id)) return created.task;
     const taskId = created.task.id;
     let settle!: () => void;
-    const model = this.options.model();
-    const run: Run = { taskId, project, model, tools: AGENT_TOOLS, conversation: new Conversation(systemPrompt(project), prompt),
-      context: (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(model), summaryInHistory: false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
+    const run: Run = { taskId, project, route, credentials, tools: AGENT_TOOLS, conversation: new Conversation(systemPrompt(project), prompt),
+      context: route.provider === 'anthropic' ? (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(route.model) : null,
+      summaryInHistory: false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
     this.runs.set(taskId, run);
     this.transition(taskId, 'QUEUED', null);
     const message = this.options.store.addTaskMessage(taskId, 'user', 0, prompt);
@@ -201,9 +208,12 @@ export class TaskRunner {
     if (run.stopping) return failed('cancelled');
     if (run.conversation.status === 'awaiting_tools') run.conversation.closeRound();
     const abort = new AbortController(); run.abort = abort;
-    const request = (context: ContextPolicy | null) => this.options.credentials.withKey(apiKey => this.options.gateway.runTurn({ apiKey, model: run.model, turn,
-      system: run.conversation.system, messages: run.conversation.history(), tools: run.tools, signal: abort.signal, context,
-      onDelta: delta => this.options.live.push(taskId, turn, delta) }));
+    const request = (context: ContextPolicy | null) => run.credentials.withKey<AgentTurnResult>(apiKey => {
+      const input: Omit<TurnInput, 'model'> = { apiKey, turn, system: run.conversation.system, messages: run.conversation.history(),
+        tools: run.tools, signal: abort.signal, context, onDelta: delta => this.options.live.push(taskId, turn, delta) };
+      return run.route.provider === 'anthropic' ? this.options.gateway.runTurn({ ...input, model: run.route.model })
+        : runLinkedTurn(run.route.provider, { ...input, model: run.route.model });
+    });
     let used = await request(run.context);
     // Context management relies on a provider beta. If the provider rejects a managed request outright (as invalid, or
     // as something this key or model may not use), the task goes on unmanaged: this turn is retried once, exactly as it
@@ -225,7 +235,7 @@ export class TaskRunner {
       run.summaryInHistory ||= result.replay.some(block => block.type === 'compaction');
       const text = result.replay.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('');
       const message = text ? this.options.store.addTaskMessage(taskId, 'assistant', turn, clip(text)) : null;
-      this.options.store.appendAgentEvent(taskId, 'assistant_turn', { turn, model: result.view.model, messageId: message?.id ?? null,
+      this.options.store.appendAgentEvent(taskId, 'assistant_turn', { turn, provider: run.route.provider, model: result.view.model, messageId: message?.id ?? null,
         stopReason: result.view.stopReason, toolCalls: result.view.toolCalls.length, fallback: result.view.fallback, usage: result.view.usage,
         timing: result.timing, context: { ...result.context, managed: run.context !== null } });
     } catch { return failed('response_invalid'); }

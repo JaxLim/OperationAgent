@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { LANGUAGES, THEME_IDS } from '@operation-agent/contracts';
-import type { Language, ThemeId, WorkbenchSettings } from '@operation-agent/contracts';
+import type { Language, ThemeId, UsagePage, UsageQuery, WorkbenchSettings } from '@operation-agent/contracts';
+import { PROVIDER_NAMES } from './ModelSettings';
 import { LANGUAGE_NAMES, resolveLocale } from '../i18n';
 import type { MessageKey } from '../i18n';
 import { useT } from '../locale';
@@ -161,6 +162,17 @@ function UsageSection() {
   const t = useT();
   const overview = useStore(s => s.overview);
   const ready = useStore(s => s.connection === 'ready');
+  const [cursors, setCursors] = useState<UsageQuery['after'][]>([null]);
+  const [revision, refresh] = useState(0);
+  const [page, setPage] = useState<UsagePage | 'error' | null>(null);
+  const after = cursors.at(-1) ?? null;
+  useEffect(() => {
+    let active = true;
+    setPage(null);
+    if (ready) void window.operationAgent.listUsage({ after }).then(
+      result => { if (active) setPage(result); }, () => { if (active) setPage('error'); });
+    return () => { active = false; };
+  }, [ready, after, revision]);
   const tiles: readonly [MessageKey, string | number][] = [
     ['usage.projects', ready && overview ? overview.database.projects : '—'], ['usage.runs', ready && overview ? overview.database.runs : '—'],
     ['usage.records', ready && overview ? overview.database.records : '—'], ['usage.schema', ready && overview ? `v${overview.database.version}` : '—'],
@@ -172,7 +184,23 @@ function UsageSection() {
         <span><span className="data-tag data-estimated">{t('data.estimated')}</span> {t('usage.legendEstimated')}</span>
         <span><span className="data-tag data-unavailable">{t('data.unavailable')}</span> {t('usage.legendUnavailable')}</span>
       </div>
-      <Row label={t('usage.tokens')} hint={t('usage.tokensHint')}><span className="data-tag data-unavailable">{t('data.unavailable')}</span></Row>
+      <Row label={t('usage.tokens')} hint={t('usage.tokensHint')}><button className="btn" disabled={!ready}
+        onClick={() => { setCursors([null]); refresh(n => n + 1); }}>{t('providers.refreshModels')}</button></Row>
+      {ready && page && page !== 'error' && page.rows.length > 0 ? <div className="usage-table-wrap"><table className="runs-table">
+        <thead><tr>{(['composer.provider', 'composer.modelLabel', 'usage.calls', 'usage.input', 'usage.cacheRead', 'usage.cacheWrite',
+          'usage.output', 'usage.total'] as const).map(key => <th key={key}>{t(key)}</th>)}</tr></thead>
+        <tbody>{page.rows.map(row => {
+          const input = row.inputTokens + row.cacheReadTokens + row.cacheWriteTokens;
+          return <tr key={row.provider + '/' + row.model}><td>{PROVIDER_NAMES[row.provider]}</td><td>{row.model}</td>
+            {[row.turns, input, row.cacheReadTokens, row.cacheWriteTokens, row.outputTokens, input + row.outputTokens]
+              .map((value, index) => <td key={index}>{value.toLocaleString()}</td>)}</tr>;
+        })}</tbody></table></div> : <p role="status">{t(!ready ? 'data.unavailable' : page === 'error' ? 'usage.loadError'
+          : page ? 'usage.empty' : 'providers.loadingModels')}</p>}
+      {cursors.length > 1 && <button className="btn" onClick={() => setCursors(items => items.slice(0, -1))}>{t('usage.previous')}</button>}
+      {ready && page && page !== 'error' && page.hasMore && <button className="btn" onClick={() => {
+        const { provider, model } = page.rows.at(-1)!;
+        setCursors(items => [...items, { provider, model }]);
+      }}>{t('usage.next')}</button>}
       <Row label={t('usage.quota')} hint={t('usage.quotaHint')}><span className="data-tag data-unavailable">{t('data.unavailable')}</span></Row>
       <Row label={t('usage.size')} hint={t('usage.sizeHint')}><span className="data-tag data-reported">{t('data.reported')}</span></Row>
       <h3 className="settings-group-title">{t('usage.storage')} <span className="data-tag data-reported">{t('data.reported')}</span></h3>

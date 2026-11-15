@@ -10,6 +10,7 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, Au
   TaskMessagePageSchema, TaskMessagesQuerySchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
 import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
+import { UsageQuerySchema } from '@operation-agent/contracts';
 import { UNAVAILABLE_BRIDGE } from './credentials/bridge.js';
 import type { CryptoBridge } from './credentials/bridge.js';
 import { createCredentialService } from './credentials/service.js';
@@ -162,6 +163,11 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     } catch (error) { failure(res, error); }
   });
   app.get(CONTROL_ROUTES.settings, (_req, res) => { try { res.json(store.getSettings()); } catch (error) { failure(res, error); } });
+  app.post(CONTROL_ROUTES.usage, (req, res) => {
+    const input = UsageQuerySchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try { res.json(store.listUsage(input.data)); } catch (error) { failure(res, error); }
+  });
   app.put(CONTROL_ROUTES.settings, (req, res) => {
     const input = WorkbenchSettingsSchema.safeParse(req.body);
     if (!input.success) { validationError(res); return; }

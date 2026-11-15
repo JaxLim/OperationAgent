@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
 import { ApiKeyInputSchema, ControlHealthSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, FoundationInfoSchema, IPC_CHANNELS,
   PROTOCOL_VERSION, ProjectAddResultSchema, ProjectListSchema, ProjectRefSchema, SmokeBatchSchema, SmokeRecordsSchema,
   TaskEventPageSchema, TaskEventsQuerySchema, TaskLivePageSchema, TaskLiveQuerySchema, TaskMessagePageSchema, TaskMessagesQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
@@ -42,6 +43,7 @@ const api: DesktopApi = {
   clearApiKey: async () => ModelSettingsViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.clearApiKey, {})),
   testModelConnection: async () => ModelTestResultSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.testModelConnection, {})),
   getProviders: async () => ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.getProviders, {})),
+  listUsage: async input => UsagePageSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listUsage, UsageQuerySchema.parse(input))),
   setProviderKey: async input => {
     const parsed = ProviderKeyInputSchema.safeParse(input);
     if (!parsed.success) throw new Error('VALIDATION_ERROR');
