@@ -1,5 +1,6 @@
 import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, safeStorage } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
+import { UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
 import { basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, CONTROL_ROUTES, ControlErrorSchema, LinkedProviderRefSchema, MODEL_LIMITS,
@@ -171,6 +172,7 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   const providersView = async (overview: ProviderOverview): Promise<ProviderOverviewView> =>
     ProviderOverviewViewSchema.parse({ ...overview, secureStorage: await secureStorageAvailable(safeStorage) ? 'available' : 'unavailable' });
   register(IPC_CHANNELS.getProviders, async input => { empty(input); return providersView(await supervisor.call('GET', CONTROL_ROUTES.providers, ProviderOverviewSchema)); });
+  register(IPC_CHANNELS.listUsage, async input => supervisor.call('POST', CONTROL_ROUTES.usage, UsagePageSchema, UsageQuerySchema.parse(input)));
   registerSecret(IPC_CHANNELS.setProviderKey, async input => {
     const parsed = ProviderKeyInputSchema.safeParse(input);
     if (!parsed.success) throw new Error('VALIDATION_ERROR');

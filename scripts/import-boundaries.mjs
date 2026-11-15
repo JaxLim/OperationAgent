@@ -25,7 +25,7 @@ const ipcOperations = ['health', 'listRecords', 'writeRecords', 'desktopStatus',
   'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
   // Settings expansion: linked providers and web-search keys (fixed endpoints, write-only keys), plus agent profiles and
   // MCP server definitions, which are stored configuration only: none runs an agent, launches a process or connects.
-  'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel',
+  'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel', 'listUsage',
   'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'];
 
 export function zoneFor(filename, cwd) {

@@ -51,9 +51,15 @@ async function start(message: unknown): Promise<void> {
   let runner: TaskRunner | undefined;
   if (input.agentRuntime) {
     const openStore = store;
+    const crypto = bridge;
     runner = new TaskRunner({ store: openStore, credentials: createCredentialService(openStore, bridge),
       gateway: createTurnGateway({ endpoint: input.modelEndpoint }), tools: createToolRouter({ store: openStore }),
       model: () => openStore.getModel(), live: new LiveFeed(), stopGraceMs: () => openStore.getSettings().stopGraceMs,
+      linkedRoute: () => {
+        const provider = openStore.getSettings().defaultProvider;
+        return provider === 'anthropic' ? null : { provider, model: openStore.getProviderModel(provider),
+          credentials: createCredentialService(openStore.credentialStore(provider), crypto) };
+      },
       ensureWorker: () => workers!.ensure() });
     workers = new AgentWorkerSupervisor({ runtimeDirectory: input.agentRuntime, expressRunId: input.expressRunId, runner });
   }

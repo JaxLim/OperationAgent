@@ -67,7 +67,7 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
   assert.deepEqual(first.renderer.keys.sort(), ['getFoundationInfo', 'getControlPlaneHealth', 'listSmokeRecords', 'writeSmokeRecords', 'getDesktopStatus',
     'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask', 'stopTask', 'listTaskMessages', 'readTaskLive',
     'listTasks', 'getTask', 'listTaskEvents', 'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
-    'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel',
+    'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel', 'listUsage',
     'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'].sort());
   assert.equal(first.renderer.mounted, true);
   assert.equal(await host.command('csp'), 'blocked'); assert.equal(await host.command('invalid-input'), 'rejected');
@@ -269,6 +269,10 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.match(view.usage, /output 240 tokens/);
   assert.match(view.usage, /model 5\.5s · first content 0\.5s \(median\) · tools 0\.1s/);
   await host.command('capture', `m2/${process.platform}-${process.arch}/conversation.png`);
+  const [provider, model, ...counts] = await host.command('usage-ui');
+  assert.equal(provider, 'Anthropic');
+  assert.equal(model, 'claude-sonnet-5-5');
+  assert.deepEqual(counts.map(value => Number(value.replace(/\D/g, ''))), [2, 2100, 900, 0, 240, 2340]);
 });
 
 /** Every file under a directory, for a plaintext scan of everything Electron, Express and SQLite left on disk. */

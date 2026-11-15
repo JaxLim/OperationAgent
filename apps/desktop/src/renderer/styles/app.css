@@ -1035,3 +1035,5 @@ button.meta-chip:hover, [aria-expanded="true"].meta-chip { background: var(--hov
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
   .dot-live { animation: none !important; }
 }
+.usage-table-wrap { overflow-x: auto; }
+.usage-table-wrap td:nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }

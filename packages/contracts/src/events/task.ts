@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ToolOutputSummarySchema } from './tool-output.js';
-import { ClaudeModelSchema } from '../api/model.js';
+import { ModelIdSchema, ModelProviderSchema } from '../api/providers.js';
 import { AGENT_RUN_LIMITS, ToolCallViewSchema, TurnStopReasonSchema, TurnUsageSchema } from '../agent/turn.js';
 import { TurnContextSchema, TurnTimingSchema } from '../agent/context.js';
 import { ToolCallStatusSchema } from '../rpc/agent.js';
@@ -66,7 +66,7 @@ const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const TaskUserMessageEventSchema = z.strictObject({ ...eventBase, type: z.literal('user_message'),
   payload: z.strictObject({ messageId: z.uuid(), chars: count }) });
 export const TaskAssistantTurnEventSchema = z.strictObject({ ...eventBase, type: z.literal('assistant_turn'),
-  payload: z.strictObject({ turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns), model: ClaudeModelSchema,
+  payload: z.strictObject({ turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns), model: ModelIdSchema, provider: ModelProviderSchema.optional(),
     messageId: z.uuid().nullable(), stopReason: TurnStopReasonSchema, toolCalls: count, fallback: z.boolean(), usage: TurnUsageSchema,
     // Added with the context engine (ADR-PLAT-001 D1/D2). Optional: turns recorded before it carry neither.
     timing: TurnTimingSchema.optional(), context: TurnContextSchema.optional() }) });
