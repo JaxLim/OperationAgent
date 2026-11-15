@@ -37,11 +37,13 @@ function normalize(reply: Reply, input: Input, started: number): AgentTurnResult
   const { message, finish_reason } = reply.choices[0]!;
   if (message.role !== 'assistant') throw new Error('response_invalid');
   const stopReason = message.refusal ? 'refusal' : stopReasons[finish_reason] ?? 'other';
+  // An interrupted function call is neither a usable request nor a completed text-only answer.
+  if (message.tool_calls?.length && stopReason !== 'tool_use') throw new Error('response_invalid');
   const text = message.content ?? message.refusal ?? '';
   const replay: Extract<AgentTurnResult, { status: 'ok' }>['replay'] = [];
   if (text) replay.push({ type: 'text', citations: null, text });
   const seen = new Set<string>();
-  const toolCalls = (stopReason === 'tool_use' ? message.tool_calls ?? [] : []).map(call => {
+  const toolCalls = (message.tool_calls ?? []).map(call => {
     if (call.type !== 'function' || seen.has(call.id) || !input.tools.some(name => name === call.function.name)) throw new Error('response_invalid');
     seen.add(call.id);
     const tool = { id: call.id, name: call.function.name, input: JSON.parse(call.function.arguments) as unknown };

@@ -102,6 +102,7 @@ test('missing usage, malformed calls, duplicate ids, undeclared tools and excess
     Array.from({ length: AGENT_RUN_LIMITS.maxToolCallsPerTurn + 1 }, (_, i) => ({ ...call, id: 'c' + i }))];
   const responses = [Response.json({ choices: [choice({ content: 'ok' })] }),
     Response.json({ choices: [choice({ content: 'ok' })], usage: { prompt_tokens: 9 } }),
+    answer({ content: null, tool_calls: [{ ...call, function: { name: 'read_file', arguments: '{' } }] }, 'length'),
     ...invalidCalls.map(calls => answer({ content: null, tool_calls: calls }, 'tool_calls'))];
   transport(t, ...responses);
   for (let i = 0; i < responses.length; i++) {
