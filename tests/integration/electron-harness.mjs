@@ -146,6 +146,30 @@ process.on('message', async message => {
         })()`);
         break;
       case 'model-test': value = await host.window.webContents.executeJavaScript('window.operationAgent.testModelConnection()'); break;
+      case 'settings-layout': {
+        host.window.setSize(message.input.width, message.input.height);
+        host.window.showInactive();
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          let requested = false;
+          for (let i = 0; i < 150; i++) {
+            if (!document.querySelector('.modal-settings') && document.querySelector('.app[data-loaded="true"]'))
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));
+            const modal = document.querySelector('.modal-settings');
+            const mode = modal?.querySelectorAll('.radio-row')[${message.input.theme === 'dark' ? 2 : 1}];
+            if (mode && !mode.disabled && !requested) { mode.click(); requested = true; }
+            if (modal && document.documentElement.dataset.theme === ${JSON.stringify(message.input.theme)}) {
+              await new Promise(done => setTimeout(done, 600));
+              const rect = modal.getBoundingClientRect();
+              return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, viewport: [innerWidth,innerHeight],
+                brand: document.querySelector('.brand').textContent, marks: document.querySelectorAll('.brand-mark').length,
+                overflow: modal.scrollWidth > modal.clientWidth };
+            }
+            await new Promise(done => setTimeout(done, 50));
+          }
+          throw new Error('SETTINGS_LAYOUT_TIMEOUT');
+        })()`);
+        break;
+      }
       case 'custom-api': {
         const original = dialog.showMessageBox;
         let confirmation;

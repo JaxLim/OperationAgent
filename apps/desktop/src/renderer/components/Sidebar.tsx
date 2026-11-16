@@ -60,7 +60,7 @@ export const Sidebar = forwardRef<HTMLInputElement, Props>(function Sidebar({ on
     <aside className="sidebar" aria-label={t('sidebar.label')}>
       <div className="sidebar-top">
         <button className="icon-btn" onClick={onCollapse} aria-label={t('sidebar.hide')} title={t('sidebar.hideTitle')}><IconPanelLeft size={17} /></button>
-        <span className="brand"><span className="brand-mark" aria-hidden="true" />OperationAgent</span>
+        <span className="brand">OperationAgent</span>
       </div>
 
       <div className="sidebar-nav">

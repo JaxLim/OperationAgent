@@ -293,6 +293,22 @@ test('custom provider confirmation encrypts its dedicated key and survives Elect
   assert.deepEqual(view.custom, saved.overview.custom);
 });
 
+test('settings stays centered below caption controls at supported window sizes', { timeout: 90_000 }, async t => {
+  const host = await (await fixture(t))();
+  for (const [width, height, theme] of [[1360,860,'light'],[1360,860,'dark'],[960,600,'dark'],[1920,1080,'light']]) {
+    const view = await host.command('settings-layout', { width, height, theme });
+    assert.ok(view.y >= 56, JSON.stringify(view));
+    assert.ok(view.x >= 32);
+    assert.ok(view.width <= 1120);
+    assert.ok(Math.abs(view.x * 2 + view.width - view.viewport[0]) <= 2);
+    assert.ok(Math.abs(view.y * 2 + view.height - view.viewport[1]) <= 2);
+    assert.equal(view.overflow, false);
+    assert.equal(view.brand, 'OperationAgent');
+    assert.equal(view.marks, 0);
+    if (width === 1360) await host.command('capture', 'ui/settings-' + theme + '.png');
+  }
+});
+
 /** Every file under a directory, for a plaintext scan of everything Electron, Express and SQLite left on disk. */
 async function allBytes(directory) {
   const chunks = [];
