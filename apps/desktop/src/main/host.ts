@@ -1,6 +1,7 @@
-import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, safeStorage } from 'electron';
+import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, safeStorage, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
-import { UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
+import { CustomProviderInputSchema, CustomProviderRefSchema, HfConfigSchema, HfLoginChallengeSchema, HfLoginInputSchema,
+  HfLoginStateSchema, HfSessionSchema, UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
 import { basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, CONTROL_ROUTES, ControlErrorSchema, LinkedProviderRefSchema, MODEL_LIMITS,
@@ -51,7 +52,9 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   nativeTheme.on('updated', repaintChrome);
   window.once('closed', () => nativeTheme.removeListener('updated', repaintChrome));
   // The saved theme (owned by Express) also drives native chrome and dialogs.
+  let language: WorkbenchSettings['language'] = 'system';
   const applyTheme = (settings: WorkbenchSettings): void => {
+    language = settings.language;
     palettes = { light: settings.lightTheme, dark: settings.darkTheme };
     nativeTheme.themeSource = settings.theme;
     // A palette change alone does not fire nativeTheme 'updated'.
@@ -173,6 +176,39 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
     ProviderOverviewViewSchema.parse({ ...overview, secureStorage: await secureStorageAvailable(safeStorage) ? 'available' : 'unavailable' });
   register(IPC_CHANNELS.getProviders, async input => { empty(input); return providersView(await supervisor.call('GET', CONTROL_ROUTES.providers, ProviderOverviewSchema)); });
   register(IPC_CHANNELS.listUsage, async input => supervisor.call('POST', CONTROL_ROUTES.usage, UsagePageSchema, UsageQuerySchema.parse(input)));
+  registerSecret(IPC_CHANNELS.saveCustomProvider, async input => {
+    const parsed = CustomProviderInputSchema.safeParse(input);
+    if (!parsed.success) throw new Error('VALIDATION_ERROR');
+    if (!await secureStorageAvailable(safeStorage)) throw new Error('SECURE_STORAGE_UNAVAILABLE');
+    const url = new URL(parsed.data.baseUrl);
+    if (!['https:', 'http:'].includes(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash)
+      throw new Error('VALIDATION_ERROR');
+    const locale = language === 'system' ? app.getPreferredSystemLanguages()[0] ?? app.getLocale() : language;
+    const copy = locale.startsWith('zh') ? ['允许向此主机发送 API Key 和模型请求？', '取消', '确认保存']
+      : locale.startsWith('ja') ? ['このホストに API キーとモデルリクエストを送信しますか？', 'キャンセル', '確認して保存']
+      : ['Allow this host to receive the API key and model requests?', 'Cancel', 'Confirm and save'];
+    const choice = await dialog.showMessageBox(window, { type: 'warning', message: copy[0]!, detail: url.hostname + '\n\n' + url.href,
+      buttons: [copy[1]!, copy[2]!], defaultId: 0, cancelId: 0, noLink: true });
+    if (choice.response !== 1) return providersView(await supervisor.call('GET', CONTROL_ROUTES.providers, ProviderOverviewSchema));
+    return providersView(await supervisor.call('POST', CONTROL_ROUTES.saveCustomProvider, ProviderOverviewSchema, parsed.data, MODEL_LIMITS.credentialRequestMs));
+  });
+  register(IPC_CHANNELS.removeCustomProvider, async input => providersView(await supervisor.call('POST', CONTROL_ROUTES.removeCustomProvider,
+    ProviderOverviewSchema, CustomProviderRefSchema.parse(input))));
+  registerSecret(IPC_CHANNELS.beginHfLogin, async input => {
+    if (!await secureStorageAvailable(safeStorage)) throw new Error('SECURE_STORAGE_UNAVAILABLE');
+    const challenge = await supervisor.call('POST', CONTROL_ROUTES.beginHfLogin, HfLoginChallengeSchema, HfLoginInputSchema.parse(input), MODEL_LIMITS.testRequestMs);
+    try { await shell.openExternal('https://huggingface.co/oauth/device'); }
+    catch {
+      await supervisor.call('POST', CONTROL_ROUTES.cancelHfLogin, HfLoginStateSchema, { sessionId: challenge.sessionId });
+      throw new Error('CONTROL_PLANE_REQUEST_FAILED');
+    }
+    return challenge;
+  });
+  registerSecret(IPC_CHANNELS.pollHfLogin, async input => supervisor.call('POST', CONTROL_ROUTES.pollHfLogin,
+    HfLoginStateSchema, HfSessionSchema.parse(input), MODEL_LIMITS.testRequestMs));
+  register(IPC_CHANNELS.cancelHfLogin, async input => supervisor.call('POST', CONTROL_ROUTES.cancelHfLogin, HfLoginStateSchema, HfSessionSchema.parse(input)));
+  register(IPC_CHANNELS.configureHf, async input => providersView(await supervisor.call('POST', CONTROL_ROUTES.configureHf,
+    ProviderOverviewSchema, HfConfigSchema.parse(input), MODEL_LIMITS.credentialRequestMs)));
   registerSecret(IPC_CHANNELS.setProviderKey, async input => {
     const parsed = ProviderKeyInputSchema.safeParse(input);
     if (!parsed.success) throw new Error('VALIDATION_ERROR');

@@ -344,6 +344,17 @@ export const actions = {
     // Discard a result for a model or key that changed while the test ran.
     if (revision === modelRevision) set({ modelTest: next });
   },
+  async saveCustomProvider(input: Parameters<DesktopApi['saveCustomProvider']>[0]): Promise<void> {
+    set({ providers: await api().saveCustomProvider(input) });
+  },
+  async removeCustomProvider(id: string): Promise<void> {
+    set({ providers: await api().removeCustomProvider({ id }) });
+    set({ settings: await api().getSettings() });
+  },
+  async configureHf(model: string | null, disconnect: boolean): Promise<void> {
+    set({ providers: await api().configureHf({ model, disconnect }) });
+    if (disconnect) set({ settings: await api().getSettings() });
+  },
   async refreshProviders(): Promise<void> {
     try { set({ providers: await api().getProviders() }); } catch { /* The status banner reports availability. */ }
   },

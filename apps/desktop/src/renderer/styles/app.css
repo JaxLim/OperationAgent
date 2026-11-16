@@ -822,6 +822,7 @@ button.meta-chip:hover, [aria-expanded="true"].meta-chip { background: var(--hov
 }
 .settings-group > .settings-group-title:first-child { margin-top: 8px; }
 .settings-body > .settings-group-title:first-of-type { margin-top: 6px; }
+.provider-url { overflow-wrap: anywhere; white-space: normal; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field + .field, .field-row + .field, .field + .field-row { margin-top: 16px; }
 .field-label { font-weight: 600; font-size: 13px; }

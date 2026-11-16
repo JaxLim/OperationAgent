@@ -1,0 +1,12 @@
+{
+  "id": "ADR-PROV-001",
+  "outcome": "approved",
+  "approvedBy": "project-owner",
+  "approvedDate": "2026-11-15",
+  "approvedChanges": ["D1", "D2"],
+  "source": {
+    "kind": "user-message",
+    "questionItemId": "[\"request_user_input_async\",\"call_ce90b043daad47bca1acbaae9d7ad1ff\",0]",
+    "quote": "批准两项：官方设备码登录，以及绑定独立密钥的自定义 HTTPS 地址（本机地址需单独勾选）"
+  }
+}

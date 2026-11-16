@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SEARCH_PROVIDERS } from '@operation-agent/contracts';
-import type { CredentialStatus, LinkedProvider, ModelProvider, ProviderModelList, ProviderTestResult, SearchProvider, WorkbenchSettings } from '@operation-agent/contracts';
+import type { CredentialStatus, HfLoginChallenge, HfLoginState, LinkedProvider, ModelProvider, ProviderModelList, ProviderTestResult, SearchProvider, WorkbenchSettings } from '@operation-agent/contracts';
 import type { MessageKey } from '../i18n';
 import { useT } from '../locale';
 import { actions, errorCode, useStore } from '../state';
@@ -9,20 +9,22 @@ import { Segmented } from './Modal';
 import { IconCheck, IconChevronRight, IconInfo, IconLock, IconPlus, IconRetry, IconSearch, IconShield } from './Icons';
 
 // Settings › Providers and Settings › Web search. Every status shown here is what Express reported; the Renderer
-// never decides that a key works. Account sign-in and custom endpoints are listed but stay locked (ADR-PROV-001).
+// never decides that a credential works.
 
-type PendingId = 'chatgpt' | 'copilot' | 'custom';
-interface Card { id: ModelProvider | PendingId; name: string; desc: MessageKey; mark: string; tone: string; recommended?: true }
+type PendingId = 'chatgpt' | 'copilot';
+interface Card { id: ModelProvider | PendingId; name: string; nameKey?: MessageKey; desc: MessageKey; mark: string; tone: string; recommended?: true }
 const CARDS: readonly Card[] = [
   { id: 'anthropic', name: PROVIDER_NAMES.anthropic, desc: 'provider.anthropic.desc', mark: 'A', tone: 'clay', recommended: true },
   { id: 'openai', name: PROVIDER_NAMES.openai, desc: 'provider.openai.desc', mark: 'O', tone: 'ink', recommended: true },
   { id: 'openrouter', name: PROVIDER_NAMES.openrouter, desc: 'provider.openrouter.desc', mark: 'R', tone: 'slate', recommended: true },
   { id: 'google', name: PROVIDER_NAMES.google, desc: 'provider.google.desc', mark: 'G', tone: 'sky' },
+  { id: 'custom', name: '', nameKey: 'provider.custom.name', desc: 'provider.custom.desc', mark: '+', tone: 'plain' },
+  { id: 'huggingface', name: 'Hugging Face', desc: 'hf.description', mark: 'HF', tone: 'clay' },
 ];
 const PENDING: readonly (Card & { id: PendingId; nameKey?: MessageKey })[] = [
   { id: 'chatgpt', name: '', nameKey: 'provider.chatgpt.name', desc: 'provider.chatgpt.desc', mark: 'C', tone: 'mint' },
   { id: 'copilot', name: '', nameKey: 'provider.copilot.name', desc: 'provider.copilot.desc', mark: 'GH', tone: 'violet' },
-  { id: 'custom', name: '', nameKey: 'provider.custom.name', desc: 'provider.custom.desc', mark: '+', tone: 'plain' },
+
 ];
 const MARKS = Object.fromEntries(CARDS.map(card => [card.id, { mark: card.mark, tone: card.tone }])) as Readonly<Record<ModelProvider, { mark: string; tone: string }>>;
 
@@ -45,7 +47,7 @@ function ProviderCard({ card, name, configured, isDefault, locked, onOpen }: { c
       <span className="provider-card-top">
         <ProviderMark label={card.mark} tone={card.tone} />
         {card.recommended && !configured && <span className="provider-badge">{t('providers.recommended')}</span>}
-        {configured && <span className="provider-badge is-ok"><IconCheck size={11} />{t('providers.keySaved')}</span>}
+        {configured && <span className="provider-badge is-ok"><IconCheck size={11} />{t(card.id === 'huggingface' ? 'hf.authorized' : 'providers.keySaved')}</span>}
         {locked && <span className="provider-badge"><IconLock size={11} />{t('providers.needsApproval')}</span>}
       </span>
       <span className="provider-card-name">{name}{isDefault && <span className="scope-tag scope-global">{t('common.default')}</span>}</span>
@@ -54,7 +56,7 @@ function ProviderCard({ card, name, configured, isDefault, locked, onOpen }: { c
   );
 }
 
-function DetailHeader({ id, name, configured, onBack }: { id: ModelProvider; name: string; configured: boolean; onBack: () => void }) {
+function DetailHeader({ id, name, configured, onBack }: { id: keyof typeof PROVIDER_HOSTS; name: string; configured: boolean; onBack: () => void }) {
   const t = useT();
   const settings = useStore(s => s.settings);
   const ready = useStore(s => s.connection === 'ready');
@@ -71,7 +73,7 @@ function DetailHeader({ id, name, configured, onBack }: { id: ModelProvider; nam
         <StatusPill configured={configured} />
         {isDefault ? <span className="pill tone-accent"><IconCheck size={12} />{t('providers.isDefault')}</span>
           : <button className="btn btn-pill btn-xs" disabled={!ready || !settings || !configured} data-action="use-default"
-            onClick={() => void actions.saveSettings({ defaultProvider: id })}>{t('providers.useDefault')}</button>}
+            onClick={() => void actions.saveSettings({ defaultProvider: id, customProviderId: null })}>{t('providers.useDefault')}</button>}
       </div>
     </>
   );
@@ -173,10 +175,142 @@ function PendingDetail({ card, onBack }: { card: (typeof PENDING)[number]; onBac
   );
 }
 
+function CustomDetail() {
+  const t = useT();
+  const overview = useStore(s => s.providers);
+  const ready = useStore(s => s.connection === 'ready');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [model, setModel] = useState('');
+  const [allowLocal, setAllowLocal] = useState(false);
+  const key = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const run = async (call: () => Promise<void>) => {
+    setBusy(true); setError('');
+    try { await call(); } catch (err) { setError(errorCode(err)); } finally { setBusy(false); }
+  };
+  const disabled = busy || !ready || !overview?.custom;
+  return <>
+    {overview?.custom?.map(item => <div key={item.id} className="model-current">
+      <span><strong>{item.model}</strong><br/><span className="mono provider-url">{item.baseUrl}</span></span>
+      <button className="btn" disabled={disabled} onClick={() => void run(() => actions.removeCustomProvider(item.id))}>{t('common.remove')}</button>
+    </div>)}
+    <form className="settings-group" onSubmit={event => {
+      event.preventDefault();
+      if (!key.current || disabled) return;
+      const pending = actions.saveCustomProvider({ baseUrl: baseUrl.trim(), model: model.trim(), allowLocal, apiKey: key.current.value });
+      key.current.value = '';
+      void run(() => pending);
+    }}>
+      <label className="field"><span className="field-label">{t('custom.baseUrl')}</span>
+        <input className="text-input mono" type="url" required value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder="https://api.example.com/v1" /></label>
+      <label className="field field-inline"><input type="checkbox" checked={allowLocal} onChange={e => setAllowLocal(e.target.checked)} />{t('custom.allowLocal')}</label>
+      <label className="field"><span className="field-label">{t('providers.model')}</span>
+        <input className="text-input mono" required value={model} onChange={e => setModel(e.target.value)} /></label>
+      <label className="field"><span className="field-label">{t('providers.apiKey')}</span>
+        <input className="text-input mono" type="password" autoComplete="new-password" required ref={key} /></label>
+      <div className="form-actions"><button className="btn btn-primary" disabled={disabled || overview?.secureStorage !== 'available'}>{t('custom.review')}</button></div>
+    </form>
+    {overview?.secureStorage === 'unavailable' && <p role="status">{t('key.blockedText')}</p>}
+    {error && <TestFailed code={error} />}
+  </>;
+}
+
+function HfDetail() {
+  const t = useT();
+  const overview = useStore(s => s.providers);
+  const ready = useStore(s => s.connection === 'ready');
+  const hf = overview?.huggingface;
+  const [clientId, setClientId] = useState('');
+  const [model, setModel] = useState(hf?.model ?? '');
+  const [challenge, setChallenge] = useState<HfLoginChallenge | null>(null);
+  const [status, setStatus] = useState<HfLoginState['state'] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const mounted = useRef(false);
+  const session = useRef<string | null>(null);
+  const api = window.operationAgent;
+  useEffect(() => { setModel(hf?.model ?? ''); }, [hf?.model]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      const sessionId = session.current;
+      session.current = null;
+      if (sessionId) void api.cancelHfLogin({ sessionId }).catch(() => {});
+    };
+  }, [api]);
+  const finish = (state: HfLoginState['state']) => {
+    setStatus(state);
+    if (state !== 'waiting') {
+      session.current = null; setChallenge(null);
+      if (state === 'authorized') void actions.refreshProviders();
+    }
+  };
+  useEffect(() => {
+    if (!challenge) return;
+    const { sessionId } = challenge;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const reply = await api.pollHfLogin({ sessionId });
+        if (!active || session.current !== sessionId) return;
+        finish(reply.state);
+        if (reply.state === 'waiting') schedule();
+      } catch (err) {
+        if (!active || session.current !== sessionId) return;
+        setError(errorCode(err));
+        if (Date.now() < challenge.expiresAt) schedule();
+        else finish('expired');
+      }
+    };
+    const schedule = () => { timer = setTimeout(() => void poll(), 5000); };
+    schedule();
+    return () => { active = false; clearTimeout(timer); };
+  }, [api, challenge]);
+  const run = async (call: () => Promise<void>) => {
+    setBusy(true); setError('');
+    try { await call(); } catch (err) { if (mounted.current) setError(errorCode(err)); }
+    finally { if (mounted.current) setBusy(false); }
+  };
+  const begin = async () => {
+    setStatus(null);
+    const result = await api.beginHfLogin({ clientId: clientId.trim() });
+    if (!mounted.current) { await api.cancelHfLogin({ sessionId: result.sessionId }); return; }
+    session.current = result.sessionId; setChallenge(result); setStatus('waiting');
+  };
+  const disabled = busy || !ready || !hf;
+  return <>
+    {hf?.configured ? <form onSubmit={e => { e.preventDefault(); void run(() => actions.configureHf(model.trim() || null, false)); }}>
+      <p className="pill tone-ok">{t('hf.authorized')}</p>
+      <label className="field"><span className="field-label">{t('providers.model')}</span>
+        <input className="text-input mono" value={model} onChange={e => setModel(e.target.value)} placeholder="org/model" /></label>
+      <div className="form-actions"><button className="btn btn-primary" disabled={disabled || (hf.model ?? '') === model.trim()}>{t('hf.saveModel')}</button>
+        <button type="button" className="btn" disabled={disabled} onClick={() => void run(async () => { await actions.configureHf(null, true); setStatus(null); })}>{t('hf.disconnect')}</button></div>
+    </form> : challenge ? <div className="settings-group">
+      <p>{t('hf.codeHint')}</p><strong className="mono">{challenge.userCode}</strong>
+      <p className="muted small">{t('hf.expires', { time: new Date(challenge.expiresAt).toLocaleTimeString() })}</p>
+      <button className="btn" disabled={busy} onClick={() => void run(async () => {
+        const result = await api.cancelHfLogin({ sessionId: challenge.sessionId });
+        if (mounted.current && session.current === challenge.sessionId) finish(result.state);
+      })}>{t('common.cancel')}</button>
+    </div> : <form onSubmit={e => { e.preventDefault(); void run(begin); }}>
+      <label className="field"><span className="field-label">{t('hf.clientId')}</span>
+        <input className="text-input mono" required value={clientId} onChange={e => setClientId(e.target.value)} /></label>
+      <div className="form-actions"><button className="btn btn-primary" disabled={disabled || overview?.secureStorage !== 'available'}>{t('hf.begin')}</button></div>
+    </form>}
+    {status && !(status === 'authorized' && hf?.configured) && <p role="status">{t(`hf.${status}`)}</p>}
+    {overview?.secureStorage === 'unavailable' && <p role="status">{t('key.blockedText')}</p>}
+    {error && <TestFailed code={error} />}
+  </>;
+}
+
 export function ProvidersSection() {
   const t = useT();
   const settings = useStore(s => s.settings);
   const status = useProviderStatus();
+  const overview = useStore(s => s.providers);
   const [open, setOpen] = useState<Card['id'] | null>(null);
   const [query, setQuery] = useState('');
   useEffect(() => { void actions.refreshProviders(); void actions.refreshModel(); }, []);
@@ -189,6 +323,12 @@ export function ProvidersSection() {
       </div>
     );
   }
+  if (open === 'custom' || open === 'huggingface') return <div className="provider-detail" data-provider-detail={open}>
+    <button className="crumb" onClick={back}><IconChevronRight size={13} className="crumb-chev" />{t('providers.back')}</button>
+    <h3>{open === 'custom' ? t('provider.custom.name') : PROVIDER_NAMES.huggingface}</h3>
+    {open === 'custom' ? <CustomDetail /> : <HfDetail />}
+    <p className="settings-note">{t('providers.acceptance')}</p>
+  </div>;
   const pending = PENDING.find(card => card.id === open);
   if (pending) return <div className="provider-detail"><PendingDetail card={pending} onBack={back} /></div>;
   const q = query.trim().toLowerCase();
@@ -205,7 +345,8 @@ export function ProvidersSection() {
       {cards.length > 0 && <h3 className="settings-group-title">{t('providers.popular')}</h3>}
       <div className="provider-grid">
         {cards.map(card => (
-          <ProviderCard key={card.id} card={card} name={card.name} configured={status(card.id as ModelProvider)?.configured === true}
+          <ProviderCard key={card.id} card={card} name={nameOf(card)} configured={card.id === 'custom' ? Boolean(overview?.custom?.length)
+            : card.id === 'huggingface' ? overview?.huggingface?.configured === true : status(card.id as ModelProvider)?.configured === true}
             isDefault={settings?.defaultProvider === card.id} onOpen={() => setOpen(card.id)} />
         ))}
       </div>

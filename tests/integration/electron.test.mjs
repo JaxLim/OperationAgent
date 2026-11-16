@@ -68,6 +68,7 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
     'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask', 'stopTask', 'listTaskMessages', 'readTaskLive',
     'listTasks', 'getTask', 'listTaskEvents', 'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
     'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel', 'listUsage',
+    'saveCustomProvider', 'removeCustomProvider', 'beginHfLogin', 'pollHfLogin', 'cancelHfLogin', 'configureHf',
     'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'].sort());
   assert.equal(first.renderer.mounted, true);
   assert.equal(await host.command('csp'), 'blocked'); assert.equal(await host.command('invalid-input'), 'rejected');
@@ -172,7 +173,7 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   assert.equal(result.tooLong, 'rejected'); assert.match(result.missing, /NOT_FOUND/);
   assert.deepEqual(result.task, { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' });
   assert.equal(result.emptyTask, 'rejected'); assert.equal(result.forged, 'rejected');
-  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 10);
+  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 11);
   assert.equal(result.overview.worker.error, 'WORKER_ISOLATION_UNAVAILABLE');
   assert.ok(Object.values(result.overview.capabilities).every(value => value !== 'verified'));
   assert.equal(result.runs.runs[0].outcome, 'RUNNING'); assert.deepEqual(result.projects.projects, []);
@@ -273,6 +274,23 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.equal(provider, 'Anthropic');
   assert.equal(model, 'claude-sonnet-5-5');
   assert.deepEqual(counts.map(value => Number(value.replace(/\D/g, ''))), [2, 2100, 900, 0, 240, 2340]);
+});
+
+test('custom provider confirmation encrypts its dedicated key and survives Electron restart', { timeout: 90_000 }, async t => {
+  const create = await fixture(t);
+  const host = await create();
+  const profile = { baseUrl: 'http://127.0.0.1:12345/v1', allowLocal: true, model: 'local-model', apiKey: 'custom-key-' + randomUUID() };
+  const cancelled = await host.command('custom-api', { profile, accept: false });
+  assert.deepEqual(cancelled.overview.custom, []);
+  const saved = await host.command('custom-api', { profile, accept: true });
+  assert.match(saved.confirmation, /127\.0\.0\.1/);
+  assert.equal(saved.overview.custom[0].baseUrl, profile.baseUrl);
+  assert.equal(JSON.stringify(saved).includes(profile.apiKey), false);
+  assert.equal((await allBytes(create.directory)).includes(profile.apiKey), false);
+  await host.command('close');
+  const reopened = await create();
+  const view = await reopened.command('providers-get');
+  assert.deepEqual(view.custom, saved.overview.custom);
 });
 
 /** Every file under a directory, for a plaintext scan of everything Electron, Express and SQLite left on disk. */

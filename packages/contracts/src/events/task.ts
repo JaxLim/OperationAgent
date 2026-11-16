@@ -67,6 +67,7 @@ export const TaskUserMessageEventSchema = z.strictObject({ ...eventBase, type: z
   payload: z.strictObject({ messageId: z.uuid(), chars: count }) });
 export const TaskAssistantTurnEventSchema = z.strictObject({ ...eventBase, type: z.literal('assistant_turn'),
   payload: z.strictObject({ turn: z.number().int().min(1).max(AGENT_RUN_LIMITS.maxTurns), model: ModelIdSchema, provider: ModelProviderSchema.optional(),
+    channel: z.string().min(1).max(512).optional(),
     messageId: z.uuid().nullable(), stopReason: TurnStopReasonSchema, toolCalls: count, fallback: z.boolean(), usage: TurnUsageSchema,
     // Added with the context engine (ADR-PLAT-001 D1/D2). Optional: turns recorded before it carry neither.
     timing: TurnTimingSchema.optional(), context: TurnContextSchema.optional() }) });

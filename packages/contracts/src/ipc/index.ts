@@ -31,6 +31,8 @@ export const IPC_CHANNELS = Object.freeze({
   getModelSettings: 'oa:model-settings-get', saveModelChoice: 'oa:model-choice-save', setApiKey: 'oa:model-key-set',
   clearApiKey: 'oa:model-key-clear', testModelConnection: 'oa:model-test',
   getProviders: 'oa:providers-get', setProviderKey: 'oa:provider-key-set', clearProviderKey: 'oa:provider-key-clear',
+  saveCustomProvider: 'oa:custom-provider-save', removeCustomProvider: 'oa:custom-provider-remove',
+  beginHfLogin: 'oa:hf-login-begin', pollHfLogin: 'oa:hf-login-poll', cancelHfLogin: 'oa:hf-login-cancel', configureHf: 'oa:hf-configure',
   testProvider: 'oa:provider-test', listProviderModels: 'oa:provider-models', saveProviderModel: 'oa:provider-model-save',
   listAgents: 'oa:agents-list', saveAgent: 'oa:agents-save', removeAgent: 'oa:agents-remove',
   listMcpServers: 'oa:mcp-list', saveMcpServer: 'oa:mcp-save', removeMcpServer: 'oa:mcp-remove',
@@ -86,6 +88,12 @@ export interface DesktopApi {
   testModelConnection(): Promise<ModelTestResult>;
   /** Linked providers and web-search keys: same key rules as Anthropic, fixed official endpoints only. */
   getProviders(): Promise<ProviderOverviewView>;
+  saveCustomProvider(input: CustomProviderInput): Promise<ProviderOverviewView>;
+  removeCustomProvider(input: CustomProviderRef): Promise<ProviderOverviewView>;
+  beginHfLogin(input: HfLoginInput): Promise<HfLoginChallenge>;
+  pollHfLogin(input: HfSession): Promise<HfLoginState>;
+  cancelHfLogin(input: HfSession): Promise<HfLoginState>;
+  configureHf(input: HfConfig): Promise<ProviderOverviewView>;
   setProviderKey(input: ProviderKeyInput): Promise<ProviderOverviewView>;
   clearProviderKey(input: ProviderRef): Promise<ProviderOverviewView>;
   testProvider(input: LinkedProviderRef): Promise<ProviderTestResult>;
@@ -99,3 +107,4 @@ export interface DesktopApi {
   saveMcpServer(input: McpServerSave): Promise<McpServerList>;
   removeMcpServer(input: McpServerRef): Promise<McpServerList>;
 }
+import type { CustomProviderInput, CustomProviderRef, HfConfig, HfLoginInput, HfSession, HfLoginChallenge, HfLoginState } from '../api/providers.js';

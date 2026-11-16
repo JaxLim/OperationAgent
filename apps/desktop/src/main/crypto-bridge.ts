@@ -44,8 +44,9 @@ export function createCryptoBridge(store: SecureStore, platform: NodeJS.Platform
       }
       const { result } = await store.decryptStringAsync(Buffer.from(request.ciphertext, 'base64'));
       // Only a well-formed key may leave the bridge; anything else is treated as undecryptable.
-      return result.length >= MODEL_LIMITS.minKeyChars && result.length <= MODEL_LIMITS.maxKeyChars ? { ...reply, ok: true, value: result } : fail('CRYPTO_FAILED');
+      return ProviderSecretSchema.safeParse(result).success ? { ...reply, ok: true, value: result } : fail('CRYPTO_FAILED');
     } catch { return fail('CRYPTO_FAILED'); }
     finally { pending--; }
   };
 }
+import { ProviderSecretSchema } from '@operation-agent/contracts';

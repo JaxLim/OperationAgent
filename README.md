@@ -32,7 +32,8 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 - 真实供应商账号联调。现有自动化使用本地应答验证请求、工具调用和用量。
 - 计划、后续追问和技能（已规划，见 [路线图](docs/ROADMAP.md)）。
 - 写文件与运行 Shell 的沙箱、审批流程、网页搜索工具、MCP Host。
-- 账号登录型供应商和自定义模型端点：方案见 [ADR-PROV-001](docs/adr/ADR-PROV-001.md)（提议中，未批准），在此之前界面中保持锁定。
+- 自定义渠道已接入 OpenAI 兼容基础地址、模型 ID 和独立密钥，本机 HTTP 须单独勾选。Hugging Face 设备码登录需要你为应用注册的公开 OAuth Client ID，授权后填写推理模型 ID。真实账号授权尚未联调。[官方注册说明](https://huggingface.co/docs/hub/oauth)
+- ChatGPT 套餐和 GitHub Copilot 的账号登录尚未接入。
 - macOS 和 Linux 的进程级验收与 SEC-W01（目前为 NOT_RUN）。
 
 界面上没实现的功能都会明确标成“不可用”，不会假装能用。

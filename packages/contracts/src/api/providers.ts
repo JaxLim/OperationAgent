@@ -5,7 +5,7 @@ import { ApiKeySchema, CredentialStatusSchema, ModelTestStatusSchema } from './m
 // linked with an API key against a fixed official endpoint. Account sign-in (OAuth) and custom endpoints are not part
 // of this contract: they wait for ADR-PROV-001.
 
-export const MODEL_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter'] as const;
+export const MODEL_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter', 'custom', 'huggingface'] as const;
 export const ModelProviderSchema = z.enum(MODEL_PROVIDERS);
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 export const LINKED_PROVIDERS = ['openai', 'google', 'openrouter'] as const;
@@ -30,12 +30,32 @@ export const PROVIDER_LIMITS = Object.freeze({ maxModels: 1_000, maxModelListByt
 
 /** Provider model ids: no whitespace, quotes or control characters, so an id can never carry provider text. */
 export const ModelIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/);
+export const CustomBaseUrlSchema = z.url().max(512);
+export const CustomProviderRefSchema = z.strictObject({ id: z.uuid() });
+const customFields = { baseUrl: CustomBaseUrlSchema, allowLocal: z.boolean(), model: ModelIdSchema };
+export const CustomProviderSchema = CustomProviderRefSchema.extend(customFields);
+export const CustomProviderInputSchema = z.strictObject({ ...customFields, apiKey: ApiKeySchema });
+export type CustomProvider = z.infer<typeof CustomProviderSchema>;
+export type CustomProviderInput = z.infer<typeof CustomProviderInputSchema>;
+export type CustomProviderRef = z.infer<typeof CustomProviderRefSchema>;
+export const HfLoginInputSchema = z.strictObject({ clientId: z.string().min(1).max(160).regex(/^[A-Za-z0-9._-]+$/) });
+export const HfSessionSchema = z.strictObject({ sessionId: z.uuid() });
+export const HfLoginChallengeSchema = HfSessionSchema.extend({ userCode: z.string().min(1).max(64), expiresAt: z.int().positive() });
+export const HfLoginStateSchema = z.strictObject({ state: z.enum(['waiting','authorized','failed','expired','cancelled']) });
+export const HfConfigSchema = z.strictObject({ model: ModelIdSchema.nullable(), disconnect: z.boolean() });
+export type HfLoginInput = z.infer<typeof HfLoginInputSchema>;
+export type HfSession = z.infer<typeof HfSessionSchema>;
+export type HfLoginChallenge = z.infer<typeof HfLoginChallengeSchema>;
+export type HfLoginState = z.infer<typeof HfLoginStateSchema>;
+export type HfConfig = z.infer<typeof HfConfigSchema>;
 export const LinkedProviderStatusSchema = z.strictObject({ provider: LinkedProviderSchema, model: ModelIdSchema.nullable(), credential: CredentialStatusSchema });
 export type LinkedProviderStatus = z.infer<typeof LinkedProviderStatusSchema>;
 export const SearchKeyStatusSchema = z.strictObject({ provider: SearchProviderSchema, credential: CredentialStatusSchema });
 export type SearchKeyStatus = z.infer<typeof SearchKeyStatusSchema>;
 /** Express view: model choice and credential status per slot, never key material. */
 export const ProviderOverviewSchema = z.strictObject({
+  custom: z.array(CustomProviderSchema).max(24).optional(),
+  huggingface: z.strictObject({ configured: z.boolean(), model: ModelIdSchema.nullable() }).optional(),
   providers: z.array(LinkedProviderStatusSchema).max(LINKED_PROVIDERS.length),
   search: z.array(SearchKeyStatusSchema).max(SEARCH_PROVIDERS.length),
 });

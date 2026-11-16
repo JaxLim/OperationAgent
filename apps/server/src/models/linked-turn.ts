@@ -1,6 +1,7 @@
 import { AGENT_RUN_LIMITS, AGENT_TOOL_DEFINITIONS, PROVIDER_ENDPOINTS, RETRYABLE_TURN_FAILURES, TurnViewSchema } from '@operation-agent/contracts';
 import type { LinkedProvider, TurnFailureCode, TurnStopReason } from '@operation-agent/contracts';
 import { readBounded } from './providers.js';
+import { sendCustomChat } from './custom-transport.js';
 import type { AgentTurnResult, TurnInput } from './turns.js';
 
 const chatPaths: Record<LinkedProvider, string> = {
@@ -69,7 +70,8 @@ function failed(code: TurnFailureCode, httpStatus: number | null = null): AgentT
 const statusCodes: Record<number, TurnFailureCode> = { 401: 'auth_failed', 403: 'permission_denied', 404: 'model_unavailable',
   413: 'context_too_long', 429: 'rate_limited', 529: 'overloaded' };
 
-export async function runLinkedTurn(provider: LinkedProvider, input: Input): Promise<AgentTurnResult> {
+export type ChatTarget = LinkedProvider | 'huggingface' | { baseUrl: string; allowLocal: boolean };
+export async function runLinkedTurn(provider: ChatTarget, input: Input): Promise<AgentTurnResult> {
   const deadline = AbortSignal.timeout(AGENT_RUN_LIMITS.turnTimeoutMs);
   const signal = input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
   const started = performance.now();
@@ -77,9 +79,11 @@ export async function runLinkedTurn(provider: LinkedProvider, input: Input): Pro
     parameters: AGENT_TOOL_DEFINITIONS[name].input_schema } }));
   try {
     signal.throwIfAborted();
-    const response = await fetch(PROVIDER_ENDPOINTS[provider] + chatPaths[provider], { method: 'POST', redirect: 'error', signal,
+    const init: RequestInit = { method: 'POST', redirect: 'error', signal,
       headers: { authorization: 'Bearer ' + input.apiKey, 'content-type': 'application/json' },
-      body: JSON.stringify({ model: input.model, messages: requestMessages(input), ...(tools.length && { tools }) }) });
+      body: JSON.stringify({ model: input.model, messages: requestMessages(input), ...(tools.length && { tools }) }) };
+    const response = typeof provider === 'object' ? await sendCustomChat(provider.baseUrl, provider.allowLocal, init) :
+      await fetch(provider === 'huggingface' ? 'https://router.huggingface.co/v1/chat/completions' : PROVIDER_ENDPOINTS[provider] + chatPaths[provider], init);
     if (!response.ok) {
       await response.body?.cancel();
       return failed(statusCodes[response.status] ?? (response.status >= 500 ? 'provider_error' : 'invalid_request'), response.status);
