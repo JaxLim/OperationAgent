@@ -18,8 +18,29 @@ if (!process.versions.electron) {
   app.disableHardwareAcceleration();
   void app.whenReady().then(() => {
     try {
-      const source = nativeImage.createFromPath(resolve(root, 'build/icon-source.png'));
+      let source = nativeImage.createFromPath(resolve(root, 'build/icon-source.png'));
       if (source.isEmpty()) throw new Error('ICON_SOURCE_INVALID');
+      const { width, height } = source.getSize();
+      const bitmap = source.toBitmap();
+      const corners = [0, width - 1, width * (height - 1), width * height - 1];
+      if (corners.some(pixel => bitmap[pixel * 4 + 3] !== 0)) {
+        // Clip the original opaque artwork inside its cream tile, with one-pixel antialiasing.
+        const inset = Math.ceil(Math.min(width, height) * 0.018);
+        const radius = Math.min(width, height) * 0.2;
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const dx = Math.abs(x + 0.5 - width / 2) - (width / 2 - inset - radius);
+            const dy = Math.abs(y + 0.5 - height / 2) - (height / 2 - inset - radius);
+            const distance = Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - radius;
+            const coverage = Math.max(0, Math.min(1, 0.5 - distance));
+            const pixel = (y * width + x) * 4;
+            for (let channel = 0; channel < 4; channel++) bitmap[pixel + channel] = Math.round(bitmap[pixel + channel] * coverage);
+          }
+        }
+        source = nativeImage.createFromBitmap(bitmap, { width, height });
+        writeFileSync(resolve(root, 'build/icon-source.png'), source.toPNG());
+      }
+      if (corners.some(pixel => source.toBitmap()[pixel * 4 + 3] !== 0)) throw new Error('ICON_CORNERS_MUST_BE_TRANSPARENT');
       const sizes = [16, 24, 32, 48, 64, 128, 256];
       const images = sizes.map(size => source.resize({ width: size, height: size, quality: 'best' }).toPNG());
       const directory = Buffer.alloc(6 + 16 * sizes.length);
