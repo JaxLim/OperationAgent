@@ -504,6 +504,18 @@ button.meta-chip:hover, [aria-expanded="true"].meta-chip { background: var(--hov
 .timeline { display: flex; flex-direction: column; gap: var(--gap); }
 .task-banner { margin-bottom: calc(var(--gap) * 1.5); }
 .timeline-entry { animation: rise 260ms var(--ease) both; }
+.task-plan { min-width: 0; }
+.task-plan-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.task-plan-head h2 { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 13px; font-weight: 600; }
+.task-plan progress { display: block; width: 100%; height: 5px; margin: 12px 0 4px; accent-color: var(--ok); }
+.task-plan-steps { list-style: none; margin: 0; padding: 0; }
+.task-plan-steps li { display: flex; align-items: flex-start; gap: 9px; padding: 10px 0; }
+.task-plan-steps li + li { border-top: 1px solid var(--border); }
+.task-plan-mark { display: grid; place-items: center; width: 16px; height: 20px; flex: none; }
+.task-plan-step-main { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.task-plan-step-title { font-size: 13px; color: var(--text); }
+.task-plan-status { flex: none; color: var(--muted); font-size: 11.5px; padding-top: 1px; }
+.task-plan > .notice { margin-top: 4px; }
 
 .card { background: var(--surface); border-radius: var(--radius-lg); padding: 14px 16px; box-shadow: 0 0 0 1px var(--border), var(--shadow-sm); }
 .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }

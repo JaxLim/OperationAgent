@@ -32,7 +32,7 @@ test('agent: search_text finds the definition and read_file returns just those l
         const read = (bodies[2]!.messages.at(-1)!.content as { type: string; content: string }[]).find(block => block.type === 'tool_result')!;
         assert.equal(read.content, '[Lines 400-402 of src/big.ts; the file has 801 lines]\n// filler line 400\nexport function locateMe() { return 42; }\n// filler line 1\n');
         // The model was given every tool, and each was described.
-        assert.deepEqual((bodies[0]!.tools as { name: string }[]).map(tool => tool.name), ['read_file', 'list_directory', 'search_text', 'find_files']);
+        assert.deepEqual((bodies[0]!.tools as { name: string }[]).map(tool => tool.name), ['read_file', 'list_directory', 'search_text', 'find_files', 'update_plan']);
         const calls = task.events.flatMap(event => event.type === 'tool_call' ? [event.payload] : []);
         assert.deepEqual(calls.map(call => [call.tool, call.target, call.status, call.size]), [['search_text', '.', 'ok', 1], ['read_file', 'src/big.ts', 'ok', 78]]);
         assert.ok(!JSON.stringify(task.events).includes('locateMe'), 'the query and the file text are not in the event log');

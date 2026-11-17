@@ -173,7 +173,7 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   assert.equal(result.tooLong, 'rejected'); assert.match(result.missing, /NOT_FOUND/);
   assert.deepEqual(result.task, { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' });
   assert.equal(result.emptyTask, 'rejected'); assert.equal(result.forged, 'rejected');
-  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 11);
+  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 12);
   assert.equal(result.overview.worker.error, 'WORKER_ISOLATION_UNAVAILABLE');
   assert.ok(Object.values(result.overview.capabilities).every(value => value !== 'verified'));
   assert.equal(result.runs.runs[0].outcome, 'RUNNING'); assert.deepEqual(result.projects.projects, []);
@@ -274,6 +274,68 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.equal(provider, 'Anthropic');
   assert.equal(model, 'claude-sonnet-5-5');
   assert.deepEqual(counts.map(value => Number(value.replace(/\D/g, ''))), [2, 2100, 900, 0, 240, 2340]);
+});
+
+test('M5.3 task plans retain progress and dependencies across terminal states, locales and Electron restart', { timeout: 90_000 }, async t => {
+  const create = await fixture(t);
+  const seed = openStore(resolve(create.directory, 'database'), randomUUID());
+  const tasks = {};
+  try {
+    const projectId = seed.addProject({ name: 'plans', path: 'C:/OperationAgentM53/plans' }).id;
+    const transition = (id, to) => seed.transitionTask(id, to, { requestId: randomUUID(), cleanupConfirmed: true });
+    for (const state of ['COMPLETED', 'FAILED', 'STOPPED', 'INTERRUPTED', 'complete', 'legacy']) {
+      const id = tasks[state] = seed.createTask(projectId, randomUUID()).task.id;
+      transition(id, 'QUEUED'); transition(id, 'RUNNING');
+      if (state !== 'legacy') {
+        const steps = [
+          { id: 'inspect', title: '检查项目 / Inspect project', status: 'in_progress', dependsOn: [] },
+          { id: 'verify', title: '验证结果 / Verify results', status: 'pending', dependsOn: ['inspect'] },
+          { id: 'report', title: '整理报告 / Report findings', status: 'pending', dependsOn: ['verify'] },
+        ];
+        assert.equal(seed.updateTaskPlan(id, 'plan_initial', 1, { steps }).changed, true);
+        steps[0].status = 'completed'; steps[1].status = 'in_progress';
+        const updated = seed.updateTaskPlan(id, 'plan_progress', 2, { steps });
+        assert.equal(updated.changed, true); assert.equal(updated.plan.revision, 2);
+        assert.equal(seed.updateTaskPlan(id, 'plan_unchanged', 3, { steps }).changed, false);
+        seed.appendAgentEvent(id, 'plan_stalled', { turn: 4 });
+        if (state === 'complete') seed.updateTaskPlan(id, 'plan_done', 5, { steps: steps.map(step => ({ ...step, status: 'completed' })) });
+      }
+      if (state === 'STOPPED') transition(id, 'STOPPING');
+      transition(id, ['complete', 'legacy'].includes(state) ? 'COMPLETED' : state);
+    }
+  } finally { seed.close(true); }
+
+  const host = await create();
+  assert.equal((await host.command('task-ui', { taskId: tasks.legacy, click: true })).plan, null);
+  for (const state of ['COMPLETED', 'FAILED', 'STOPPED', 'INTERRUPTED']) {
+    const view = await host.command('task-ui', { taskId: tasks[state], click: true, language: 'en' });
+    assert.equal(view.plan.revision, 2); assert.equal(view.plan.completed, 1); assert.equal(view.plan.total, 3);
+    assert.deepEqual(view.plan.steps.map(step => step.status), ['completed', 'in_progress', 'pending']);
+    assert.match(view.plan.text, /1 of 3 steps completed/);
+    assert.match(view.plan.steps[1].text, /Depends on: 检查项目 \/ Inspect project/);
+    assert.match(view.plan.steps[2].text, /Depends on: 验证结果 \/ Verify results/);
+    assert.match(view.plan.incomplete, /2 steps remain unfinished/);
+    assert.equal(view.plan.overflow, false);
+    assert.match(view.text, /Task plan updated/); assert.match(view.text, /Plan progress stalled at turn 4/);
+    assert.doesNotMatch(view.text, /plan_updated|plan_stalled/);
+  }
+  for (const [language, count, incomplete, updated, stalled] of [
+    ['zh-CN', /已完成 1\/3 步/, /仍有 2 个步骤未完成/, /任务计划已更新/, /第 4 轮计划进度停滞/],
+    ['ja', /3 ステップ中 1 ステップ完了/, /未完了のステップが 2 件/, /タスク計画を更新しました/, /ターン 4 で計画の進行が停滞/],
+  ]) {
+    const view = await host.command('task-ui', { taskId: tasks.FAILED, click: true, language });
+    assert.match(view.plan.text, count); assert.match(view.plan.incomplete, incomplete);
+    assert.match(view.text, updated); assert.match(view.text, stalled);
+  }
+  const done = await host.command('task-ui', { taskId: tasks.complete, click: true, language: 'en' });
+  assert.equal(done.plan.completed, 3); assert.equal(done.plan.revision, 3); assert.equal(done.plan.incomplete, null);
+  await host.command('task-ui', { taskId: tasks.FAILED, click: true });
+  await host.command('capture', `m5/${process.platform}-${process.arch}/task-plan.png`);
+  await host.close();
+  const reopened = await create();
+  const restored = await reopened.command('task-ui', { taskId: tasks.STOPPED, click: true });
+  assert.equal(restored.plan.completed, 1); assert.equal(restored.plan.revision, 2);
+  assert.match(restored.plan.incomplete, /2 steps remain unfinished/);
 });
 
 test('custom provider confirmation encrypts its dedicated key and survives Electron restart', { timeout: 90_000 }, async t => {
