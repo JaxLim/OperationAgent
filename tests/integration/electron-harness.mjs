@@ -67,16 +67,18 @@ process.on('message', async message => {
       case 'task-ui': {
         // Drives the real Workbench DOM: optionally clicks a task row, then waits until its committed log is synced.
         const { taskId, click, entries, fresh, language } = message.input;
+        if (language) {
+          await host.window.webContents.executeJavaScript(`window.operationAgent.getSettings().then(settings =>
+            window.operationAgent.saveSettings({ ...settings, language: ${JSON.stringify(language)} }))`);
+          // Settings are mirrored on initial load; refresh this window to read the saved language through the real bridge.
+          await new Promise(done => { host.window.webContents.once('did-finish-load', done); host.window.reload(); });
+        }
         value = await host.window.webContents.executeJavaScript(`(async () => {
           const wait = async (check, ms = 15000) => { const end = Date.now() + ms;
             while (Date.now() < end) { const found = check(); if (found) return found; await new Promise(done => setTimeout(done, 50)); }
             throw new Error('UI_TIMEOUT ' + document.querySelector('[data-sync]')?.textContent); };
           const id = ${JSON.stringify(taskId)}; const since = Date.now();
-          if (${JSON.stringify(Boolean(language))}) {
-            const api = window.operationAgent;
-            await api.saveSettings({ ...await api.getSettings(), language: ${JSON.stringify(language)} });
-            await wait(() => document.documentElement.lang === ${JSON.stringify(language)});
-          }
+          if (${JSON.stringify(Boolean(language))}) await wait(() => document.documentElement.lang === ${JSON.stringify(language)});
           if (${JSON.stringify(Boolean(click))}) (await wait(() => document.querySelector('.task-row[data-task-id="' + id + '"]'))).click();
           await wait(() => document.querySelector('section[data-task-id="' + id + '"] [data-sync="synced"]') &&
             (!${JSON.stringify(Boolean(fresh))} || Number(document.querySelector('[data-synced-at]').dataset.syncedAt) > since) &&
