@@ -40,7 +40,7 @@ export async function runAgentLoop(task: AgentTask, port: AgentPort): Promise<Ag
         case 'end_turn': case 'stop_sequence': return await end('completed', 'end_turn');
         case 'refusal': return await end('failed', 'refusal');
         case 'context_exhausted': return await end('failed', 'context_exhausted');
-        // The provider paused a long turn; asking for the next turn resumes it.
+        // Express continues the same run after a provider pause or a bounded plan review request.
         case 'pause_turn': continue;
         case 'max_tokens':
           // A truncated text answer is still an answer. Truncated tool calls are never run: Express answers them with

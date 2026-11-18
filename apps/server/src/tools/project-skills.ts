@@ -1,6 +1,6 @@
 import { FAILSAFE_SCHEMA, load } from 'js-yaml';
 import { PROJECT_SKILL_LIMITS, PROJECT_SKILL_ROOTS, SkillMetadataSchema, SkillPathSchema } from '@operation-agent/contracts';
-import type { Project, ProjectSkillPreview, ProjectSkillPreviewRequest, ProjectSkills, SetProjectSkill, SkillMetadata } from '@operation-agent/contracts';
+import type { Project, ProjectSkillPreview, ProjectSkillPreviewRequest, ProjectSkills, ReadFailureCode, SetProjectSkill, SkillMetadata } from '@operation-agent/contracts';
 import type { ToolRouter } from './router.js';
 
 export interface SkillGrant { path: string; sha256: string }
@@ -10,7 +10,8 @@ export interface ProjectSkillStore {
   setSkillGrant(projectId: string, path: string, sha256: string | null): void;
 }
 type ApprovedSkill = SkillGrant & SkillMetadata;
-type SkillFile = { metadata: ApprovedSkill; body: string } | { failure: 'missing' | 'unavailable' };
+type SkillFile = { metadata: ApprovedSkill; body: string } | { failure: 'missing' } | { failure: 'unavailable'; code: ReadFailureCode };
+type SkillLoadFailure = { code: 'CANCELLED' | 'CLEANUP_UNCONFIRMED' };
 
 function parseSkill(content: string, path: string): { metadata: SkillMetadata; body: string } | null {
   const source = content.replace(/^\uFEFF/, '');
@@ -31,10 +32,10 @@ function parseSkill(content: string, path: string): { metadata: SkillMetadata; b
 export class ProjectSkillService {
   constructor(private readonly store: ProjectSkillStore, private readonly tools: ToolRouter) {}
 
-  private async read(projectId: string, path: string, correlation?: { taskId: string; toolCallId: string }): Promise<SkillFile> {
+  private async read(projectId: string, path: string, correlation?: { taskId: string; toolCallId: string; signal?: AbortSignal }): Promise<SkillFile> {
     if (!SkillPathSchema.safeParse(path).success) return { failure: 'missing' };
     const result = await this.tools.readFile({ projectId, ...correlation, args: { path, maxBytes: PROJECT_SKILL_LIMITS.maxFileBytes } });
-    if (result.status === 'failed') return { failure: 'unavailable' };
+    if (result.status === 'failed') return { failure: 'unavailable', code: result.code };
     if (result.status !== 'ok' || result.truncated || result.path !== path) return { failure: 'missing' };
     const skill = parseSkill(result.content, path);
     return skill ? { metadata: { ...skill.metadata, path, sha256: result.sha256 }, body: skill.body } : { failure: 'missing' };
@@ -115,9 +116,12 @@ export class ProjectSkillService {
       file.metadata.sha256 === current.get(file.metadata.path) ? [file.metadata] : []);
   }
 
-  async load(projectId: string, approved: SkillGrant, correlation: { taskId: string; toolCallId: string }): Promise<string | null> {
+  async load(projectId: string, approved: SkillGrant, correlation: { taskId: string; toolCallId: string; signal?: AbortSignal }): Promise<string | SkillLoadFailure | null> {
     if (this.hash(projectId, approved.path) !== approved.sha256) return null;
     const file = await this.read(projectId, approved.path, correlation);
+    if ('failure' in file && file.failure === 'unavailable' && (file.code === 'CANCELLED' || file.code === 'CLEANUP_UNCONFIRMED')) {
+      return { code: file.code };
+    }
     if ('failure' in file || file.metadata.sha256 !== approved.sha256 || this.hash(projectId, approved.path) !== approved.sha256) return null;
     return file.body;
   }

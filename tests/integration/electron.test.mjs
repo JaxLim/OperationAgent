@@ -251,6 +251,23 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   seed.appendAgentEvent(task, 'assistant_turn', { turn: 2, model: 'claude-sonnet-5-5', messageId: second.id, stopReason: 'end_turn', toolCalls: 0, fallback: false,
     usage: { inputTokens: 300, outputTokens: 120, cacheReadTokens: 900, cacheWriteTokens: 0 }, timing: { ttftMs: 600, durationMs: 3_400 }, context: context(1_200) });
   step('COMPLETED');
+
+  const addTimingSample = (provider, model, turnTiming, toolDuration) => {
+    const { id } = seed.createTask(projectId, randomUUID()).task;
+    seed.transitionTask(id, 'QUEUED', { requestId: randomUUID(), sideEffects: null, reason: null });
+    const request = seed.addTaskMessage(id, 'user', 0, 'Review the operation.');
+    seed.appendAgentEvent(id, 'user_message', { messageId: request.id, chars: request.text.length });
+    seed.transitionTask(id, 'RUNNING', { requestId: randomUUID(), sideEffects: null, reason: null });
+    const response = seed.addTaskMessage(id, 'assistant', 1, 'The operation finished.');
+    seed.appendAgentEvent(id, 'assistant_turn', { turn: 1, provider, model, messageId: response.id, stopReason: 'end_turn', toolCalls: 1,
+      fallback: false, usage, ...(turnTiming && { timing: turnTiming }) });
+    seed.appendAgentEvent(id, 'tool_call', { turn: 1, callId: 'toolu_timing', tool: 'list_directory', target: '.', status: 'ok',
+      code: null, size: 1, ...(toolDuration !== undefined && { durationMs: toolDuration }) });
+    seed.transitionTask(id, 'COMPLETED', { requestId: randomUUID(), sideEffects: 'VERIFIED', reason: null });
+    return id;
+  };
+  const buffered = addTimingSample('openai', 'gpt-4o', { ttftMs: null, durationMs: 2_300 }, 750);
+  const legacy = addTimingSample('openrouter', 'legacy-model');
   seed.close(true);
 
   const host = await create();
@@ -275,8 +292,17 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.match(view.usage, /turns 2 · tool calls 3/);
   assert.match(view.usage, /input 2,100 tokens \(43% cached\)/);
   assert.match(view.usage, /output 240 tokens/);
-  assert.match(view.usage, /model 5\.5s · first content 0\.5s \(median\) · tools 0\.1s/);
+  assert.match(view.usage, /model 5\.5s/);
+  assert.match(view.usage, /first content 0\.5s \(median\)/);
+  assert.match(view.usage, /tools 0\.1s/);
   await host.command('capture', `m2/${process.platform}-${process.arch}/conversation.png`);
+  const bufferedView = await host.command('conversation-ui', { taskId: buffered, answers: 1 });
+  assert.match(bufferedView.usage, /model 2\.3s/);
+  assert.match(bufferedView.usage, /tools 0\.8s/);
+  assert.doesNotMatch(bufferedView.usage, /first content/);
+  const legacyView = await host.command('conversation-ui', { taskId: legacy, answers: 1 });
+  assert.match(legacyView.usage, /turns 1 · tool calls 1/);
+  assert.doesNotMatch(legacyView.usage, /model .*s|first content|tools .*s/);
   const [provider, model, ...counts] = await host.command('usage-ui');
   assert.equal(provider, 'Anthropic');
   assert.equal(model, 'claude-sonnet-5-5');

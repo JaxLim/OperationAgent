@@ -15,6 +15,7 @@ const EXIT_CONFIRM_MS = 2_000;
 const MAX_STDERR_BYTES = 8_192;
 
 type Rejected = { status: 'refused'; code: ReadRefusalCode } | { status: 'failed'; code: ReadFailureCode; retryable: boolean };
+const CANCELLED: Rejected = { status: 'failed', code: 'CANCELLED', retryable: false };
 /** A range of lines: the first line asked for, how many came back, and the file's line count when it could be counted. */
 export interface LineRange { startLine: number; lines: number; totalLines: number | null }
 export type AdapterOutcome = { status: 'ok'; content: Buffer; size: number; truncated: boolean; range?: LineRange } | Rejected;
@@ -45,13 +46,13 @@ export interface ReadAdapterOptions {
 export interface ReadAdapterSnapshot { available: boolean; active: number; queued: number; launched: number; killed: number; activePids: number[] }
 export interface ReadAdapter {
   /** Reads a file from its start, or `lines.count` lines from line `lines.start`; at most `maxBytes` either way. */
-  read(root: string, segments: readonly string[], maxBytes: number, lines?: { start: number; count: number }): Promise<AdapterOutcome>;
+  read(root: string, segments: readonly string[], maxBytes: number, lines?: { start: number; count: number }, signal?: AbortSignal): Promise<AdapterOutcome>;
   /** Lists a directory below the root; an empty segment list is the root itself. */
-  list(root: string, segments: readonly string[], request: ListRequest): Promise<ListOutcome>;
+  list(root: string, segments: readonly string[], request: ListRequest, signal?: AbortSignal): Promise<ListOutcome>;
   /** Searches the text of the files below a directory (an empty segment list is the root), or of one named file. */
-  search(root: string, segments: readonly string[], request: SearchRequest): Promise<SearchOutcome>;
+  search(root: string, segments: readonly string[], request: SearchRequest, signal?: AbortSignal): Promise<SearchOutcome>;
   /** Finds entries by name below a directory. Nothing is opened. */
-  find(root: string, segments: readonly string[], request: FindRequest): Promise<FindOutcome>;
+  find(root: string, segments: readonly string[], request: FindRequest, signal?: AbortSignal): Promise<FindOutcome>;
   snapshot(): ReadAdapterSnapshot;
 }
 
@@ -92,16 +93,29 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
   const pids = new Set<number>();
   const queue: (() => void)[] = [];
 
-  const acquire = (): Promise<boolean> => {
+  const acquire = (signal?: AbortSignal): Promise<boolean> => {
     if (active < maxConcurrent) { active++; return Promise.resolve(true); }
     if (queue.length >= maxQueued) return Promise.resolve(false);
-    return new Promise(resolve => queue.push(() => { active++; resolve(true); }));
+    return new Promise(resolve => {
+      const admit = (): void => {
+        signal?.removeEventListener('abort', cancel);
+        active++;
+        resolve(true);
+      };
+      const cancel = (): void => {
+        queue.splice(queue.indexOf(admit), 1);
+        resolve(false);
+      };
+      queue.push(admit);
+      signal?.addEventListener('abort', cancel, { once: true });
+    });
   };
   const release = (): void => { active--; queue.shift()?.(); };
 
   type ChildReply = Exclude<ReturnType<typeof ReadChildReplySchema.parse>, { status: 'refused' }>;
   /** One child, one request line, one validated reply; `accept` turns a non-refusal reply into the caller's outcome. */
-  function launch<T>(root: string, request: Record<string, unknown>, accept: (reply: ChildReply) => T | Rejected, deadlineMs = timeoutMs): Promise<T | Rejected> {
+  function launch<T>(root: string, request: Record<string, unknown>, accept: (reply: ChildReply) => T | Rejected,
+    signal?: AbortSignal, deadlineMs = timeoutMs): Promise<T | Rejected> {
     return new Promise(resolve => {
       let child: ReturnType<typeof spawn>;
       try {
@@ -117,16 +131,21 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
       let settled = false;
       let confirmTimer: NodeJS.Timeout | undefined;
       const kill = (code: ReadFailureCode): void => {
-        failure ??= code;
+        if (failure) return;
+        failure = code;
         if (child.exitCode === null && child.signalCode === null) { killed++; child.kill('SIGKILL'); }
         // After a kill the exit must still be observed; otherwise the child may be alive and the adapter shuts itself off.
         confirmTimer ??= setTimeout(() => {
           if (settled) return;
           settled = true; available = false;
+          clearTimeout(deadline);
+          signal?.removeEventListener('abort', cancel);
           resolve({ status: 'failed', code: 'CLEANUP_UNCONFIRMED', retryable: false });
         }, EXIT_CONFIRM_MS);
       };
+      const cancel = (): void => kill('CANCELLED');
       const deadline = setTimeout(() => kill('TIMED_OUT'), deadlineMs);
+      signal?.addEventListener('abort', cancel, { once: true });
       child.stdout!.on('data', (chunk: Buffer) => {
         stdoutBytes += chunk.length;
         if (stdoutBytes > READ_CHILD_MAX_REPLY_BYTES) { kill('ADAPTER_FAILED'); return; }
@@ -137,9 +156,10 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
       child.stdin!.on('error', () => {});
       child.on('error', () => { spawnError = true; kill('ADAPTER_FAILED'); });
       child.on('close', (exitCode: number | null) => {
+        if (child.pid !== undefined) pids.delete(child.pid);
         if (settled) return;
         settled = true; clearTimeout(deadline); clearTimeout(confirmTimer);
-        if (child.pid !== undefined) pids.delete(child.pid);
+        signal?.removeEventListener('abort', cancel);
         if (failure) { resolve({ status: 'failed', code: failure, retryable: failure === 'TIMED_OUT' }); return; }
         if (spawnError || exitCode !== 0) { resolve({ status: 'failed', code: 'ADAPTER_FAILED', retryable: false }); return; }
         const text = Buffer.concat(stdout).toString('utf8');
@@ -157,19 +177,21 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
   }
 
   const MALFORMED: Rejected = { status: 'failed', code: 'ADAPTER_FAILED', retryable: false };
-  async function guarded<T>(run: () => Promise<T | Rejected>): Promise<T | Rejected> {
+  async function guarded<T>(signal: AbortSignal | undefined, run: () => Promise<T | Rejected>): Promise<T | Rejected> {
+    if (signal?.aborted) return CANCELLED;
     if (!available) return { status: 'failed', code: 'READ_ADAPTER_UNAVAILABLE', retryable: false };
-    if (!(await acquire())) return { status: 'failed', code: 'BUSY', retryable: true };
+    if (!(await acquire(signal))) return signal?.aborted ? CANCELLED : { status: 'failed', code: 'BUSY', retryable: true };
     try {
+      if (signal?.aborted) return CANCELLED;
       if (!available) return { status: 'failed', code: 'READ_ADAPTER_UNAVAILABLE', retryable: false };
       return await run();
     } finally { release(); }
   }
 
   return {
-    read(root, segments, maxBytes, lines) {
+    read(root, segments, maxBytes, lines, signal) {
       const request = lines ? { op: 'read', segments, maxBytes, startLine: lines.start, lineCount: lines.count } : { op: 'read', segments, maxBytes };
-      return guarded(() => launch<AdapterOutcome>(root, request, value => {
+      return guarded(signal, () => launch<AdapterOutcome>(root, request, value => {
         if (value.status !== 'ok') return MALFORMED;
         const content = Buffer.from(value.content, 'base64');
         if (content.length > maxBytes) return MALFORMED;
@@ -180,31 +202,31 @@ export function createReadAdapter(options: ReadAdapterOptions = {}): ReadAdapter
         if (value.startLine !== lines.start || value.lines! > lines.count) return MALFORMED;
         return { status: 'ok', content, size: value.size, truncated: value.truncated,
           range: { startLine: value.startLine, lines: value.lines!, totalLines: value.totalLines! } };
-      }));
+      }, signal));
     },
-    search(root, segments, request) {
-      return guarded(() => launch<SearchOutcome>(root, { op: 'search', segments, budgetMs: walkBudgetMs, maxResults: request.maxResults, skip: [...request.skip],
+    search(root, segments, request, signal) {
+      return guarded(signal, () => launch<SearchOutcome>(root, { op: 'search', segments, budgetMs: walkBudgetMs, maxResults: request.maxResults, skip: [...request.skip],
         skipSequences: request.skipSequences.map(sequence => [...sequence]), query: request.query, regex: request.regex, ignoreCase: request.ignoreCase,
         glob: request.glob, sensitive: { names: [...request.sensitive.names], suffixes: [...request.sensitive.suffixes],
           prefixes: [...request.sensitive.prefixes], envAllow: [...request.sensitive.envAllow] } }, value => {
         if (value.status !== 'matched' || value.matches.length > request.maxResults) return MALFORMED;
         return { status: 'matched', matches: value.matches, truncated: value.truncated, filesScanned: value.filesScanned, filesSkipped: value.filesSkipped };
-      }, walkTimeoutMs));
+      }, signal, walkTimeoutMs));
     },
-    find(root, segments, request) {
-      return guarded(() => launch<FindOutcome>(root, { op: 'find', segments, budgetMs: walkBudgetMs, maxResults: request.maxResults, skip: [...request.skip],
+    find(root, segments, request, signal) {
+      return guarded(signal, () => launch<FindOutcome>(root, { op: 'find', segments, budgetMs: walkBudgetMs, maxResults: request.maxResults, skip: [...request.skip],
         skipSequences: request.skipSequences.map(sequence => [...sequence]), glob: request.glob }, value => {
         if (value.status !== 'found' || value.entries.length > request.maxResults) return MALFORMED;
         return { status: 'found', entries: value.entries, truncated: value.truncated };
-      }, walkTimeoutMs));
+      }, signal, walkTimeoutMs));
     },
-    list(root, segments, request) {
-      return guarded(() => launch<ListOutcome>(root, { op: 'list', segments, depth: request.depth, maxEntries: request.maxEntries,
+    list(root, segments, request, signal) {
+      return guarded(signal, () => launch<ListOutcome>(root, { op: 'list', segments, depth: request.depth, maxEntries: request.maxEntries,
         skip: [...request.skip] }, value => {
         if (value.status !== 'listed' || value.entries.length > request.maxEntries ||
           value.entries.some(entry => entry.segments.length > request.depth) || value.unlisted.some(segments => segments.length >= request.depth)) return MALFORMED;
         return { status: 'listed', entries: value.entries, truncated: value.truncated, unlisted: value.unlisted };
-      }));
+      }, signal));
     },
     snapshot: () => ({ available, active, queued: queue.length, launched, killed, activePids: [...pids] }),
   };

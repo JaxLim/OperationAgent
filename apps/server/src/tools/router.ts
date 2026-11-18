@@ -19,7 +19,7 @@ export interface ToolRouterStore {
   recordToolAudit(entry: ToolAuditInput): ToolAuditEntry;
 }
 export interface ToolRouterOptions { store: ToolRouterStore; adapter?: ReadAdapter; platform?: PlatformKey }
-export interface ReadFileCall { projectId: string; taskId?: string | null; toolCallId?: string | null; args: unknown }
+export interface ReadFileCall { projectId: string; taskId?: string | null; toolCallId?: string | null; args: unknown; signal?: AbortSignal }
 export type ListDirectoryCall = ReadFileCall;
 export interface ToolRouter {
   readFile(call: ReadFileCall): Promise<ReadFileResult>;
@@ -82,7 +82,7 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
       path = auditPath(place, requested);
       if (!('root' in place) || !requested.ok) return finish(place as Refused | Unavailable);
       const outcome = await adapter.list(place.root, requested.segments, { depth: args.data.depth ?? 1, maxEntries: READ_FILE_LIMITS.maxEntries,
-        skip: LIST_SKIP_DIRECTORIES });
+        skip: LIST_SKIP_DIRECTORIES }, call.signal);
       if (outcome.status !== 'listed') return finish(outcome);
       const entries: DirectoryEntry[] = [];
       for (const entry of outcome.entries) {
@@ -115,7 +115,7 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
       // Either field asks for a range: a start alone reads the default number of lines, a count alone starts at line 1.
       const lines = args.data.startLine === undefined && args.data.lineCount === undefined ? undefined
         : { start: args.data.startLine ?? 1, count: args.data.lineCount ?? READ_FILE_LIMITS.defaultLineCount };
-      const outcome = await adapter.read(place.root, requested.segments, maxBytes, lines);
+      const outcome = await adapter.read(place.root, requested.segments, maxBytes, lines, call.signal);
       if (outcome.status !== 'ok') return finish(outcome);
       let content: string;
       // The child already refused non-UTF-8 data; a reply that does not decode is an adapter failure, not content.
@@ -145,7 +145,7 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
       path = auditPath(place, requested);
       if (!('root' in place) || !requested.ok) return finish(place as Refused | Unavailable);
       const outcome = await adapter.search(place.root, requested.segments, { ...walk, maxResults: args.data.maxResults ?? READ_FILE_LIMITS.defaultSearchResults,
-        query, regex, ignoreCase, glob: names?.ok ? names.glob : null, sensitive: SENSITIVE_FILE_POLICY });
+        query, regex, ignoreCase, glob: names?.ok ? names.glob : null, sensitive: SENSITIVE_FILE_POLICY }, call.signal);
       if (outcome.status !== 'matched') return finish(outcome);
       const matches: SearchMatch[] = [];
       for (const match of outcome.matches) {
@@ -172,7 +172,7 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
       path = auditPath(place, requested);
       if (!('root' in place) || !requested.ok) return finish(place as Refused | Unavailable);
       const outcome = await adapter.find(place.root, requested.segments, { ...walk, maxResults: args.data.maxResults ?? READ_FILE_LIMITS.defaultFindResults,
-        glob: pattern.glob });
+        glob: pattern.glob }, call.signal);
       if (outcome.status !== 'found') return finish(outcome);
       const entries: DirectoryEntry[] = [];
       for (const entry of outcome.entries) {

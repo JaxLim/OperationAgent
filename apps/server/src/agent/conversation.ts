@@ -35,9 +35,14 @@ export class Conversation {
   history(): BetaMessageParam[] { return structuredClone(this.messages); }
 
   private append(message: BetaMessageParam): void {
+    if (!this.tryAppend(message)) throw new Error('CONVERSATION_TOO_LARGE');
+  }
+
+  private tryAppend(message: BetaMessageParam): boolean {
     const size = Buffer.byteLength(JSON.stringify(message));
-    if (this.bytes + size > AGENT_RUN_LIMITS.maxConversationBytes) throw new Error('CONVERSATION_TOO_LARGE');
+    if (this.bytes + size > AGENT_RUN_LIMITS.maxConversationBytes) return false;
     this.messages.push(message); this.bytes += size;
+    return true;
   }
 
   /**
@@ -90,5 +95,10 @@ export class Conversation {
     if (this.state !== 'awaiting_model') throw new Error('CONVERSATION_STATE');
     this.append({ role: 'user', content: [{ type: 'text', text:
       'Your task plan has made no recorded progress for several turns. Review it, update completed steps honestly, or revise the remaining work. Check unfinished steps before your final answer.' }] });
+  }
+
+  requestPlanReview(): boolean {
+    return this.state === 'awaiting_model' && this.tryAppend({ role: 'user', content: [{ type: 'text', text:
+      'Check the unfinished steps in your task plan against the tool results. Continue using the available tools if there is work you can complete. Update the plan to reflect verified progress. If any steps are still blocked, explain what could not be completed and why.' }] });
   }
 }

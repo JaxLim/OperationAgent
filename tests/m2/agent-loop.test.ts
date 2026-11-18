@@ -14,6 +14,8 @@ import type { Store } from '../../apps/server/dist/persistence/store.js';
 import { createCredentialService } from '../../apps/server/dist/credentials/service.js';
 import type { CryptoBridge } from '../../apps/server/dist/credentials/bridge.js';
 import { createTurnGateway } from '../../apps/server/dist/models/turns.js';
+import { createReadAdapter } from '../../apps/server/dist/tools/read-adapter.js';
+import type { ReadAdapter } from '../../apps/server/dist/tools/read-adapter.js';
 import { createToolRouter } from '../../apps/server/dist/tools/router.js';
 import { LiveFeed } from '../../apps/server/dist/agent/live.js';
 import { TaskRunner } from '../../apps/server/dist/agent/runner.js';
@@ -86,7 +88,7 @@ class Inbox {
 interface Harness { store: Store; runner: TaskRunner; projectId: string; root: string; base: string; live: LiveFeed; finished: Map<string, AgentResult>;
   crash(): void; workerDone: Promise<void>; framesToWorker(): number }
 async function withAgent(endpoint: string, run: (harness: Harness) => Promise<void>,
-  options: { configured?: boolean; base?: string; model?: () => ClaudeModel } = {}): Promise<void> {
+  options: { configured?: boolean; base?: string; model?: () => ClaudeModel; adapter?: ReadAdapter } = {}): Promise<void> {
   const cache = resolve('.cache'); mkdirSync(cache, { recursive: true });
   const base = options.base ?? mkdtempSync(resolve(cache, 'agent-loop-'));
   const root = resolve(base, 'workspace'); mkdirSync(resolve(root, 'src'), { recursive: true });
@@ -98,7 +100,7 @@ async function withAgent(endpoint: string, run: (harness: Harness) => Promise<vo
   const credentials = createCredentialService(store, fakeBridge());
   if (options.configured !== false) await credentials.set(KEY);
   const live = new LiveFeed();
-  const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store }),
+  const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store, ...(options.adapter ? { adapter: options.adapter } : {}) }),
     model: options.model ?? (() => 'claude-sonnet-5-5'), live, stopGraceMs: () => 5_000,
     saveCheckpoints: () => store.getSettings().saveCheckpoints === true });
   const identity = { expressRunId: randomUUID(), workerRunId: randomUUID() };
@@ -169,6 +171,11 @@ test('conversation: reopen SQLite and explicitly continue from model progress an
       res => sse(res, [start, ...text(0, progress), ...tool(1, 'toolu_plan', 'update_plan', plan),
         ...tool(2, 'toolu_read', 'read_file', { path: 'README.md' }), ...stop('tool_use')]),
       res => sse(res, [start, ...text(0, 'UNCOMMITTED_STREAM')], false),
+      res => sse(res, [start, ...text(0, 'I think the setup is checked.'), ...stop('end_turn')]),
+      res => sse(res, [start, ...tool(0, 'toolu_verify', 'list_directory', { path: '.' }), ...stop('tool_use')]),
+      res => sse(res, [start, ...tool(0, 'toolu_done', 'update_plan', {
+        steps: plan.steps.map(step => ({ ...step, status: 'completed' })),
+      }), ...stop('tool_use')]),
       res => sse(res, [start, ...text(0, 'Checked setup.'), ...stop('end_turn')]),
     ], async (endpoint, bodies) => {
       let oldTask = '';
@@ -193,6 +200,12 @@ test('conversation: reopen SQLite and explicitly continue from model progress an
         await until(() => store.getTask(next.id)?.state === 'COMPLETED');
         assert.equal(store.getTask(oldTask)?.state, 'INTERRUPTED');
         assert.deepEqual(next.plan?.steps.map(step => [step.id, step.status]), [['inspect', 'completed'], ['verify', 'in_progress']]);
+        assert.equal(bodies.length, 6);
+        const review = bodies[3]?.messages.at(-1);
+        assert.equal(review?.role, 'user');
+        assert.match(JSON.stringify(review?.content), /Check the unfinished steps in your task plan against the tool results\./);
+        if (WINDOWS) assert.match(JSON.stringify(bodies[4]?.messages.at(-1)), /README\.md/);
+        assert.deepEqual(store.getTask(next.id)?.plan?.steps.map(step => step.status), ['completed', 'completed']);
         const request = JSON.stringify(bodies[2]?.messages);
         assert.match(request, /Audit the setup/);
         assert.ok(request.includes(progress) && request.includes('Check setup instructions'));
@@ -202,7 +215,7 @@ test('conversation: reopen SQLite and explicitly continue from model progress an
         assert.equal(store.getCheckpoint(oldTask), null);
         assert.equal(store.getCheckpoint(next.id), null);
         assert.equal(store.getTask(oldTask)?.resumable, undefined);
-        assert.equal(store.pageSessionMessages(next.id, 0).messages.length, 4);
+        assert.equal(store.pageSessionMessages(next.id, 0).messages.length, 5);
       }, { base, model: () => model });
     });
   } finally { rmSync(base, { recursive: true, force: true }); }
@@ -317,6 +330,28 @@ test('agent loop: Stop aborts a streaming turn, the loop confirms, and the task 
       assert.equal(finished.get(task.id)!.outcome, 'stopped');
       await assert.rejects(runner.stop(task.id), /INVALID_TRANSITION/);
     });
+  });
+});
+
+test('agent loop: Stop reaps the active Read Adapter and cancels queued work before reporting STOPPED', { skip: !WINDOWS }, async () => {
+  const adapter = createReadAdapter({ maxConcurrent: 1, walkTimeoutMs: 6_000 });
+  const args = { query: '^(a+)+$', regex: true, path: 'trap.txt' };
+  await withProvider([res => sse(res, [start, ...tool(0, 'toolu_active', 'search_text', args),
+    ...tool(1, 'toolu_queued', 'search_text', args), ...stop('tool_use')])], async (endpoint, requests) => {
+    await withAgent(endpoint, async ({ root, store, runner, projectId }) => {
+      writeFileSync(resolve(root, 'trap.txt'), 'a'.repeat(5_000) + '!\n');
+      const task = await runner.start(projectId, 'Search both parts', randomUUID());
+      await until(() => adapter.snapshot().activePids.length === 1 && adapter.snapshot().queued === 1);
+      const pid = adapter.snapshot().activePids[0]!;
+      const stopped = await runner.stop(task.id);
+      if (stopped.state !== 'STOPPED') await until(() => adapter.snapshot().active === 0, 15_000);
+      assert.equal(stopped.state, 'STOPPED');
+      assert.deepEqual(adapter.snapshot(), { available: true, active: 0, queued: 0, launched: 1, killed: 1, activePids: [] });
+      assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+      assert.equal(requests.length, 1);
+      assert.deepEqual(states(events(store, task.id)), ['QUEUED', 'RUNNING', 'STOPPING', 'STOPPED']);
+      assert.deepEqual(store.listToolAudit().map(row => row.code), ['CANCELLED', 'CANCELLED']);
+    }, { adapter });
   });
 });
 

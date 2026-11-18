@@ -105,6 +105,8 @@ function TaskUsage({ events }: { events: readonly TaskEvent[] }) {
   const t = useT(); const locale = useLocale();
   const usage = summarizeTaskUsage(events);
   if (!usage.turns) return null;
+  const hasModelTiming = events.some(event => event.type === 'assistant_turn' && event.payload.timing !== undefined);
+  const hasToolTiming = events.some(event => event.type === 'tool_call' && event.payload.durationMs !== undefined);
   const count = (value: number): string => value.toLocaleString(locale);
   const seconds = (milliseconds: number): string => `${(milliseconds / 1000).toFixed(1)}s`;
   const items = [
@@ -112,7 +114,9 @@ function TaskUsage({ events }: { events: readonly TaskEvent[] }) {
     usage.cacheHitRatio === null ? t('taskUsage.input', { tokens: count(usage.totalInputTokens) })
       : t('taskUsage.inputCached', { tokens: count(usage.totalInputTokens), percent: Math.round(usage.cacheHitRatio * 100) }),
     t('taskUsage.output', { tokens: count(usage.outputTokens) }),
-    ...(usage.medianTtftMs !== null ? [t('taskUsage.time', { model: seconds(usage.modelMs), first: seconds(usage.medianTtftMs), tools: seconds(usage.toolMs) })] : []),
+    ...(hasModelTiming ? [t('taskUsage.modelTime', { time: seconds(usage.modelMs) })] : []),
+    ...(usage.medianTtftMs !== null ? [t('taskUsage.firstContentTime', { time: seconds(usage.medianTtftMs) })] : []),
+    ...(hasToolTiming ? [t('taskUsage.toolTime', { time: seconds(usage.toolMs) })] : []),
     ...(usage.compactions > 0 ? [t('taskUsage.summarized', { compactions: usage.compactions })] : []),
     ...(usage.contextManaged === false ? [t('taskUsage.unmanaged')] : []),
   ];

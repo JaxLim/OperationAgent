@@ -24,6 +24,7 @@ const FAILURES: Readonly<Record<ReadFailureCode, string>> = Object.freeze({
   TIMED_OUT: 'Reading took too long and was stopped.',
   ADAPTER_FAILED: 'The file reader failed.',
   BUSY: 'Too many reads are in progress; try again.',
+  CANCELLED: 'The read was cancelled.',
   CLEANUP_UNCONFIRMED: 'The file reader could not be confirmed stopped, so reading is disabled for now.',
 });
 

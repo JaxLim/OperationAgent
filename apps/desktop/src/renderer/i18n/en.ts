@@ -144,7 +144,9 @@ export const en = {
   'taskUsage.input': 'input {tokens} tokens',
   'taskUsage.inputCached': 'input {tokens} tokens ({percent}% cached)',
   'taskUsage.output': 'output {tokens} tokens',
-  'taskUsage.time': 'model {model} · first content {first} (median) · tools {tools}',
+  'taskUsage.modelTime': 'model {time}',
+  'taskUsage.firstContentTime': 'first content {time} (median)',
+  'taskUsage.toolTime': 'tools {time}',
   'taskUsage.summarized': 'earlier context summarized {compactions}×',
   'taskUsage.unmanaged': 'context management off',
 

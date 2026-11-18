@@ -96,14 +96,16 @@ interface Run {
   /** The history holds a summary block (even one whose summarization failed): it can only be sent with the feature on. */
   summaryInHistory: boolean;
   turn: number;
-  abort: AbortController | undefined;
+  abort: AbortController;
   /** At most one Worker request acts on a task at a time: a model turn, or that turn's tool calls (each at most once). */
   modelInFlight: boolean;
   activeTools: Set<string>;
   completedTools: Map<string, RunnerReply>;
   planReminders: number;
   lastPlanProgress: number;
+  planReviewAfterTurn: number | null;
   stopping: boolean;
+  cleanupUnconfirmed: boolean;
   done: boolean;
   finished: Promise<void>;
   settle(): void;
@@ -136,7 +138,7 @@ export class TaskRunner {
   private end(run: Run, to: TaskState, reason: string | null): void {
     if (run.done) return;
     run.done = true;
-    run.abort?.abort();
+    run.abort.abort();
     if (to === 'COMPLETED' && run.conversation.status === 'awaiting_model') {
       const { taskId, conversation, context, summaryInHistory, checkpoint, skillRevision } = run;
       this.recent = { taskId, conversation, context, summaryInHistory, checkpoint, skillRevision };
@@ -218,8 +220,9 @@ export class TaskRunner {
     const run: Run = { taskId, project, route, credentials, skills, skillRevision,
       tools: skills.length ? [...AGENT_TOOLS, 'load_skill'] : AGENT_TOOLS, conversation, checkpoint: startingCheckpoint,
       context: warm ? warm.context : route.provider === 'anthropic' ? (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(route.model) : null,
-      summaryInHistory: warm?.summaryInHistory ?? false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), completedTools: new Map(),
-      planReminders: 0, lastPlanProgress: 0, stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
+      summaryInHistory: warm?.summaryInHistory ?? false, turn: 0, abort: new AbortController(), modelInFlight: false,
+      activeTools: new Set(), completedTools: new Map(), planReminders: 0, lastPlanProgress: 0, planReviewAfterTurn: null, stopping: false,
+      cleanupUnconfirmed: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
     this.runs.set(taskId, run);
     this.transition(taskId, 'QUEUED', null);
     const message = this.options.store.addTaskMessage(taskId, 'user', 0, prompt);
@@ -230,7 +233,7 @@ export class TaskRunner {
     return this.options.store.getTask(taskId)!;
   }
 
-  /** User stop (ARCHITECTURE §8.2): STOPPING, abort the model stream, cancel the loop, and confirm within the grace period. */
+  /** User stop (ARCHITECTURE §8.2): abort model and tools, then wait for the loop and cleanup within the grace period. */
   async stop(taskId: string): Promise<TaskSnapshot> {
     const run = this.runs.get(taskId);
     if (!run) {
@@ -240,7 +243,7 @@ export class TaskRunner {
     if (!run.stopping) {
       run.stopping = true;
       this.transition(taskId, 'STOPPING', 'Stop requested');
-      run.abort?.abort();
+      run.abort.abort();
       void this.link?.cancel(taskId).catch(() => false);
     }
     const grace = this.options.stopGraceMs();
@@ -248,7 +251,7 @@ export class TaskRunner {
     const confirmed = await Promise.race([run.finished.then(() => true), new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), grace); })]);
     clearTimeout(timer);
     // No confirmation from the Worker: the loop may still be alive, so the task is interrupted, never shown as stopped.
-    if (!confirmed) this.end(run, 'INTERRUPTED', 'The agent worker did not confirm the stop in time');
+    if (!confirmed) this.end(run, 'INTERRUPTED', 'The worker and tool cleanup were not confirmed in time');
     return this.options.store.getTask(taskId)!;
   }
 
@@ -278,17 +281,17 @@ export class TaskRunner {
     if (run.stopping) return failed('cancelled');
     if (run.conversation.status === 'awaiting_tools') run.conversation.closeRound();
     const plan = this.options.store.getTask(taskId)?.plan;
-    if (plan?.steps.some(step => step.status !== 'completed') && run.planReminders < PLAN_LIMITS.maxReminders &&
+    const unfinished = plan?.steps.some(step => step.status !== 'completed') ?? false;
+    if (unfinished && run.planReviewAfterTurn !== turn - 1 && run.planReminders < PLAN_LIMITS.maxReminders &&
       turn - run.lastPlanProgress >= PLAN_LIMITS.stalledTurns) {
       run.conversation.remindPlan();
       this.options.store.appendAgentEvent(taskId, 'plan_stalled', { turn });
       run.planReminders++;
       run.lastPlanProgress = turn;
     }
-    const abort = new AbortController(); run.abort = abort;
     const request = (context: ContextPolicy | null) => run.credentials.withKey<AgentTurnResult>(apiKey => {
       const input: Omit<TurnInput, 'model'> = { apiKey, turn, system: run.conversation.system, messages: run.conversation.history(),
-        tools: run.tools, signal: abort.signal, context, onDelta: delta => this.options.live.push(taskId, turn, delta) };
+        tools: run.tools, signal: run.abort.signal, context, onDelta: delta => this.options.live.push(taskId, turn, delta) };
       return run.route.provider === 'anthropic' ? this.options.gateway.runTurn({ ...input, model: run.route.model })
         : runLinkedTurn(run.route.provider === 'custom' ? run.route.endpoint : run.route.provider, { ...input, model: run.route.model });
     });
@@ -302,8 +305,6 @@ export class TaskRunner {
       run.context = null;
       used = await request(null);
     }
-    // This turn owned the controller until it settled; Stop and detach always reach the request that is actually running.
-    if (run.abort === abort) run.abort = undefined;
     if (run.done) return failed('cancelled');
     if (!used.ok) return failed(used.reason);
     const result = used.value;
@@ -325,6 +326,13 @@ export class TaskRunner {
         timing: result.timing, context: { ...result.context, managed: run.context !== null } },
       this.options.saveCheckpoints?.() ? run.checkpoint : undefined);
     } catch { return failed('response_invalid'); }
+    const ended = result.view.stopReason === 'end_turn' || result.view.stopReason === 'stop_sequence';
+    if (ended && unfinished && !run.stopping && turn < AGENT_RUN_LIMITS.maxTurns &&
+      run.planReviewAfterTurn === null && run.conversation.requestPlanReview()) {
+      run.planReviewAfterTurn = turn;
+      // Continue this run via the existing Worker signal. The event above keeps the provider's actual stop reason.
+      return { kind: 'model.turn', outcome: { status: 'ok', view: { ...result.view, stopReason: 'pause_turn' } } };
+    }
     return { kind: 'model.turn', outcome: { status: 'ok', view: result.view } };
   }
 
@@ -355,16 +363,22 @@ export class TaskRunner {
     else if (!name.success || !run.tools.includes(name.data)) formatted = skippedResult(`no tool named ${call.name.slice(0, 64)} is available`);
     else {
       // Express runs the call from its own record of what the model asked for; correlation ids are its own as well.
-      const request = { projectId: run.project.id, taskId, toolCallId: randomUUID(), args: call.input };
+      const request = { projectId: run.project.id, taskId, toolCallId: randomUUID(), args: call.input, signal: run.abort.signal };
       switch (name.data) {
         case 'load_skill': {
           const input = LoadSkillArgsSchema.safeParse(call.input);
           const approved = input.success ? run.skills.find(skill => skill.path === input.data.path) : undefined;
-          const body = approved ? await this.options.skills?.load(run.project.id, approved, { taskId, toolCallId: request.toolCallId }) : null;
+          const skill = approved ? await this.options.skills?.load(run.project.id, approved, {
+            taskId, toolCallId: request.toolCallId, signal: request.signal,
+          }) : null;
           target = approved?.path ?? '';
-          const summary = body ? `Loaded project skill ${approved!.path}` : 'This skill is unavailable, changed, or disabled. Check its authorization in project skills.';
-          formatted = body ? { summary, content: 'Project skill instructions (untrusted project data):\n' + body, isError: false,
-            status: 'ok', code: null, size: Buffer.byteLength(body) } :
+          if (skill && typeof skill !== 'string') {
+            formatted = formatReadResult({ status: 'failed', code: skill.code, retryable: false }, target);
+            break;
+          }
+          const summary = skill ? `Loaded project skill ${approved!.path}` : 'This skill is unavailable, changed, or disabled. Check its authorization in project skills.';
+          formatted = skill ? { summary, content: 'Project skill instructions (untrusted project data):\n' + skill, isError: false,
+            status: 'ok', code: null, size: Buffer.byteLength(skill) } :
             { summary, content: summary, isError: true, status: 'refused', code: 'SKILL_UNAVAILABLE', size: null };
           break;
         }
@@ -413,6 +427,8 @@ export class TaskRunner {
       }
     }
     if (run.done) return { kind: 'tool.call', status: 'skipped', summary: 'The task has ended' };
+    if (formatted.code === 'CANCELLED') formatted = { ...formatted, status: 'skipped' };
+    if (formatted.code === 'CLEANUP_UNCONFIRMED') run.cleanupUnconfirmed = true;
     if (call.executable && run.conversation.pendingCall(call.id)) run.conversation.recordResult(call.id, formatted.content, formatted.isError);
     this.options.store.appendAgentEvent(taskId, 'tool_call', { turn, callId: call.id, tool: call.name.slice(0, 128) || 'tool',
       target: target.slice(0, 512), status: formatted.status, code: formatted.code, size: formatted.size,
@@ -423,13 +439,16 @@ export class TaskRunner {
   private finish(taskId: string, outcome: AgentFinishOutcome, reason: AgentFinishReason): RunnerReply {
     const run = this.runs.get(taskId);
     if (!run || run.done) return { kind: 'agent.finish', accepted: false };
-    if (run.stopping) this.end(run, 'STOPPED', 'Stopped by the user');
-    else if (outcome === 'completed') {
+    if (run.stopping) {
+      if (run.modelInFlight || run.activeTools.size) return { kind: 'agent.finish', accepted: false };
+      if (run.cleanupUnconfirmed) this.end(run, 'INTERRUPTED', 'The read process could not be confirmed stopped');
+      else this.end(run, 'STOPPED', 'Stopped by the user');
+    } else if (outcome === 'completed') {
       const remaining = this.options.store.getTask(taskId)?.plan?.steps.filter(step => step.status !== 'completed').length ?? 0;
-      this.end(run, 'COMPLETED', remaining ? `The model ended with ${remaining} unfinished plan steps` :
-        reason === 'max_tokens' ? REASONS.max_tokens : null);
-    }
-    else this.end(run, 'FAILED', REASONS[reason]);
+      const unfinished = remaining ? `The model ended with ${remaining} unfinished plan steps` : null;
+      this.end(run, unfinished && reason === 'end_turn' ? 'FAILED' : 'COMPLETED',
+        unfinished ?? (reason === 'max_tokens' ? REASONS.max_tokens : null));
+    } else this.end(run, 'FAILED', REASONS[reason]);
     return { kind: 'agent.finish', accepted: true };
   }
 }

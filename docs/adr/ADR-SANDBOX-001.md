@@ -9,4 +9,4 @@
 
 P3a 测试产物只在构建和验收阶段使用。现有发布能力门禁继续要求 P3b，届时还需核验真实项目权限、所有敏感路径、网络协议覆盖、审批、工具输出和取消行为。
 
-Windows runner `b071554` 的合成写文件、环回网络拒绝和 Job 进程树回收用例通过。ACL 用例观测到工作区外写入返回 `EPERM`，随后因原用例只接受 `EACCES` 提前结束。独立复验保留两处写入的权限错误与原文件内容检查。Git for Windows 的 MSYS Bash 在创建 `\\BaseNamedObjects` 命名空间对象时返回 `0xC0000022`，SEC-23 整体未通过。见 [Windows runner](https://github.com/JaxLim/OperationAgent/actions/runs/44253164952/job/134628474449) 和 [MSYS 上游兼容性记录](https://github.com/microsoft/mxc/issues/1061)。
+Windows runner `e53613a` 的合成文件写入、ACL、环回网络阻断和 Job 回收通过。ACL 同时确认工作区外文件和 `.git/config` 写入被拒，原内容保持原样。主机对照成功连接环回监听，容器探针未能连接。Git for Windows 的 MSYS Bash 在创建 `\\BaseNamedObjects` 命名空间对象时返回 `0xC0000022`，SEC-23 整体未通过。SEC-W01、隔离只读 Agent 与安装后 SEC-18 在各自的验收中通过。 [Windows runner](https://github.com/JaxLim/OperationAgent/actions/runs/44340151287/job/134927587035) [MSYS 上游兼容性记录](https://github.com/microsoft/mxc/issues/1061)

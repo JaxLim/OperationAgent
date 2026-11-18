@@ -46,7 +46,7 @@ export const ReadRefusalCodeSchema = z.enum([
 export type ReadRefusalCode = z.infer<typeof ReadRefusalCodeSchema>;
 
 /** Adapter failures: the read did not complete; nothing was returned. */
-export const ReadFailureCodeSchema = z.enum(['READ_ADAPTER_UNAVAILABLE', 'TIMED_OUT', 'ADAPTER_FAILED', 'BUSY', 'CLEANUP_UNCONFIRMED']);
+export const ReadFailureCodeSchema = z.enum(['READ_ADAPTER_UNAVAILABLE', 'TIMED_OUT', 'ADAPTER_FAILED', 'BUSY', 'CANCELLED', 'CLEANUP_UNCONFIRMED']);
 export type ReadFailureCode = z.infer<typeof ReadFailureCodeSchema>;
 
 const RelativePathSchema = z.string().min(1).max(READ_FILE_LIMITS.maxPathChars);

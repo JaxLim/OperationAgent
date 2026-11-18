@@ -29,7 +29,7 @@ export const AGENT_RUN_LIMITS = Object.freeze({
 export const AgentToolNameSchema = z.enum(['read_file', 'list_directory', 'search_text', 'find_files', 'update_plan', 'load_skill']);
 export type AgentToolName = z.infer<typeof AgentToolNameSchema>;
 
-/** Why a turn ended, normalized from the provider's stop_reason. `refusal` is a policy decline (HTTP 200). */
+/** Why a turn ended. On the Worker channel, `pause_turn` can also request a bounded plan review in the same task. */
 export const TurnStopReasonSchema = z.enum(['end_turn', 'tool_use', 'max_tokens', 'refusal', 'pause_turn', 'stop_sequence', 'context_exhausted', 'other']);
 export type TurnStopReason = z.infer<typeof TurnStopReasonSchema>;
 

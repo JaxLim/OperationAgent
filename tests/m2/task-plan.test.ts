@@ -34,6 +34,7 @@ test('a real Worker publishes and completes a plan through the selected model ro
     store.saveSettings({ ...store.getSettings(), defaultProvider: 'openrouter' });
     const result = await runTask('Inspect the project then answer');
     assert.equal(result.state,'COMPLETED');
+    assert.equal(calls, replies.length + 1, 'finishing a completed plan needs no extra model turn');
     assert.equal(result.events.filter(event => event.type === 'plan_updated').length,3);
     assert.equal(store.getTask(result.taskId)?.plan?.revision,3);
     assert.ok(store.getTask(result.taskId)?.plan?.steps.every(item => item.status === 'completed'));
@@ -43,16 +44,19 @@ test('a real Worker publishes and completes a plan through the selected model ro
   }, { linkedKey: 'test-openrouter-key-' + 'x'.repeat(40) });
 });
 
-test('stalled plans produce bounded append-only reminders and retain unfinished steps at completion', async t => {
+test('an unfinished plan gets one final check after the bounded progress reminders', async t => {
   let calls = 0;
   const steps = [step('inspect','in_progress')];
-  const messages: unknown[][] = [];
+  const messages: { role: string; content: string }[][] = [];
+  const firstFinish = PLAN_LIMITS.stalledTurns * (PLAN_LIMITS.maxReminders + 1) + 1;
+  const check = 'Check the unfinished steps in your task plan against the tool results.';
   t.mock.method(globalThis, 'fetch', async (_url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
     messages.push(body.messages);
-    const finish = ++calls > PLAN_LIMITS.stalledTurns * (PLAN_LIMITS.maxReminders + 1);
+    const finish = ++calls >= firstFinish;
     return Response.json({ choices: [{ finish_reason: finish ? 'stop' : 'tool_calls', message: { role: 'assistant',
-      content: finish ? 'Finished' : null, ...(!finish && { tool_calls: [{ id: 'plan_' + calls, type: 'function',
+      content: finish ? (calls === firstFinish ? 'Finished' : 'Still unable to finish the inspection.') : null,
+      ...(!finish && { tool_calls: [{ id: 'plan_' + calls, type: 'function',
         function: { name: 'update_plan', arguments: JSON.stringify({ steps }) } }] }) } }],
       usage: { prompt_tokens: 10, completion_tokens: 5 } });
   });
@@ -60,11 +64,22 @@ test('stalled plans produce bounded append-only reminders and retain unfinished 
     store.saveProviderModel('openrouter','vendor/model');
     store.saveSettings({ ...store.getSettings(), defaultProvider: 'openrouter' });
     const result = await runTask('Inspect project');
-    assert.equal(result.state,'COMPLETED');
+    assert.equal(calls, firstFinish + 1, 'exactly one extra turn for a natural end with unfinished work');
+    assert.equal(result.state, 'FAILED');
     assert.equal(result.events.filter(e => e.type === 'plan_stalled').length, PLAN_LIMITS.maxReminders);
     assert.equal(result.events.filter(e => e.type === 'plan_updated').length,1);
     assert.equal(store.getTask(result.taskId)?.plan?.steps[0]?.status,'in_progress');
+    const terminal = result.events.findLast(event => event.type === 'task_state_changed');
+    assert.match(terminal?.payload.reason ?? '', /^The model ended with 1 unfinished plan steps/);
+    const providerStops = result.events.flatMap(event => event.type === 'assistant_turn' ? [event.payload.stopReason] : []);
+    assert.deepEqual(providerStops.slice(-2), ['end_turn', 'end_turn']);
+    assert.deepEqual(store.pageSessionMessages(result.taskId, 0).messages.slice(-2).map(message => message.text),
+      ['Finished', 'Still unable to finish the inspection.']);
+    const followUp = messages.at(-1)?.at(-1);
+    assert.equal(followUp?.role, 'user');
+    assert.ok(followUp?.content.startsWith(check));
     const final = JSON.stringify(messages.at(-1));
+    assert.equal(final.split(check).length - 1, 1);
     assert.equal(final.split('Your task plan has made no recorded progress').length - 1, PLAN_LIMITS.maxReminders);
   }, { linkedKey: 'test-openrouter-key-' + 'x'.repeat(40) });
 });

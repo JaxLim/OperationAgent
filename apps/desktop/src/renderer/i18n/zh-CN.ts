@@ -144,7 +144,9 @@ export const zhCN: Readonly<Record<MessageKey, string>> = {
   'taskUsage.input': '输入 {tokens} tokens',
   'taskUsage.inputCached': '输入 {tokens} tokens（{percent}% 来自缓存）',
   'taskUsage.output': '输出 {tokens} tokens',
-  'taskUsage.time': '模型 {model} · 首段内容 {first}（中位数）· 工具 {tools}',
+  'taskUsage.modelTime': '模型耗时 {time}',
+  'taskUsage.firstContentTime': '首段内容 {time}（中位数）',
+  'taskUsage.toolTime': '工具耗时 {time}',
   'taskUsage.summarized': '较早的上下文已摘要 {compactions} 次',
   'taskUsage.unmanaged': '上下文管理已关闭',
 

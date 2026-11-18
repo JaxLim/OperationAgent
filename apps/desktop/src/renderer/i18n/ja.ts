@@ -144,7 +144,9 @@ export const ja: Readonly<Record<MessageKey, string>> = {
   'taskUsage.input': '入力 {tokens} トークン',
   'taskUsage.inputCached': '入力 {tokens} トークン（{percent}% はキャッシュ）',
   'taskUsage.output': '出力 {tokens} トークン',
-  'taskUsage.time': 'モデル {model} · 最初の出力まで {first}（中央値）· ツール {tools}',
+  'taskUsage.modelTime': 'モデル {time}',
+  'taskUsage.firstContentTime': '最初の出力まで {time}（中央値）',
+  'taskUsage.toolTime': 'ツール {time}',
   'taskUsage.summarized': '以前のコンテキストを {compactions} 回要約',
   'taskUsage.unmanaged': 'コンテキスト管理はオフ',
 
