@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { summarizeTaskUsage } from '@operation-agent/contracts';
 import type { TaskEvent, TaskPlan, TaskSnapshot } from '@operation-agent/contracts';
 import { useLocale, useT } from '../locale';
@@ -145,8 +147,11 @@ function TaskPlanProgress({ plan, state }: { plan: TaskPlan; state: TaskSnapshot
   );
 }
 
-export function TaskDetail({ task }: { task: TaskSnapshot }) {
+export function TaskDetail({ task, children }: { task: TaskSnapshot; children?: ReactNode }) {
   const t = useT(); const locale = useLocale();
+  const [resuming, setResuming] = useState(false);
+  const ready = useStore(s => s.connection === 'ready' && s.overview?.agentReady === true);
+  const persist = useStore(s => s.settings?.saveCheckpoints === true);
   const view = useStore(s => s.taskViews[task.id]);
   const stopping = useStore(s => s.conversations[task.id]?.stopping ?? false);
   const events = view?.events ?? [];
@@ -162,7 +167,7 @@ export function TaskDetail({ task }: { task: TaskSnapshot }) {
     <section className="center" data-task-id={task.id}>
       <header className="task-header">
         <div className="task-header-main">
-          <h1 className="task-title">{t('task.label')} <span className="mono">{shortId(task.id)}</span></h1>
+          <h1 className="task-title">{t('task.label')} <span className="mono">{shortId(task.sessionId ?? task.id)}</span></h1>
           <div className="task-meta">
             <StatePill state={task.state} />
             <span className="meta-item"><IconClock size={12} />{t('task.createdAgo', { time: relativeTime(Date.parse(task.createdAt), locale) })}</span>
@@ -183,8 +188,11 @@ export function TaskDetail({ task }: { task: TaskSnapshot }) {
         {task.state === 'INTERRUPTED' && (
           <div className="notice tone-notice-warn task-banner"><IconAlert size={14} /><div>
             <div className="notice-text">{t(unknown ? 'task.interruptedUnknown' : 'task.interrupted')}</div>
-            <div className="notice-detail">{t('task.interruptedText')}</div>
-          </div><IconLock size={13} /></div>
+            <div className="notice-detail">{t(task.resumable && persist ? 'task.interruptedText' : 'session.noCheckpoint')}</div>
+          </div>{task.resumable && persist ? <button className="btn btn-xs" disabled={!ready || resuming}
+            onClick={() => { setResuming(true); void actions.resumeTask(task.projectId, task.id).finally(() => setResuming(false)); }}>
+            {t('session.resume')}
+          </button> : <IconLock size={13} />}</div>
         )}
         {latestPlan && <TaskPlanProgress plan={latestPlan} state={task.state} />}
         {agentTask && <Conversation task={task} />}
@@ -195,6 +203,7 @@ export function TaskDetail({ task }: { task: TaskSnapshot }) {
           : <div className="timeline" aria-label={t('task.eventsLabel')}>{events.map(event => <EventEntry key={event.eventId} event={event} />)}</div>}
         {view?.sync === 'syncing' && events.length === 0 && <p className="muted small">{t('task.loading')}</p>}
       </div></div>
+      {children}
     </section>
   );
 }

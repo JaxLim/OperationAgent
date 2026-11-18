@@ -151,6 +151,10 @@ function ChatSection({ settings }: { settings: WorkbenchSettings }) {
           options={[{ value: 5000, label: '5 s' }, { value: 10000, label: '10 s' }, { value: 30000, label: '30 s' }]} />
       </Row>
       <Row label={t('chat.approval')} hint={t('chat.approvalHint')}><Availability>{t('common.notAvailableYet')}</Availability></Row>
+      <Row label={t('session.saveCheckpoints')} hint={t('session.saveCheckpointsHint')}>
+        <Toggle label={t('session.saveCheckpoints')} checked={settings.saveCheckpoints === true}
+          onChange={saveCheckpoints => void actions.saveSettings({ saveCheckpoints })} />
+      </Row>
       <Row label={t('chat.effort')} hint={t('chat.effortHint')}><Availability>{t('common.notAvailableYet')}</Availability></Row>
       <Row label={t('chat.drafts')} hint={t('chat.draftsHint')}><span className="value-text">{t('chat.inMemory')}</span></Row>
       <div className="settings-note"><IconShield size={14} /><span>{t('chat.shellNote')}</span></div>

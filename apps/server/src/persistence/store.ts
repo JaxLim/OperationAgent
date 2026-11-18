@@ -20,7 +20,7 @@ import type { AuditStore } from './audit.js';
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
 const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql',
   '006-providers-agents.sql', '007-tool-audit.sql', '008-tool-audit-tools.sql', '009-agent-conversation.sql',
-  '010-tool-audit-search.sql', '011-provider-connections.sql', '012-task-plans.sql'];
+  '010-tool-audit-search.sql', '011-provider-connections.sql', '012-task-plans.sql', '013-task-sessions.sql'];
 type ConnectionStore = ReturnType<typeof createConnectionStore>;
 export interface Store extends TaskLog, ModelStore, ConfigStore, AuditStore, ConnectionStore {
   readonly databaseVersion: number;
@@ -114,6 +114,7 @@ export function openStore(directory: string, runId: string, migrationDirectory =
         return db.transaction(() => {
           if (next.activeProjectId && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(next.activeProjectId)) throw new Error('NOT_FOUND');
           writeSettings.run(JSON.stringify(next), new Date().toISOString());
+          if (!next.saveCheckpoints) db.prepare('DELETE FROM task_checkpoints').run();
           return settings();
         }).immediate();
       },

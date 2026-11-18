@@ -87,6 +87,12 @@ export function notify(tone: Notice['tone'], text: string): void {
   setTimeout(() => set({ notices: state.notices.filter(item => item.id !== notice.id) }), 4_500);
 }
 
+function sessionError(code: string): void {
+  const message = code === 'SESSION_MODEL_CHANGED' ? 'session.modelChanged' : code === 'SESSION_CONTEXT_UNAVAILABLE' ? 'session.noContext'
+    : code === 'SESSION_ALREADY_CONTINUED' ? 'session.alreadyContinued' : 'session.startFailed';
+  notify('danger', tr(message, { code }));
+}
+
 async function loadDomain(): Promise<void> {
   const [settings, projects, runs, overview, model, providers] = await Promise.all([api().getSettings(), api().listProjects(), api().listRuns(),
     api().getOverview(), api().getModelSettings(), api().getProviders()]);
@@ -135,7 +141,8 @@ async function syncTask(taskId: string): Promise<void> {
 }
 async function loadTasks(): Promise<void> {
   const { tasks } = await api().listTasks();
-  set({ tasks });
+  const prior = state.tasks.find(task => task.id === state.selectedTaskId);
+  set({ tasks: tasks.map(task => task.id === prior?.id && prior.plan ? { ...task, plan: prior.plan } : task) });
   const selected = tasks.find(task => task.id === state.selectedTaskId);
   if (!selected) return;
   if (selected.lastSeq !== (state.taskViews[selected.id]?.appliedSeq ?? -1)) { await syncTask(selected.id); await syncMessages(selected.id); }
@@ -170,7 +177,7 @@ async function syncMessages(taskId: string): Promise<void> {
       const asked = messagesWanted.get(taskId);
       const shown = (state.conversations[taskId] ?? EMPTY_CONVERSATION).messages.length;
       const result = await api().listTaskMessages({ taskId, after: shown });
-      updateConversation(taskId, current => withMessages(current, shown, result.messages, taskEvents(taskId)));
+      updateConversation(taskId, current => withMessages(current, shown, result.messages, taskEvents(taskId), taskId));
       if (!result.hasMore && messagesWanted.get(taskId) === asked) { messagesWanted.delete(taskId); return; }
     }
   } catch { /* Still wanted: the next poll retries. The committed log stays the source of truth. */ }
@@ -187,7 +194,7 @@ async function pollLive(): Promise<void> {
     const afterSeq = (state.conversations[taskId] ?? EMPTY_CONVERSATION).liveSeq;
     const page = await api().readTaskLive({ taskId, afterSeq });
     let refresh = false;
-    updateConversation(taskId, current => { const next = withLivePage(current, page, taskEvents(taskId)); refresh = next.refresh; return next.view; });
+    updateConversation(taskId, current => { const next = withLivePage(current, page, taskEvents(taskId), taskId); refresh = next.refresh; return next.view; });
     if (refresh) { await syncTask(taskId); await syncMessages(taskId); }
   } catch { /* Live deltas are best effort; the committed views are polled independently. */ }
   finally { liveBusy = false; }
@@ -287,20 +294,30 @@ export const actions = {
     } catch (error) { notify('danger', tr('notice.projectNotRemoved', { code: errorCode(error) })); }
   },
   /** A goal travels inside the prompt text the control plane receives; it is kept apart here only to display it. */
-  async submitTask(projectId: string, prompt: string, goal: string | null = null): Promise<void> {
+  async submitTask(projectId: string, prompt: string, goal: string | null = null, followUpTo?: string): Promise<boolean> {
     const at = Date.now(); const id = crypto.randomUUID();
     let outcome: Submission['outcome'] = 'refused'; let code: string;
     try {
-      const result = await api().startTask({ projectId, prompt: composePrompt(prompt, goal) });
+      const result = await api().startTask({ projectId, prompt: composePrompt(prompt, goal), ...(followUpTo && { followUpTo }) });
       if (result.accepted) {
         // The task now exists in Express; the task list and its view take over from here.
         await loadTasks();
         actions.selectTask(result.task.id);
-        return;
+        return true;
       }
       code = result.error;
     } catch (error) { outcome = 'failed'; code = errorCode(error); }
+    if (followUpTo) { sessionError(code); return false; }
     set({ submissions: [...state.submissions, { id, projectId, prompt, goal, at, outcome, code }].slice(-20) });
+    return true;
+  },
+  async resumeTask(projectId: string, taskId: string): Promise<void> {
+    try {
+      const result = await api().startTask({ projectId, resumeFrom: taskId });
+      if (!result.accepted) { sessionError(result.error); return; }
+      await loadTasks();
+      actions.selectTask(result.task.id);
+    } catch (error) { sessionError(errorCode(error)); }
   },
   async refreshModel(): Promise<void> {
     try { set({ model: await api().getModelSettings() }); } catch { /* The status banner reports availability. */ }

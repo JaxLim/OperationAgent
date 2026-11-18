@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { TaskEvent, TaskSnapshot } from '@operation-agent/contracts';
 import { useT } from '../locale';
 import { useStore } from '../state';
@@ -33,8 +34,12 @@ export function Conversation({ task }: { task: TaskSnapshot }) {
   const conversation = useStore(s => s.conversations[task.id]);
   const events = view?.events ?? [];
   const messages = conversation?.messages ?? [];
-  const prompt = messages.find(message => message.role === 'user');
-  const answers = new Map(messages.filter(message => message.role === 'assistant').map(message => [message.turn, message]));
+  const prompt = messages.find(message => message.taskId === task.id && message.role === 'user');
+  const currentPrompt = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (task.previousTaskId && prompt) currentPrompt.current?.scrollIntoView({ block: 'start' });
+  }, [task.previousTaskId, prompt]);
+  const answers = new Map(messages.filter(message => message.taskId === task.id && message.role === 'assistant').map(message => [message.turn, message]));
   const turns = events.filter((event): event is TurnEvent => event.type === 'assistant_turn');
   const calls = events.filter((event): event is ToolCallEvent => event.type === 'tool_call');
   const committed = Math.max(0, ...turns.map(event => event.payload.turn));
@@ -44,8 +49,12 @@ export function Conversation({ task }: { task: TaskSnapshot }) {
 
   return (
     <section className="conversation" aria-label={t('conv.label')}>
+      {messages.filter(message => message.taskId !== task.id).map(message => message.role === 'user'
+        ? <div key={message.id} className="msg-user"><div className="bubble conv-prompt">{message.text}</div></div>
+        : <article key={message.id} className="conv-turn"><div className="conv-answer"><Markdown text={message.text} />
+            {message.textTruncated && <p className="muted small">{t('conv.clipped')}</p>}</div></article>)}
       {prompt && (
-        <div className="msg-user"><div className="bubble conv-prompt">{prompt.text}</div></div>
+        <div className="msg-user" ref={currentPrompt}><div className="bubble conv-prompt">{prompt.text}</div></div>
       )}
       {turns.map(event => {
         const answer = answers.get(event.payload.turn);

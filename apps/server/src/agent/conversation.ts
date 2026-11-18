@@ -21,10 +21,11 @@ export class Conversation {
   private state: ConversationState = 'awaiting_model';
   private turns = 0;
 
-  constructor(readonly system: string, prompt: string) {
+  constructor(readonly system: string, prompt: string, history: BetaMessageParam[] = []) {
     if (!prompt.trim() || prompt.length > AGENT_RUN_LIMITS.maxPromptChars) throw new Error('VALIDATION_ERROR');
-    this.messages = [{ role: 'user', content: [{ type: 'text', text: prompt }] }];
-    this.bytes = Buffer.byteLength(system) + Buffer.byteLength(JSON.stringify(this.messages));
+    this.messages = history;
+    this.bytes = Buffer.byteLength(system) + Buffer.byteLength(JSON.stringify(history));
+    this.append({ role: 'user', content: [{ type: 'text', text: prompt }] });
   }
 
   get status(): ConversationState { return this.state; }

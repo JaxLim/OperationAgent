@@ -380,11 +380,17 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     const runner = services.runner;
     if (!runner) { res.status(503).json({ error: 'WORKER_ISOLATION_UNAVAILABLE' }); return; }
     const requestId = String(req.headers['x-oa-request-id']);
-    void runner.start(input.data.projectId, input.data.prompt, requestId).then(task => res.status(201).json(TaskStartResultSchema.parse({ accepted: true, task })),
+    const taskInput = input.data;
+    const resuming = 'resumeFrom' in taskInput;
+    const prompt = resuming ? 'Continue the interrupted task from the saved checkpoint.' : taskInput.prompt;
+    const previous = resuming ? taskInput.resumeFrom : taskInput.followUpTo;
+    void runner.start(taskInput.projectId, prompt, requestId, previous ? { taskId: previous, resume: resuming } : undefined)
+      .then(task => res.status(201).json(TaskStartResultSchema.parse({ accepted: true, task })),
       (error: unknown) => {
         const code = error instanceof Error ? error.message : '';
         if (code === 'WORKER_ISOLATION_UNAVAILABLE') res.status(503).json({ error: code });
-        else if (code === 'MODEL_NOT_CONFIGURED' || code === 'AGENT_BUSY') res.status(409).json({ error: code });
+        else if (code === 'MODEL_NOT_CONFIGURED' || code === 'AGENT_BUSY' || code === 'SESSION_CONTEXT_UNAVAILABLE'
+          || code === 'SESSION_MODEL_CHANGED' || code === 'SESSION_ALREADY_CONTINUED') res.status(409).json({ error: code });
         else if (code === 'VALIDATION_ERROR') validationError(res);
         else failure(res, error);
       });
@@ -395,16 +401,16 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     if (!input.success) { validationError(res); return; }
     try {
       if (!store.getTask(input.data.taskId)) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
-      const all = store.listTaskMessages(input.data.taskId);
+      const page = store.pageSessionMessages(input.data.taskId, input.data.after);
       const messages = []; let bytes = 0;
-      for (const message of all.slice(input.data.after)) {
+      for (const message of page.messages) {
         const view = clipMessage(message);
         const size = Buffer.byteLength(JSON.stringify(view));
         if (messages.length && bytes + size > TASK_VIEW_LIMITS.maxMessagePageBytes) break;
         messages.push(view); bytes += size;
       }
       res.json(TaskMessagePageSchema.parse({ taskId: input.data.taskId, after: input.data.after, messages,
-        hasMore: input.data.after + messages.length < all.length }));
+        hasMore: page.hasMore || messages.length < page.messages.length }));
     } catch (error) { failure(res, error); }
   });
   // Live deltas exist only for tasks this Express instance is running or ran recently; anything else is simply done.

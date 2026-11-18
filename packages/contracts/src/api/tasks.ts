@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TaskEventSchema, TaskSnapshotSchema, replayTaskEvents } from '../events/task.js';
+import { CHECKPOINT_LIMITS, TaskEventSchema, TaskSnapshotSchema, replayTaskEvents } from '../events/task.js';
 import { utf8ByteLength } from '../events/tool-output.js';
 import { AGENT_RUN_LIMITS, TurnDeltaSchema } from '../agent/turn.js';
 import type { EventSequenceError, TaskEvent, TaskState } from '../events/task.js';
@@ -99,7 +99,8 @@ export type TaskLivePage = z.infer<typeof TaskLivePageSchema>;
 export const TASK_VIEW_LIMITS = Object.freeze({ maxMessagePageBytes: 150_000, maxMessageViewBytes: 140_000, maxLivePageBytes: 150_000,
   /** Starting may launch the isolated Worker; Stop may wait for the whole grace period (at most 30 s). */
   startRequestMs: 45_000, stopRequestMs: 40_000 });
-export const TaskMessagesQuerySchema = z.strictObject({ taskId: z.uuid(), after: z.number().int().nonnegative().max(TASK_MESSAGE_LIMITS.maxMessages) });
+export const TaskMessagesQuerySchema = z.strictObject({ taskId: z.uuid(),
+  after: z.number().int().nonnegative().max(TASK_MESSAGE_LIMITS.maxMessages * CHECKPOINT_LIMITS.visibleRuns) });
 export type TaskMessagesQuery = z.infer<typeof TaskMessagesQuerySchema>;
 export const TaskMessageViewSchema = TaskMessageSchema.extend({
   text: z.string().refine(value => utf8ByteLength(value) <= TASK_VIEW_LIMITS.maxMessageViewBytes, 'MESSAGE_VIEW_TOO_LARGE'),

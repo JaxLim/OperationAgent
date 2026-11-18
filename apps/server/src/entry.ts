@@ -56,6 +56,7 @@ async function start(message: unknown): Promise<void> {
     runner = new TaskRunner({ store: openStore, credentials: createCredentialService(openStore, bridge),
       gateway: createTurnGateway({ endpoint: input.modelEndpoint }), tools: createToolRouter({ store: openStore }),
       model: () => openStore.getModel(), live: new LiveFeed(), stopGraceMs: () => openStore.getSettings().stopGraceMs,
+      saveCheckpoints: () => openStore.getSettings().saveCheckpoints === true,
       linkedRoute: connections.route,
       ensureWorker: () => workers!.ensure() });
     workers = new AgentWorkerSupervisor({ runtimeDirectory: input.agentRuntime, expressRunId: input.expressRunId, runner });
