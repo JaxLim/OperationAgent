@@ -7,6 +7,7 @@ import type { TaskLog } from '../persistence/tasks.js';
 import type { AgentTurnResult, TurnInput, TurnGateway } from '../models/turns.js';
 import { runLinkedTurn } from '../models/linked-turn.js';
 import type { LinkedProvider } from '@operation-agent/contracts';
+import type { CustomProvider } from '@operation-agent/contracts';
 import type { ToolRouter } from '../tools/router.js';
 import { Conversation } from './conversation.js';
 import type { LiveFeed } from './live.js';
@@ -24,13 +25,16 @@ export interface AgentWorkerLink {
   cancel(taskId: string): Promise<boolean>;
 }
 export interface TaskRunnerStore extends TaskLog { getProject(id: string): Project | null }
+type RunCredentials = Pick<CredentialService, 'withKey'> & { status(): { configured: boolean } };
+export type LinkedRoute = ({ provider: LinkedProvider | 'huggingface' } | { provider: 'custom'; endpoint: CustomProvider }) &
+  { model: string | null; credentials: RunCredentials };
 export interface TaskRunnerOptions {
   store: TaskRunnerStore;
   credentials: CredentialService;
   gateway: TurnGateway;
   tools: ToolRouter;
   model: () => ClaudeModel;
-  linkedRoute?: () => { provider: LinkedProvider; model: string | null; credentials: CredentialService } | null;
+  linkedRoute?: () => LinkedRoute | null;
   live: LiveFeed;
   stopGraceMs: () => number;
   /** Launches and attaches a qualified Worker on demand; absent or rejecting, starts fail closed. */
@@ -67,8 +71,8 @@ export function systemPrompt(project: Project): string {
 interface Run {
   taskId: string;
   project: Project;
-  route: { provider: 'anthropic'; model: ClaudeModel } | { provider: LinkedProvider; model: string };
-  credentials: CredentialService;
+  route: { provider: 'anthropic'; model: ClaudeModel } | (LinkedRoute & { model: string });
+  credentials: RunCredentials;
   tools: AgentToolName[];
   conversation: Conversation;
   /** The policy this task's requests are managed under; null once it has been switched off (or was never on). */
@@ -136,7 +140,7 @@ export class TaskRunner {
     const linked = this.options.linkedRoute?.();
     const credentials = linked?.credentials ?? this.options.credentials;
     if (!credentials.status().configured || (linked && !linked.model)) throw new Error('MODEL_NOT_CONFIGURED');
-    const route: Run['route'] = linked ? { provider: linked.provider, model: linked.model! } : { provider: 'anthropic', model: this.options.model() };
+    const route: Run['route'] = linked ? { ...linked, model: linked.model! } : { provider: 'anthropic', model: this.options.model() };
     if (this.busy) throw new Error('AGENT_BUSY');
     if (!this.link && this.options.ensureWorker) await this.options.ensureWorker().catch(() => undefined);
     const link = this.link;
@@ -212,7 +216,7 @@ export class TaskRunner {
       const input: Omit<TurnInput, 'model'> = { apiKey, turn, system: run.conversation.system, messages: run.conversation.history(),
         tools: run.tools, signal: abort.signal, context, onDelta: delta => this.options.live.push(taskId, turn, delta) };
       return run.route.provider === 'anthropic' ? this.options.gateway.runTurn({ ...input, model: run.route.model })
-        : runLinkedTurn(run.route.provider, { ...input, model: run.route.model });
+        : runLinkedTurn(run.route.provider === 'custom' ? run.route.endpoint : run.route.provider, { ...input, model: run.route.model });
     });
     let used = await request(run.context);
     // Context management relies on a provider beta. If the provider rejects a managed request outright (as invalid, or
@@ -236,6 +240,7 @@ export class TaskRunner {
       const text = result.replay.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('');
       const message = text ? this.options.store.addTaskMessage(taskId, 'assistant', turn, clip(text)) : null;
       this.options.store.appendAgentEvent(taskId, 'assistant_turn', { turn, provider: run.route.provider, model: result.view.model, messageId: message?.id ?? null,
+        ...(run.route.provider === 'custom' && { channel: run.route.endpoint.baseUrl }),
         stopReason: result.view.stopReason, toolCalls: result.view.toolCalls.length, fallback: result.view.fallback, usage: result.view.usage,
         timing: result.timing, context: { ...result.context, managed: run.context !== null } });
     } catch { return failed('response_invalid'); }

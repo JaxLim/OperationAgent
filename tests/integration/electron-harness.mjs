@@ -1,5 +1,5 @@
 // Test-only entry point. Never included in Desktop or Sidecar production files.
-import { app, BrowserWindow, safeStorage } from 'electron';
+import { app, BrowserWindow, safeStorage, dialog } from 'electron';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -146,6 +146,18 @@ process.on('message', async message => {
         })()`);
         break;
       case 'model-test': value = await host.window.webContents.executeJavaScript('window.operationAgent.testModelConnection()'); break;
+      case 'custom-api': {
+        const original = dialog.showMessageBox;
+        let confirmation;
+        dialog.showMessageBox = async (_window, options) => { confirmation = options.detail; return { response: message.input.accept ? 1 : 0, checkboxChecked: false }; };
+        try {
+          value = await host.window.webContents.executeJavaScript(`window.operationAgent.saveCustomProvider(${JSON.stringify(message.input.profile)})`);
+          value = { overview: value, confirmation };
+        } finally { dialog.showMessageBox = original; }
+        break;
+      }
+      case 'providers-get':
+        value = await host.window.webContents.executeJavaScript('window.operationAgent.getProviders()'); break;
       case 'usage-ui':
         value = await host.window.webContents.executeJavaScript(`(async () => {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));

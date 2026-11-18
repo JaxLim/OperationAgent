@@ -13,14 +13,16 @@ import { createModelStore } from './models.js';
 import type { ModelStore } from './models.js';
 import { createConfigStore } from './config.js';
 import type { ConfigStore } from './config.js';
+import { createConnectionStore } from './connections.js';
 import { createAuditStore } from './audit.js';
 import type { AuditStore } from './audit.js';
 
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
 const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql',
   '006-providers-agents.sql', '007-tool-audit.sql', '008-tool-audit-tools.sql', '009-agent-conversation.sql',
-  '010-tool-audit-search.sql'];
-export interface Store extends TaskLog, ModelStore, ConfigStore, AuditStore {
+  '010-tool-audit-search.sql', '011-provider-connections.sql'];
+type ConnectionStore = ReturnType<typeof createConnectionStore>;
+export interface Store extends TaskLog, ModelStore, ConfigStore, AuditStore, ConnectionStore {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;
   /** Unfinished tasks moved to INTERRUPTED when this instance opened the database. */
@@ -100,6 +102,7 @@ export function openStore(directory: string, runId: string, migrationDirectory =
       ...tasks,
       ...models,
       ...config,
+      ...createConnectionStore(db),
       ...audit,
       databaseVersion: migrationNames.length,
       recoveredRuns,

@@ -27,6 +27,8 @@ export const MODEL_LIMITS = Object.freeze({
  * and every boundary maps failures to fixed codes.
  */
 export const ApiKeySchema = z.string().min(MODEL_LIMITS.minKeyChars).max(MODEL_LIMITS.maxKeyChars).regex(/^[\x21-\x7e]+$/);
+/** OAuth access and refresh tokens may exceed the fixed provider API-key length. */
+export const ProviderSecretSchema = z.string().min(MODEL_LIMITS.minKeyChars).max(4096).regex(/^[\x21-\x7e]+$/);
 export const CredentialHintSchema = z.string().regex(/^[A-Za-z0-9_-]{4}$/);
 export const ApiKeyInputSchema = z.strictObject({ apiKey: ApiKeySchema });
 export type ApiKeyInput = z.infer<typeof ApiKeyInputSchema>;
@@ -86,7 +88,7 @@ export const ModelEndpointSchema = z.union([z.literal(ANTHROPIC_ENDPOINT), z.str
 // two fixed operations and bounded sizes. Main never interprets what it encrypts; Express never sees the OS key.
 const cryptoRequestBase = { kind: z.literal('crypto-request'), ...ServiceTreeIdentitySchema.shape, requestId: z.uuid() };
 export const CryptoBridgeRequestSchema = z.discriminatedUnion('operation', [
-  z.strictObject({ ...cryptoRequestBase, operation: z.literal('encrypt'), plaintext: ApiKeySchema }),
+  z.strictObject({ ...cryptoRequestBase, operation: z.literal('encrypt'), plaintext: ProviderSecretSchema }),
   z.strictObject({ ...cryptoRequestBase, operation: z.literal('decrypt'),
     ciphertext: z.base64().min(4).max(MODEL_LIMITS.maxCiphertextChars) }),
 ]);

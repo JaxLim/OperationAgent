@@ -59,15 +59,16 @@ export function createTaskLog(db: Database.Database): TaskLog {
   const selectRecent = db.prepare<[number], TaskRow>(`SELECT id, project_id AS projectId, state, last_seq AS lastSeq,
     created_at AS createdAt, updated_at AS updatedAt FROM tasks ORDER BY created_at DESC, id LIMIT ?`);
   const selectByRequest = db.prepare<[string], EventRow>(`SELECT ${eventColumns} FROM task_events WHERE request_id = ?`);
-  const selectUsage = db.prepare<[string, string, number], UsagePage['rows'][number]>(`
+  const selectUsage = db.prepare<[string, string, string, number], UsagePage['rows'][number] & { channel: string }>(`
     WITH turns AS (
-      SELECT coalesce(payload ->> '$.provider', 'anthropic') AS provider, payload ->> '$.model' AS model, payload
+      SELECT coalesce(payload ->> '$.provider', 'anthropic') AS provider, payload ->> '$.model' AS model,
+        coalesce(payload ->> '$.channel', '') AS channel, payload
       FROM task_events WHERE type = 'assistant_turn'
     )
-    SELECT provider, model, count(*) AS turns,
+    SELECT provider, model, channel, count(*) AS turns,
       sum(payload ->> '$.usage.inputTokens') AS inputTokens, sum(payload ->> '$.usage.outputTokens') AS outputTokens,
       sum(payload ->> '$.usage.cacheReadTokens') AS cacheReadTokens, sum(payload ->> '$.usage.cacheWriteTokens') AS cacheWriteTokens
-    FROM turns WHERE (provider, model) > (?, ?) GROUP BY provider, model ORDER BY provider, model LIMIT ?`);
+    FROM turns WHERE (provider, model, channel) > (?, ?, ?) GROUP BY provider, model, channel ORDER BY provider, model, channel LIMIT ?`);
   const selectPage = db.prepare<[string, number, number], EventRow>(`SELECT ${eventColumns} FROM task_events
     WHERE task_id = ? AND seq > ? ORDER BY seq LIMIT ?`);
   const insertEvent = db.prepare(`INSERT INTO task_events(task_id, seq, event_id, type, request_id, occurred_at, payload)
@@ -107,7 +108,8 @@ export function createTaskLog(db: Database.Database): TaskLog {
 
   return {
     listUsage({ after }) {
-      const rows = selectUsage.all(after?.provider ?? '', after?.model ?? '', USAGE_PAGE_SIZE + 1);
+      const rows = selectUsage.all(after?.provider ?? '', after?.model ?? '', after?.channel ?? '', USAGE_PAGE_SIZE + 1)
+        .map(({ channel, ...row }) => channel ? { ...row, channel } : row);
       return UsagePageSchema.parse({ rows: rows.slice(0, USAGE_PAGE_SIZE), hasMore: rows.length > USAGE_PAGE_SIZE });
     },
     createTask(projectId, requestId) {

@@ -13,8 +13,11 @@ export const MODEL_INFO: Record<ClaudeModel, { name: string; tagline: MessageKey
   'claude-haiku-5-5': { name: 'Haiku 5.5', tagline: 'model.haiku' },
 };
 export function modelName(model: ClaudeModel): string { return `Claude ${MODEL_INFO[model].name}`; }
-export const PROVIDER_NAMES: Readonly<Record<ModelProvider, string>> = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google Gemini', openrouter: 'OpenRouter' };
-export const PROVIDER_HOSTS: Readonly<Record<ModelProvider, string>> = {
+export const PROVIDER_NAMES: Readonly<Record<ModelProvider, string>> = {
+  anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google Gemini', openrouter: 'OpenRouter', custom: 'OpenAI-compatible', huggingface: 'Hugging Face',
+};
+type OfficialKeyProvider = Exclude<ModelProvider, 'custom' | 'huggingface'>;
+export const PROVIDER_HOSTS: Readonly<Record<OfficialKeyProvider, string>> = {
   anthropic: 'api.anthropic.com', openai: 'api.openai.com', google: 'generativelanguage.googleapis.com', openrouter: 'openrouter.ai',
 };
 
@@ -32,7 +35,7 @@ const TEST_TONE: Record<ModelTestStatus, 'ok' | 'warn' | 'danger'> = {
 };
 
 /** A normalised test outcome. Facts are what Express measured; no provider text is ever shown because none arrives. */
-export function TestResult({ status, provider, httpStatus, latencyMs, model }: { status: ModelTestStatus; provider: ModelProvider; httpStatus: number | null;
+export function TestResult({ status, provider, httpStatus, latencyMs, model }: { status: ModelTestStatus; provider: OfficialKeyProvider; httpStatus: number | null;
   latencyMs: number | null; model: string | null }) {
   const t = useT();
   const tone = TEST_TONE[status];

@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
-import { CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL, MODEL_PROVIDERS, WORKBENCH_LIMITS } from '@operation-agent/contracts';
+import { CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL, LINKED_PROVIDERS, WORKBENCH_LIMITS } from '@operation-agent/contracts';
 import type { ModelProvider, Project } from '@operation-agent/contracts';
 import type { MessageKey } from '../i18n';
 import { useLocale, useT } from '../locale';
@@ -43,30 +43,41 @@ function ModelPicker({ onOpenSettings }: { onOpenSettings: (target: SettingsTarg
   const configured = useConfigured();
   const provider = settings?.defaultProvider ?? 'anthropic';
   const chosen = model?.model ?? DEFAULT_CLAUDE_MODEL;
-  const linkedModel = provider === 'anthropic' ? null : providers?.providers.find(item => item.provider === provider)?.model ?? null;
+  const profile = providers?.custom?.find(item => item.id === settings?.customProviderId);
+  const hf = providers?.huggingface;
+  const linkedModel = provider === 'custom' ? profile?.model : provider === 'huggingface' ? hf?.model
+    : providers?.providers.find(item => item.provider === provider)?.model;
+  const providerName = provider === 'custom' ? profile?.baseUrl ?? t('provider.custom.name') : PROVIDER_NAMES[provider];
   const label = provider === 'anthropic' ? MODEL_INFO[chosen].name : linkedModel ?? t('composer.noModel');
   return (
     <Popover label={t('composer.model')} placement="top-end" className="popover-model" trigger={props => (
       <button {...props} className="composer-select" data-model-picker={provider === 'anthropic' ? chosen : linkedModel ?? ''} disabled={!model || !settings}
-        title={`${PROVIDER_NAMES[provider]} · ${label}`}>
+        title={`${providerName} · ${label}`}>
         <span className="ellipsis">{label}</span><IconChevronDown size={13} />
       </button>
     )}>
       {close => (
         <>
           <MenuLabel>{t('composer.provider')}</MenuLabel>
-          {MODEL_PROVIDERS.map(id => (
+          {(['anthropic', ...LINKED_PROVIDERS] as const).map(id => (
             <MenuItem key={id} checked={id === provider} unavailable={!ready || (!configured(id) && id !== provider)} label={PROVIDER_NAMES[id]}
               hint={configured(id) ? undefined : t('composer.addKeyHint')}
-              onSelect={() => { void actions.saveSettings({ defaultProvider: id }); close(); }} />
+              onSelect={() => { void actions.saveSettings({ defaultProvider: id, customProviderId: null }); close(); }} />
           ))}
+          {providers?.custom?.map(item => (
+            <MenuItem key={item.id} checked={provider === 'custom' && item.id === profile?.id} unavailable={!ready}
+              label={item.model} hint={item.baseUrl} onSelect={() => { void actions.saveSettings({ defaultProvider: 'custom', customProviderId: item.id }); close(); }} />
+          ))}
+          {hf?.configured && hf.model && <MenuItem checked={provider === 'huggingface'} unavailable={!ready}
+            label={PROVIDER_NAMES.huggingface} hint={hf.model}
+            onSelect={() => { void actions.saveSettings({ defaultProvider: 'huggingface', customProviderId: null }); close(); }} />}
           <MenuSeparator />
           <MenuLabel>{t('composer.modelLabel')}</MenuLabel>
           {provider === 'anthropic' ? CLAUDE_MODELS.map(id => (
             <MenuItem key={id} checked={id === chosen} unavailable={!ready} label={<>{MODEL_INFO[id].name}{id === DEFAULT_CLAUDE_MODEL && <span className="menu-tag">{t('common.default')}</span>}</>}
               hint={t(MODEL_INFO[id].tagline)} onSelect={() => { void actions.saveModelChoice(id); close(); }} />
           )) : (
-            <MenuItem checked={linkedModel !== null} label={<span className="mono">{linkedModel ?? t('composer.noModel')}</span>} hint={t('composer.otherModelHint')}
+            <MenuItem checked={Boolean(linkedModel)} label={<span className="mono">{linkedModel ?? t('composer.noModel')}</span>} hint={t('composer.otherModelHint')}
               onSelect={() => { close(); onOpenSettings('providers'); }} />
           )}
           <MenuSeparator />

@@ -5,7 +5,7 @@ import { TurnUsageSchema } from './turn.js';
 
 // Bound each local control-plane reply independently of the number of models in historical events.
 export const USAGE_PAGE_SIZE = 50;
-const usageGroup = z.strictObject({ provider: ModelProviderSchema, model: ModelIdSchema });
+const usageGroup = z.strictObject({ provider: ModelProviderSchema, model: ModelIdSchema, channel: z.string().max(512).optional() });
 export const UsageQuerySchema = z.strictObject({ after: usageGroup.nullable() });
 export type UsageQuery = z.infer<typeof UsageQuerySchema>;
 const usageRow = TurnUsageSchema.extend({ ...usageGroup.shape, turns: z.int().positive() });

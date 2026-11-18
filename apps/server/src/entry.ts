@@ -10,6 +10,7 @@ import { createIpcCryptoBridge } from './credentials/bridge.js';
 import type { IpcCryptoBridge } from './credentials/bridge.js';
 import { createCredentialService } from './credentials/service.js';
 import { createTurnGateway } from './models/turns.js';
+import { createModelConnections } from './models/connections.js';
 import { createToolRouter } from './tools/router.js';
 import { LiveFeed } from './agent/live.js';
 import { TaskRunner } from './agent/runner.js';
@@ -49,23 +50,19 @@ async function start(message: unknown): Promise<void> {
     message => process.connected && process.send ? process.send(message) : false);
   // The Task Runner exists only when Main handed over a verified isolated Worker runtime (packaged Windows x64 builds).
   let runner: TaskRunner | undefined;
+  const connections = createModelConnections(store, bridge);
   if (input.agentRuntime) {
     const openStore = store;
-    const crypto = bridge;
     runner = new TaskRunner({ store: openStore, credentials: createCredentialService(openStore, bridge),
       gateway: createTurnGateway({ endpoint: input.modelEndpoint }), tools: createToolRouter({ store: openStore }),
       model: () => openStore.getModel(), live: new LiveFeed(), stopGraceMs: () => openStore.getSettings().stopGraceMs,
-      linkedRoute: () => {
-        const provider = openStore.getSettings().defaultProvider;
-        return provider === 'anthropic' ? null : { provider, model: openStore.getProviderModel(provider),
-          credentials: createCredentialService(openStore.credentialStore(provider), crypto) };
-      },
+      linkedRoute: connections.route,
       ensureWorker: () => workers!.ensure() });
     workers = new AgentWorkerSupervisor({ runtimeDirectory: input.agentRuntime, expressRunId: input.expressRunId, runner });
   }
   server = createServer({ maxHeaderSize: 8192 }, createControlPlane(input, store, () => {
     const address = server?.address(); return address && typeof address !== 'string' ? address.port : 0;
-  }, () => { lastContact = Date.now(); }, { bridge, ...(runner && workers ? { runner, workers } : {}) }));
+  }, () => { lastContact = Date.now(); }, { bridge, connections, ...(runner && workers ? { runner, workers } : {}) }));
   server.maxConnections = 16; server.requestTimeout = 5_000; server.headersTimeout = 5_000; server.keepAliveTimeout = 1_000;
   server.on('error', () => stop(false));
   await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', resolve); });

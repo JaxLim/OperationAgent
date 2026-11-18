@@ -26,6 +26,7 @@ const ipcOperations = ['health', 'listRecords', 'writeRecords', 'desktopStatus',
   // Settings expansion: linked providers and web-search keys (fixed endpoints, write-only keys), plus agent profiles and
   // MCP server definitions, which are stored configuration only: none runs an agent, launches a process or connects.
   'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel', 'listUsage',
+  'saveCustomProvider', 'removeCustomProvider', 'beginHfLogin', 'pollHfLogin', 'cancelHfLogin', 'configureHf',
   'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'];
 
 export function zoneFor(filename, cwd) {
@@ -49,6 +50,7 @@ export default {
       'apps/server/src/tools/read-adapter.ts': ['node:child_process'],
       // The Model Gateway is the only module that talks to the provider; the conversation only uses its types.
       'apps/server/src/models/turns.ts': ['@anthropic-ai/sdk', '@anthropic-ai/sdk/resources/beta/messages/messages'],
+      'apps/server/src/models/custom-transport.ts': ['node:dns/promises', 'node:https', 'node:net'],
       'apps/server/src/agent/conversation.ts': ['@anthropic-ai/sdk/resources/beta/messages/messages'],
     };
     // SEC-08: Express never reads workspace files in-process. Under tools/, only the Read Adapter child program may use

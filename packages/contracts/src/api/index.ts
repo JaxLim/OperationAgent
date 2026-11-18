@@ -16,6 +16,8 @@ export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '
   overview: '/v1/overview', settings: '/v1/settings', projects: '/v1/projects', projectRemove: '/v1/projects/remove', runs: '/v1/runs',
   tasks: '/v1/tasks', taskSnapshot: '/v1/tasks/snapshot', taskEvents: '/v1/tasks/events',
   usage: '/v1/settings/usage',
+  saveCustomProvider: '/v1/providers/custom/save', removeCustomProvider: '/v1/providers/custom/remove',
+  beginHfLogin: '/v1/providers/hf/begin', pollHfLogin: '/v1/providers/hf/poll', cancelHfLogin: '/v1/providers/hf/cancel', configureHf: '/v1/providers/hf/configure',
   // M2 conversation: committed prompt/answer text, transient live deltas, and the user's Stop.
   taskMessages: '/v1/tasks/messages', taskLive: '/v1/tasks/live', taskStop: '/v1/tasks/stop',
   // M2 model settings: fixed operations only; there is no generic provider proxy.
@@ -42,7 +44,7 @@ export type SmokeRecord = z.infer<typeof SmokeRecordSchema>;
 export type SmokeRecords = z.infer<typeof SmokeRecordsSchema>;
 export const ControlHealthSchema = z.strictObject({ protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.boolean(),
-  databaseVersion: z.literal(10), recoveredRuns: z.number().int().nonnegative() });
+  databaseVersion: z.literal(11), recoveredRuns: z.number().int().nonnegative() });
 export type ControlHealth = z.infer<typeof ControlHealthSchema>;
 export const BootstrapSchema = z.strictObject({ kind: z.literal('bootstrap'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, token: z.string().regex(/^[a-f0-9]{64}$/),

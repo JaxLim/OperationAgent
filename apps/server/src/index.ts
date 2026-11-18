@@ -11,6 +11,8 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, Au
 import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview } from '@operation-agent/contracts';
 import type { Store } from './persistence/store.js';
 import { UsageQuerySchema } from '@operation-agent/contracts';
+import { CustomProviderInputSchema, CustomProviderRefSchema, HfConfigSchema, HfLoginInputSchema, HfSessionSchema } from '@operation-agent/contracts';
+import { createModelConnections } from './models/connections.js';
 import { UNAVAILABLE_BRIDGE } from './credentials/bridge.js';
 import type { CryptoBridge } from './credentials/bridge.js';
 import { createCredentialService } from './credentials/service.js';
@@ -24,6 +26,7 @@ import type { TaskRunner } from './agent/runner.js';
 import type { AgentWorkerSnapshot } from './agent/supervisor.js';
 
 export interface ModelServices { bridge?: CryptoBridge; gateway?: ModelGateway; providerGateway?: ProviderGateway;
+  connections?: ReturnType<typeof createModelConnections>;
   /** Present only when a qualified Worker runtime exists; without it task starts are refused (ADR-WIN-001 D4). */
   runner?: TaskRunner;
   workers?: { snapshot(): AgentWorkerSnapshot } }
@@ -32,6 +35,7 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   const app = express();
   // Without a Main Crypto Bridge every key operation fails closed (SEC-14).
   const credentials = createCredentialService(store, services.bridge ?? UNAVAILABLE_BRIDGE);
+  const connections = services.connections ?? createModelConnections(store, services.bridge ?? UNAVAILABLE_BRIDGE);
   const gateway = services.gateway ?? createModelGateway({ endpoint: bootstrap.modelEndpoint });
   // Linked providers always use their fixed official endpoints in production; only tests inject a fake gateway.
   const providerGateway = services.providerGateway ?? createProviderGateway();
@@ -258,10 +262,50 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   });
   // Linked providers and web-search keys: the same key rules as Anthropic, one credential service (and queue) per slot.
   const providerOverview = (): ProviderOverview => ProviderOverviewSchema.parse({
+    custom: store.listCustom(),
+    huggingface: { configured: !!store.hfAccount(), model: store.hfAccount()?.model ?? null },
     providers: LINKED_PROVIDERS.map(provider => ({ provider, model: store.getProviderModel(provider), credential: slots[provider].status() })),
     search: SEARCH_PROVIDERS.map(provider => ({ provider, credential: slots[provider].status() })),
   });
   app.get(CONTROL_ROUTES.providers, (_req, res) => { try { res.json(providerOverview()); } catch (error) { failure(res, error); } });
+  app.post(CONTROL_ROUTES.saveCustomProvider, async (req, res) => {
+    const parsed = CustomProviderInputSchema.safeParse(req.body);
+    if (!parsed.success) { validationError(res); return; }
+    try { await connections.saveCustom(parsed.data); res.json(providerOverview()); }
+    catch (error) {
+      if (error instanceof Error && error.message === 'CUSTOM_ENDPOINT_INVALID') validationError(res);
+      else if (error instanceof Error && error.message === 'LIMIT_EXCEEDED') failure(res, error);
+      else keyFailure(res, error);
+    }
+  });
+  app.post(CONTROL_ROUTES.removeCustomProvider, (req, res) => {
+    const parsed = CustomProviderRefSchema.safeParse(req.body);
+    if (!parsed.success) { validationError(res); return; }
+    try { store.removeCustom(parsed.data.id); res.json(providerOverview()); } catch (error) { failure(res, error); }
+  });
+  app.post(CONTROL_ROUTES.beginHfLogin, async (req, res) => {
+    const input = HfLoginInputSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try { res.json(await connections.beginHf(input.data.clientId)); }
+    catch { res.status(503).json({ error: 'SERVICE_UNAVAILABLE' }); }
+  });
+  for (const [route, action] of [[CONTROL_ROUTES.pollHfLogin, connections.hfStatus], [CONTROL_ROUTES.cancelHfLogin, connections.cancelHf]] as const) {
+    app.post(route, (req, res) => {
+      const input = HfSessionSchema.safeParse(req.body);
+      if (!input.success) { validationError(res); return; }
+      res.json(action(input.data.sessionId));
+    });
+  }
+  app.post(CONTROL_ROUTES.configureHf, (req, res) => {
+    const input = HfConfigSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try {
+      if (input.data.disconnect) connections.disconnectHf();
+      else if (store.hfAccount()) store.setHfModel(input.data.model);
+      else { res.status(409).json({ error: 'MODEL_NOT_CONFIGURED' }); return; }
+      res.json(providerOverview());
+    } catch (error) { failure(res, error); }
+  });
   app.put(CONTROL_ROUTES.providerCredential, (req, res) => {
     const input = ProviderKeyInputSchema.safeParse(req.body);
     if (!input.success) { validationError(res); return; }

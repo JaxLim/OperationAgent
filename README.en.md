@@ -32,7 +32,8 @@ The project is delivered in gated phases, each with evidence that can be re-chec
 - A recorded run against the real Claude API: the agent has been verified end to end on the CI runner against a local stand-in for the model service, not against the real service. Treat the first real use as untested.
 - Plans, follow-up questions and skills (planned, see the [roadmap](docs/ROADMAP.md)).
 - Sandboxes for file writes and shell commands, approvals, the web-search tool, the MCP host.
-- Account sign-in providers and custom model endpoints: proposed in [ADR-PROV-001](docs/adr/ADR-PROV-001.md) (not approved) and locked in the interface until then.
+- Custom providers accept an OpenAI-compatible base URL, model ID and dedicated key. Local HTTP requires opt-in. Hugging Face device login uses the public OAuth client ID registered for your app. Real account authorization has not been exercised. [Registration](https://huggingface.co/docs/hub/oauth)
+- ChatGPT plan and GitHub Copilot account sign-in are pending.
 - Process-level acceptance and SEC-W01 on macOS and Linux (currently NOT_RUN).
 
 Anything not implemented is labelled as unavailable in the interface; the app never shows a capability it doesn't have.

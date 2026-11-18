@@ -44,6 +44,7 @@ export const WorkbenchSettingsSchema = z.strictObject({
   activeProjectId: z.uuid().nullable(),
   /** Which linked provider new chats would use once the agent loop exists. */
   defaultProvider: ModelProviderSchema,
+  customProviderId: z.uuid().nullable().optional(),
   // Off by default: a search sends the query to a third party, so it is opted into, never assumed.
   webSearchMode: z.enum(WEB_SEARCH_MODES),
   webSearchProvider: SearchProviderSchema,
@@ -101,7 +102,7 @@ export const ControlOverviewSchema = z.strictObject({
   agentReady: z.boolean(),
   startedAt: z.iso.datetime(), uptimeMs: z.number().int().nonnegative(),
   runtime: z.strictObject({ node: z.string().max(32), abi: z.string().max(8), sqlite: z.string().max(32), platform: z.string().max(16), arch: z.string().max(16) }),
-  database: z.strictObject({ version: z.literal(10), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
+  database: z.strictObject({ version: z.literal(11), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
     runs: z.number().int().nonnegative(), records: z.number().int().nonnegative() }),
   // Per-platform Worker qualification (SEC-W01) is a build record (build/agent-status.json); at runtime the control plane
   // reports only whether this installation has an isolated Worker runtime and what its supervisor is doing.

@@ -191,15 +191,16 @@ function UsageSection() {
           'usage.output', 'usage.total'] as const).map(key => <th key={key}>{t(key)}</th>)}</tr></thead>
         <tbody>{page.rows.map(row => {
           const input = row.inputTokens + row.cacheReadTokens + row.cacheWriteTokens;
-          return <tr key={row.provider + '/' + row.model}><td>{PROVIDER_NAMES[row.provider]}</td><td>{row.model}</td>
+          return <tr key={JSON.stringify([row.provider, row.model, row.channel])}><td>{row.provider === 'custom' ? t('provider.custom.name') : PROVIDER_NAMES[row.provider]}
+            {row.channel && <div className="muted small provider-url">{row.channel}</div>}</td><td>{row.model}</td>
             {[row.turns, input, row.cacheReadTokens, row.cacheWriteTokens, row.outputTokens, input + row.outputTokens]
               .map((value, index) => <td key={index}>{value.toLocaleString()}</td>)}</tr>;
         })}</tbody></table></div> : <p role="status">{t(!ready ? 'data.unavailable' : page === 'error' ? 'usage.loadError'
           : page ? 'usage.empty' : 'providers.loadingModels')}</p>}
       {cursors.length > 1 && <button className="btn" onClick={() => setCursors(items => items.slice(0, -1))}>{t('usage.previous')}</button>}
       {ready && page && page !== 'error' && page.hasMore && <button className="btn" onClick={() => {
-        const { provider, model } = page.rows.at(-1)!;
-        setCursors(items => [...items, { provider, model }]);
+        const { provider, model, channel } = page.rows.at(-1)!;
+        setCursors(items => [...items, { provider, model, channel }]);
       }}>{t('usage.next')}</button>}
       <Row label={t('usage.quota')} hint={t('usage.quotaHint')}><span className="data-tag data-unavailable">{t('data.unavailable')}</span></Row>
       <Row label={t('usage.size')} hint={t('usage.sizeHint')}><span className="data-tag data-reported">{t('data.reported')}</span></Row>

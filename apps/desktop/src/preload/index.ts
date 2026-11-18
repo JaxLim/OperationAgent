@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
+import { CustomProviderInputSchema, CustomProviderRefSchema, HfConfigSchema, HfLoginChallengeSchema, HfLoginInputSchema,
+  HfLoginStateSchema, HfSessionSchema, UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
 import { ApiKeyInputSchema, ControlHealthSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, FoundationInfoSchema, IPC_CHANNELS,
   PROTOCOL_VERSION, ProjectAddResultSchema, ProjectListSchema, ProjectRefSchema, SmokeBatchSchema, SmokeRecordsSchema,
   TaskEventPageSchema, TaskEventsQuerySchema, TaskLivePageSchema, TaskLiveQuerySchema, TaskMessagePageSchema, TaskMessagesQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
@@ -44,6 +45,16 @@ const api: DesktopApi = {
   testModelConnection: async () => ModelTestResultSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.testModelConnection, {})),
   getProviders: async () => ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.getProviders, {})),
   listUsage: async input => UsagePageSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listUsage, UsageQuerySchema.parse(input))),
+  saveCustomProvider: async input => {
+    const parsed = CustomProviderInputSchema.safeParse(input);
+    if (!parsed.success) throw new Error('VALIDATION_ERROR');
+    return ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.saveCustomProvider, parsed.data));
+  },
+  removeCustomProvider: async input => ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.removeCustomProvider, CustomProviderRefSchema.parse(input))),
+  beginHfLogin: async input => HfLoginChallengeSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.beginHfLogin, HfLoginInputSchema.parse(input))),
+  pollHfLogin: async input => HfLoginStateSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pollHfLogin, HfSessionSchema.parse(input))),
+  cancelHfLogin: async input => HfLoginStateSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.cancelHfLogin, HfSessionSchema.parse(input))),
+  configureHf: async input => ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.configureHf, HfConfigSchema.parse(input))),
   setProviderKey: async input => {
     const parsed = ProviderKeyInputSchema.safeParse(input);
     if (!parsed.success) throw new Error('VALIDATION_ERROR');
