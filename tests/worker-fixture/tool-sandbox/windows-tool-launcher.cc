@@ -1,3 +1,4 @@
+// The native executable is built only for P3a validation.
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>

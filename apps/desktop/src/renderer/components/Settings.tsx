@@ -340,7 +340,7 @@ export function SettingsDialog({ onClose, initialSection = 'appearance', onOpenD
               {shown.id === 'providers' && <ProvidersSection initialProvider={integration?.section === 'providers' ? integration.provider : null} />}
               {shown.id === 'search' && settings && <WebSearchSection settings={settings} initialProvider={integration?.section === 'search' ? integration.provider : null} />}
               {shown.id === 'agents' && <AgentsSection />}
-              {shown.id === 'skills' && <ProjectSkills />}
+              {shown.id === 'skills' && <ProjectSkills initialTab={integration?.section === 'skills' ? 'github' : 'project'} />}
               {shown.id === 'mcp' && <McpSection initialServer={integration?.section === 'mcp' ? integration.server : null} />}
               {shown.id === 'advanced' && <AdvancedSection onOpenDiagnostics={onOpenDiagnostics} />}
             </div>

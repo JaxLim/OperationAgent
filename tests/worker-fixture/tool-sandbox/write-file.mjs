@@ -1,4 +1,4 @@
-// P3a adapter. The trusted host starts this script inside the tool AppContainer.
+// P3a scoped writer. The trusted host starts it inside the tool AppContainer.
 import { Buffer } from 'node:buffer';
 import { writeFileSync } from 'node:fs';
 import process from 'node:process';

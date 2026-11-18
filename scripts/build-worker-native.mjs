@@ -74,7 +74,7 @@ await mkdir(toolOutput, { recursive: true });
 const launcher = resolve(toolOutput, 'tool-launcher.exe');
 const toolBuild = command(compiler, ['/nologo', '/MT', '/std:c++20', '/EHsc', '/W4', '/WX', '/O2', '/utf-8', '/D_WIN32_WINNT=0x0A00',
   '/Fo' + resolve(toolOutput, 'tool-launcher.obj'), '/Fd' + resolve(toolOutput, 'tool-launcher.pdb'),
-  resolve(root, 'packages/platform-sandbox/native/windows-tool-launcher.cc'), '/link', '/OUT:' + launcher,
+  resolve(root, 'tests/worker-fixture/tool-sandbox/windows-tool-launcher.cc'), '/link', '/OUT:' + launcher,
   'advapi32.lib', 'userenv.lib', 'bcrypt.lib'], { encoding: 'utf8', env: {
   ...process.env, INCLUDE: include.join(';'), LIB: library.join(';'), PATH: `${resolve(msvc, 'bin/Hostx64/x64')};${process.env.PATH}`,
 } });

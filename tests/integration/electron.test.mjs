@@ -377,6 +377,11 @@ test('project skills and integration catalog: real Electron previews, authorizes
     const changed = await reopened.command('project-skills-ui', { before: 'changed', action: 'enable-skill', after: 'enabled' });
     assert.match(changed.initial, /Authorize new version/);
     assert.match(changed.current, /Read the latest project priorities/);
+    if (process.env.OA_LIVE_GITHUB_SKILLS === '1') {
+      const remote = await reopened.command('github-skills-live');
+      assert.ok(remote.count > 0 && remote.previewChars > 0);
+      await reopened.command('capture', `m6/${process.platform}-${process.arch}/github-skills.png`);
+    }
   });
 
 test('custom provider confirmation encrypts its dedicated key and survives Electron restart', { timeout: 90_000 }, async t => {

@@ -44,7 +44,7 @@ test('SEC-23 Windows x64: write_file and bash run in an AppContainer with scoped
       await mkdir(bashBin, { recursive: true });
       await Promise.all([
         copyFile(process.execPath, resolve(runtime, 'node.exe')),
-        copyFile(resolve(root, 'packages/platform-sandbox/write-file.mjs'), resolve(runtime, 'write-file.mjs')),
+        copyFile(resolve(root, 'tests/worker-fixture/tool-sandbox/write-file.mjs'), resolve(runtime, 'write-file.mjs')),
         writeFile(resolve(workspace, '.git/config'), 'git sentinel\n'),
         writeFile(resolve(directory, 'outside.txt'), 'outside sentinel\n'),
         ...['bash.exe', 'msys-2.0.dll', 'msys-intl-8.dll', 'msys-iconv-2.dll'].map(name =>

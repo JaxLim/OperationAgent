@@ -423,7 +423,8 @@ export function WebSearchSection({ settings, initialProvider = null }: { setting
 export type IntegrationTarget =
   | { section: 'providers'; provider: Card['id'] }
   | { section: 'search'; provider: SearchProvider }
-  | { section: 'mcp'; server: string };
+  | { section: 'mcp'; server: string }
+  | { section: 'skills' };
 
 export function IntegrationsSection({ onOpen }: { onOpen: (target: IntegrationTarget) => void }) {
   const t = useT();
@@ -454,7 +455,10 @@ export function IntegrationsSection({ onOpen }: { onOpen: (target: IntegrationTa
     id: 'mcp-new', name: t('mcp.add'), description: t('integrations.mcpAdd'),
     mark: '+', tone: 'plain', configured: false, target: { section: 'mcp', server: 'new' } satisfies IntegrationTarget,
   };
-  const groups = [{ id: 'providers', entries }, { id: 'search', entries: search }, { id: 'mcp', entries: [...servers, addServer] }] as const;
+  const skills = { id: 'github-skills', name: t('skills.githubTab'), description: t('catalog.lead'), mark: 'GH', tone: 'ink',
+    configured: false, target: { section: 'skills' } satisfies IntegrationTarget };
+  const groups = [{ id: 'skills', entries: [skills] }, { id: 'providers', entries }, { id: 'search', entries: search },
+    { id: 'mcp', entries: [...servers, addServer] }] as const;
   const q = query.trim().toLowerCase();
   const shown = groups.filter(group => category === 'all' || category === group.id).map(group => ({ ...group,
     entries: group.entries.filter(item => (!configuredOnly || item.configured) && `${item.name} ${item.description}`.toLowerCase().includes(q)),

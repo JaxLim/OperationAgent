@@ -167,11 +167,32 @@ process.on('message', async message => {
           };
           const nav = '.settings-nav button[data-section="integrations"]';
           (await wait(nav)).click();
+          (await wait('[data-integration="github-skills"]')).click();
+          await wait('[data-catalog-source="anthropics/skills"]');
+          (await wait(nav)).click();
           (await wait('[data-integration="openai"]')).click();
           const provider = await wait('[data-provider-detail="openai"]');
           (await wait(nav)).click();
           (await wait('[data-integration="mcp-new"]')).click();
           return { providerDetail: provider.dataset.providerDetail, mcpForm: !!(await wait('.settings-body[data-section="mcp"] form')) };
+        })()`);
+        break;
+      }
+      case 'github-skills-live': {
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const wait = async selector => {
+            for (let attempts = 0; attempts < 240; attempts++) {
+              const result = document.querySelector(selector);
+              if (result) return result;
+              await new Promise(done => setTimeout(done, 50));
+            }
+            throw new Error('GITHUB_SKILLS_UI_TIMEOUT: ' + selector);
+          };
+          (await wait('.settings-nav button[data-section="integrations"]')).click();
+          (await wait('[data-integration="github-skills"]')).click();
+          (await wait('[data-catalog-source="anthropics/skills"]:enabled')).click();
+          const preview = await wait('[data-catalog-preview]');
+          return { count: document.querySelectorAll('.skill-index-row').length, previewChars: preview.textContent.length };
         })()`);
         break;
       }

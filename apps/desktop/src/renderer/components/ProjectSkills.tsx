@@ -16,10 +16,10 @@ const SOURCES = [
 ] as const;
 const skillName = (skill: Skill): string => skill.state === 'missing' ? skill.path.split('/')[2]! : skill.name;
 
-export function ProjectSkills() {
+export function ProjectSkills({ initialTab = 'project' }: { initialTab?: 'project' | 'github' }) {
   const t = useT();
   const project = useStore(s => s.projects.find(item => item.id === s.settings?.activeProjectId));
-  const [tab, setTab] = useState<'project' | 'github'>('project');
+  const [tab, setTab] = useState<'project' | 'github'>(initialTab);
   const [sources, setSources] = useState<GitHubSkillSource[]>([]);
   return <>
     <div className="skill-toolbar skill-tabs"><Segmented value={tab} onChange={setTab} options={[
@@ -197,7 +197,7 @@ function GitHubCatalog({ sources, onAdd }: { sources: GitHubSkillSource[]; onAdd
     <div className="integration-grid">
       {cards.map(card => <button className="integration-entry" type="button" key={card.repo + ':' + card.subdirectory}
         aria-pressed={source?.repo === card.repo && source.subdirectory === card.subdirectory}
-        disabled={!ready || busy} onClick={() => void scan({ repo: card.repo, subdirectory: card.subdirectory })}>
+        data-catalog-source={card.repo} disabled={!ready || busy} onClick={() => void scan({ repo: card.repo, subdirectory: card.subdirectory })}>
         <span className="feature-empty-icon"><IconFolder size={16} /></span>
         <span><strong>{card.label}</strong><span className="mono muted small">{card.repo}</span></span>
       </button>)}
