@@ -278,7 +278,7 @@ export function SettingsDialog({ onClose, initialSection = 'appearance', onOpenD
   };
   const needsSettings = shown && ['appearance', 'chat', 'search'].includes(shown.id);
   return (
-    <Modal title={t('settings.title')} onClose={onClose} width="calc(100vw - 32px)" className="modal-settings" hideHeader
+    <Modal title={t('settings.title')} onClose={onClose} width="min(1120px, calc(100vw - 64px))" className="modal-settings" hideHeader
       onEscape={() => { if (!query) return false; setQuery(''); return true; }}>
       <div className="settings">
         <aside className="settings-side">
