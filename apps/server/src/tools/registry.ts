@@ -40,3 +40,6 @@ export const TOOL_REGISTRY: Readonly<Record<ToolId, Readonly<ToolRegistration>>>
 });
 
 export const currentPlatform = (): PlatformKey => `${process.platform}-${process.arch}`;
+
+/** Internal planning only; this registration grants no OS capability. */
+export const PLAN_TOOL_REGISTRATION = Object.freeze({ toolId: 'update_plan', capability: 'plan', channel: 'control-plane' } as const);

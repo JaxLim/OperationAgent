@@ -55,7 +55,7 @@ Anything not implemented is labelled as unavailable in the interface; the app ne
 | M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop, isolated worker, conversation view | Done (Windows x64; runner evidence in `docs/evidence/m2/win32-x64/`) |
 | M3 | File writes and shell: sandbox, approvals, command normalization, stop semantics | Not started |
 | M4 | Productization: MCP, signing and updates | Not started |
-| M5 | Platform foundations ([ADR-PLAT-001](docs/adr/ADR-PLAT-001.md)): context engine and metrics, selective retrieval, plans | In progress: context engine, per-task usage, the offline benchmark, text search, find-by-name and line-range reads are implemented; plans are next |
+| M5 | Platform foundations ([ADR-PLAT-001](docs/adr/ADR-PLAT-001.md)): context engine and metrics, selective retrieval, plans | Context metrics, selective retrieval and persisted task plans implemented. Real provider verification pending. |
 | M6–M8 | Sessions and checkpoints, skills; sub-agents and goal-driven runs; MCP host and plugins | Not started (sub-agents, unattended continuation, MCP and plugins each need approval of a specific decision in the ADR) |
 
 See the [roadmap](docs/ROADMAP.md) for the plan and the [execution log](docs/EXECUTION.md) for how each change was verified.

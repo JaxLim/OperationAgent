@@ -83,4 +83,11 @@ export class Conversation {
   }
 
   close(): void { this.state = 'closed'; this.pending = []; this.results.clear(); }
+
+  /** Appends bounded orchestration feedback only between complete model/tool rounds. */
+  remindPlan(): void {
+    if (this.state !== 'awaiting_model') throw new Error('CONVERSATION_STATE');
+    this.append({ role: 'user', content: [{ type: 'text', text:
+      'Your task plan has made no recorded progress for several turns. Review it, update completed steps honestly, or revise the remaining work. Check unfinished steps before your final answer.' }] });
+  }
 }

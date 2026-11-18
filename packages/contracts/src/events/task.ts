@@ -4,6 +4,7 @@ import { ModelIdSchema, ModelProviderSchema } from '../api/providers.js';
 import { AGENT_RUN_LIMITS, ToolCallViewSchema, TurnStopReasonSchema, TurnUsageSchema } from '../agent/turn.js';
 import { TurnContextSchema, TurnTimingSchema } from '../agent/context.js';
 import { ToolCallStatusSchema } from '../rpc/agent.js';
+import { TaskPlanSchema } from '../agent/plan.js';
 
 // ARCHITECTURE §7.2/§7.3/§8.1. Express is the only writer: it checks a transition here, then commits the
 // state and its event in one transaction before anything is broadcast. Contracts hold no I/O.
@@ -80,8 +81,10 @@ export const TaskToolCallEventSchema = z.strictObject({ ...eventBase, type: z.li
     /** How long Express spent on the call, child process included. Optional: older events do not carry it. */
     durationMs: count.max(86_400_000).optional() }) });
 export const TaskEventSchema = z.union([TaskCreatedEventSchema, TaskStateChangedEventSchema, TaskToolSummaryEventSchema,
-  TaskUserMessageEventSchema, TaskAssistantTurnEventSchema, TaskToolCallEventSchema]);
-export const AGENT_EVENT_TYPES = Object.freeze(['user_message', 'assistant_turn', 'tool_call'] as const);
+  TaskUserMessageEventSchema, TaskAssistantTurnEventSchema, TaskToolCallEventSchema,
+  z.strictObject({ ...eventBase, type: z.literal('plan_updated'), payload: z.strictObject({ callId: ToolCallViewSchema.shape.id, plan: TaskPlanSchema }) }),
+  z.strictObject({ ...eventBase, type: z.literal('plan_stalled'), payload: z.strictObject({ turn: z.int().min(1).max(AGENT_RUN_LIMITS.maxTurns) }) })]);
+export const AGENT_EVENT_TYPES = Object.freeze(['user_message', 'assistant_turn', 'tool_call', 'plan_updated', 'plan_stalled'] as const);
 export type AgentEventType = typeof AGENT_EVENT_TYPES[number];
 export type TaskEvent = z.infer<typeof TaskEventSchema>;
 
@@ -116,5 +119,6 @@ export function replayTaskEvents(taskId: string, afterSeq: number, state: TaskSt
 
 /** Express's committed view of one task; `lastSeq` is the cursor a client resumes events from. */
 export const TaskSnapshotSchema = z.strictObject({ id: z.uuid(), projectId: z.uuid(), state: TaskStateSchema,
+  plan: TaskPlanSchema.optional(),
   lastSeq: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() });
 export type TaskSnapshot = z.infer<typeof TaskSnapshotSchema>;

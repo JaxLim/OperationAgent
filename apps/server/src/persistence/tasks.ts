@@ -3,9 +3,9 @@ import type Database from 'better-sqlite3';
 import { USAGE_PAGE_SIZE, UsagePageSchema } from '@operation-agent/contracts';
 import type { UsagePage, UsageQuery } from '@operation-agent/contracts';
 import { AGENT_EVENT_TYPES, TASK_MESSAGE_LIMITS, TERMINAL_TASK_STATES, TaskEventSchema, TaskMessageSchema, TaskSnapshotSchema, TaskStateSchema,
-  ToolOutputSummarySchema, checkTaskTransition } from '@operation-agent/contracts';
+  TaskPlanSchema, ToolCallViewSchema, ToolOutputSummarySchema, UpdatePlanInputSchema, checkTaskTransition } from '@operation-agent/contracts';
 import type { AgentEventType, SideEffectStatus, TaskEvent, TaskMessage, TaskSnapshot, TaskState, ToolOutputSummary,
-  TransitionContext } from '@operation-agent/contracts';
+  TaskPlan, TransitionContext, UpdatePlanInput } from '@operation-agent/contracts';
 
 // ARCHITECTURE §7.3: every state change and its event commit in one transaction, the per-task seq is gap-free,
 // and a request id is applied once. Callers broadcast only what these methods return, i.e. after commit.
@@ -27,6 +27,8 @@ export interface TaskLog {
   recordToolSummary(summary: ToolOutputSummary, requestId: string): TaskCommit;
   /** Appends a metadata-only agent event to an unfinished task without changing its state. Throws NOT_FOUND or TASK_TERMINAL. */
   appendAgentEvent(taskId: string, type: AgentEventType, payload: unknown): TaskCommit;
+  /** RUNNING only; identical content keeps the revision/turn. Historical calls replay even after completion. */
+  updateTaskPlan(taskId: string, callId: string, turn: number, input: UpdatePlanInput): { plan: TaskPlan; changed: boolean };
   /** Stores prompt or answer text (bounded) for an unfinished task. Throws NOT_FOUND, TASK_TERMINAL or VALIDATION_ERROR. */
   addTaskMessage(taskId: string, role: TaskMessage['role'], turn: number, text: string): TaskMessage;
   /** Oldest first; rows that no longer validate are skipped. Throws NOT_FOUND for an unknown task. */
@@ -34,7 +36,7 @@ export interface TaskLog {
   getTask(taskId: string): TaskSnapshot | null;
   /** The task a create request already made (its task_created event carries the request id), or null. */
   taskForRequest(requestId: string): TaskSnapshot | null;
-  /** Most recently created first. */
+  /** Most recently created first; omits plans to keep the bounded list response small. */
   listTasks(limit: number): TaskSnapshot[];
   /** Events after the cursor in seq order, at most one page. Throws NOT_FOUND for an unknown task. */
   listTaskEvents(taskId: string, afterSeq: number, limit?: number): TaskEvent[];
@@ -74,11 +76,22 @@ export function createTaskLog(db: Database.Database): TaskLog {
   const insertEvent = db.prepare(`INSERT INTO task_events(task_id, seq, event_id, type, request_id, occurred_at, payload)
     VALUES (?, ?, ?, ?, ?, ?, ?)`);
   const updateTask = db.prepare('UPDATE tasks SET state = ?, last_seq = ?, updated_at = ? WHERE id = ?');
+  const selectPlan = db.prepare<[string], { plan: string }>('SELECT plan FROM task_plans WHERE task_id = ?');
+  const writePlan = db.prepare(`INSERT INTO task_plans(task_id, plan) VALUES (?, ?)
+    ON CONFLICT(task_id) DO UPDATE SET plan = excluded.plan`);
+  const selectPlanCall = db.prepare<[string, number, string], { input: string; plan: string }>(
+    'SELECT input, plan FROM task_plan_calls WHERE task_id = ? AND turn = ? AND call_id = ?');
+  const insertPlanCall = db.prepare('INSERT INTO task_plan_calls(task_id, turn, call_id, input, plan) VALUES (?, ?, ?, ?, ?)');
 
   // Stored JSON is re-validated on every read; a row that no longer matches the contract fails closed.
   const toEvent = (row: EventRow): TaskEvent => TaskEventSchema.parse({ eventId: row.eventId, taskId: row.taskId, seq: row.seq,
     occurredAt: row.occurredAt, requestId: row.requestId, type: row.type, payload: JSON.parse(row.payload) });
-  const task = (id: string): TaskSnapshot | null => { const row = selectTask.get(id); return row ? TaskSnapshotSchema.parse(row) : null; };
+  const task = (id: string): TaskSnapshot | null => {
+    const row = selectTask.get(id);
+    if (!row) return null;
+    const stored = selectPlan.get(id);
+    return TaskSnapshotSchema.parse(stored ? { ...row, plan: TaskPlanSchema.parse(JSON.parse(stored.plan)) } : row);
+  };
   const existing = (id: string): TaskSnapshot => { const found = task(id); if (!found) throw new Error('NOT_FOUND'); return found; };
 
   /**
@@ -150,6 +163,33 @@ export function createTaskLog(db: Database.Database): TaskLog {
         const current = existing(taskId);
         if (TERMINAL_TASK_STATES.includes(current.state)) throw new Error('TASK_TERMINAL');
         return append(current, { type, payload } as Pick<TaskEvent, 'type' | 'payload'>, null, current.state);
+      }).immediate();
+    },
+    updateTaskPlan(taskId, callId, turn, input) {
+      const value = UpdatePlanInputSchema.parse(input);
+      ToolCallViewSchema.shape.id.parse(callId);
+      TaskPlanSchema.shape.turn.parse(turn);
+      const normalized = canonical(value);
+      return db.transaction(() => {
+        // Scope to the turn: providers may reuse a call id in later model turns. Replay precedes state checks.
+        const repeated = selectPlanCall.get(taskId, turn, callId);
+        if (repeated) {
+          if (repeated.input !== normalized) throw new Error('REQUEST_CONFLICT');
+          return { plan: TaskPlanSchema.parse(JSON.parse(repeated.plan)), changed: false };
+        }
+        const current = existing(taskId);
+        if (TERMINAL_TASK_STATES.includes(current.state)) throw new Error('TASK_TERMINAL');
+        if (current.state !== 'RUNNING') throw new Error('INVALID_TRANSITION');
+        const changed = !current.plan || canonical({ steps: current.plan.steps }) !== normalized;
+        const plan = changed ? TaskPlanSchema.parse({ ...value, revision: (current.plan?.revision ?? 0) + 1, turn }) : current.plan!;
+        const serialized = JSON.stringify(plan);
+        if (changed) {
+          writePlan.run(taskId, serialized);
+          append(current, { type: 'plan_updated', payload: { callId, plan } }, null, current.state);
+        }
+        // Even a no-op needs an identity and its original result for conflict checks and historical replay.
+        insertPlanCall.run(taskId, turn, callId, normalized, serialized);
+        return { plan, changed };
       }).immediate();
     },
     addTaskMessage(taskId, role, turn, text) {

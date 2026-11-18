@@ -68,6 +68,7 @@ test('failed SQL migrations roll back and altered migration history is rejected 
     writeFileSync(resolve(migrations, '009-agent-conversation.sql'), readFileSync('apps/server/migrations/009-agent-conversation.sql'));
     writeFileSync(resolve(migrations, '010-tool-audit-search.sql'), readFileSync('apps/server/migrations/010-tool-audit-search.sql'));
     writeFileSync(resolve(migrations, '011-provider-connections.sql'), readFileSync('apps/server/migrations/011-provider-connections.sql'));
+    writeFileSync(resolve(migrations, '012-task-plans.sql'), readFileSync('apps/server/migrations/012-task-plans.sql'));
     writeFileSync(file, sql + '\nCREATE TABLE rollback_probe(id INTEGER);\nINVALID SQL;', 'utf8');
     assert.throws(() => openStore(database, randomUUID(), migrations));
     writeFileSync(file, sql + '\nCREATE TABLE rollback_probe(id INTEGER);', 'utf8');
@@ -98,14 +99,14 @@ test('001 databases upgrade without changing data, run history or the original m
   try {
     const store = openStore(directory, randomUUID());
     try {
-      assert.equal(store.databaseVersion, 11); assert.equal(store.recoveredRuns, 0);
+      assert.equal(store.databaseVersion, 12); assert.equal(store.recoveredRuns, 0);
       assert.deepEqual(store.listRecords(), [{ id, value: 'old\u0000data', createdAt: timestamp }]);
       store.insertRecords([{ id: randomUUID(), value: '\u0000upgraded' }]);
     } finally { store.close(true); }
     const inspect = new DatabaseSync(path);
     try {
       assert.equal(inspect.prepare('SELECT sha256 FROM schema_migrations WHERE version = 1').get()?.sha256, hash);
-      assert.equal(inspect.prepare('SELECT count(*) AS count FROM schema_migrations').get()?.count, 11);
+      assert.equal(inspect.prepare('SELECT count(*) AS count FROM schema_migrations').get()?.count, 12);
       assert.equal(inspect.prepare('SELECT outcome FROM control_plane_runs WHERE id = ?').get(oldRun)?.outcome, 'CLEAN');
       inspect.prepare('UPDATE schema_migrations SET sha256 = ? WHERE version = 2').run('tampered');
     } finally { inspect.close(); }
@@ -131,6 +132,7 @@ test('a failed 002 upgrade rolls back the original table, data and migration his
   writeFileSync(resolve(migrations, '009-agent-conversation.sql'), readFileSync('apps/server/migrations/009-agent-conversation.sql'));
   writeFileSync(resolve(migrations, '010-tool-audit-search.sql'), readFileSync('apps/server/migrations/010-tool-audit-search.sql'));
   writeFileSync(resolve(migrations, '011-provider-connections.sql'), readFileSync('apps/server/migrations/011-provider-connections.sql'));
+  writeFileSync(resolve(migrations, '012-task-plans.sql'), readFileSync('apps/server/migrations/012-task-plans.sql'));
   const legacy = new DatabaseSync(path);
   legacy.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, sha256 TEXT NOT NULL) STRICT'); legacy.exec(first);
   legacy.prepare('INSERT INTO schema_migrations VALUES (?, ?)').run(1, createHash('sha256').update(first).digest('hex'));
@@ -158,7 +160,7 @@ test('workbench projects, settings and run history are transactional and survive
   try {
     const store = open(directory, randomUUID());
     try {
-    assert.equal(store.databaseVersion, 11);
+    assert.equal(store.databaseVersion, 12);
     const project = store.addProject({ name: 'ledger', path: 'C:/work/ledger' });
     assert.throws(() => store.addProject({ name: 'dup', path: 'c:/WORK/ledger' }), (error: Error & { code?: string }) => String(error.code).startsWith('SQLITE_CONSTRAINT'));
     assert.throws(() => store.addProject({ name: 'relative', path: 'work/ledger' }));

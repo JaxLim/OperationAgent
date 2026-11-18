@@ -1,9 +1,9 @@
 import { summarizeTaskUsage } from '@operation-agent/contracts';
-import type { TaskEvent, TaskSnapshot } from '@operation-agent/contracts';
+import type { TaskEvent, TaskPlan, TaskSnapshot } from '@operation-agent/contracts';
 import { useLocale, useT } from '../locale';
 import { actions, useStore } from '../state';
 import { TASK_STATE, bytes, dateTime, relativeTime, shortId, stateLabel } from './format';
-import { IconAlert, IconChat, IconChevronRight, IconClock, IconEye, IconListTree, IconLock, IconRetry, IconSparkle, IconStop, IconTerminal } from './Icons';
+import { IconAlert, IconChat, IconCheck, IconChevronRight, IconClock, IconEye, IconListTree, IconLock, IconRetry, IconSparkle, IconStop, IconTerminal } from './Icons';
 import { Conversation } from './Conversation';
 
 // Read-only view of one task's committed log. State comes from Express; this view never infers success.
@@ -67,6 +67,18 @@ function EventEntry({ event }: { event: TaskEvent }) {
       </div>
     );
   }
+  if (event.type === 'plan_updated') {
+    const { plan } = event.payload;
+    return <div className="notice tone-notice-neutral timeline-entry"><IconListTree size={13} /><div>
+      <div className="notice-text">{t('taskPlan.updated')}</div>
+      <div className="notice-detail">{t('taskPlan.progress', { completed: plan.steps.filter(step => step.status === 'completed').length, total: plan.steps.length })}</div>
+    </div>{at}</div>;
+  }
+  if (event.type === 'plan_stalled') {
+    return <div className="notice tone-notice-warn timeline-entry"><IconAlert size={13} /><div>
+      <div className="notice-text">{t('taskPlan.stalled', { turn: event.payload.turn })}</div>
+    </div>{at}</div>;
+  }
   const summary = event.payload;
   const parts = [t('task.output', { out: bytes(summary.stdoutBytes), err: bytes(summary.stderrBytes) }),
     ...(summary.truncatedBytes > 0 ? [t('task.notKept', { bytes: bytes(summary.truncatedBytes) })] : [])];
@@ -105,11 +117,43 @@ function TaskUsage({ events }: { events: readonly TaskEvent[] }) {
   return <p className="task-usage" data-task-usage aria-label={t('taskUsage.label')}>{items.map((item, index) => <span key={index} className="meta-item mono">{item}</span>)}</p>;
 }
 
+function TaskPlanProgress({ plan, state }: { plan: TaskPlan; state: TaskSnapshot['state'] }) {
+  const t = useT();
+  const completed = plan.steps.filter(step => step.status === 'completed').length;
+  const progress = t('taskPlan.progress', { completed, total: plan.steps.length });
+  const ended = state === 'COMPLETED' || state === 'FAILED' || state === 'STOPPED' || state === 'INTERRUPTED';
+  const titles = new Map(plan.steps.map(step => [step.id, step.title]));
+  return (
+    <section className="card task-plan" data-task-plan data-revision={plan.revision} aria-label={t('taskPlan.label')}>
+      <div className="task-plan-head"><h2><IconListTree size={14} />{t('taskPlan.label')}</h2><span className="muted small">{progress}</span></div>
+      <progress value={completed} max={plan.steps.length} aria-label={progress} />
+      <ol className="task-plan-steps">
+        {plan.steps.map(step => <li key={step.id} data-plan-step={step.id} data-status={step.status}>
+          <span className={`task-plan-mark ${step.status === 'completed' ? 'tone-ok' : step.status === 'in_progress' ? 'tone-wait' : 'tone-muted'}`}>
+            {step.status === 'completed' ? <IconCheck size={14} /> : step.status === 'in_progress' ? <IconClock size={14} /> : <span className="dot" />}
+          </span>
+          <div className="task-plan-step-main"><div className="task-plan-step-title">{step.title}</div>
+            {step.dependsOn.length > 0 && <div className="notice-detail small">{t('taskPlan.dependsOn', { titles: step.dependsOn.map(id => titles.get(id) ?? id).join(' · ') })}</div>}
+          </div>
+          <span className="task-plan-status">{t(`taskPlan.status.${step.status}`)}</span>
+        </li>)}
+      </ol>
+      {ended && completed < plan.steps.length && <div className="notice tone-notice-warn" data-plan-incomplete><IconAlert size={13} /><div>
+        {t('taskPlan.incomplete', { state: stateLabel(state, t), remaining: plan.steps.length - completed })}
+      </div></div>}
+    </section>
+  );
+}
+
 export function TaskDetail({ task }: { task: TaskSnapshot }) {
   const t = useT(); const locale = useLocale();
   const view = useStore(s => s.taskViews[task.id]);
   const stopping = useStore(s => s.conversations[task.id]?.stopping ?? false);
   const events = view?.events ?? [];
+  // Snapshot reads precede event catch-up. Only a newer revision may replace the snapshot's plan.
+  const latestPlan = events.reduce<TaskPlan | undefined>((plan, event) =>
+    event.taskId === task.id && event.type === 'plan_updated' && (!plan || event.payload.plan.revision > plan.revision)
+      ? event.payload.plan : plan, task.plan);
   const stoppable = task.state === 'QUEUED' || task.state === 'RUNNING' || task.state === 'STOPPING';
   const agentTask = events.some(event => event.type === 'user_message');
   const last = [...events].reverse().find(event => event.type === 'task_state_changed');
@@ -142,6 +186,7 @@ export function TaskDetail({ task }: { task: TaskSnapshot }) {
             <div className="notice-detail">{t('task.interruptedText')}</div>
           </div><IconLock size={13} /></div>
         )}
+        {latestPlan && <TaskPlanProgress plan={latestPlan} state={task.state} />}
         {agentTask && <Conversation task={task} />}
         {agentTask && <TaskUsage events={events} />}
         {agentTask

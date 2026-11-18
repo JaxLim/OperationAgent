@@ -6,6 +6,8 @@ import type { CredentialService } from '../credentials/service.js';
 import type { TaskLog } from '../persistence/tasks.js';
 import type { AgentTurnResult, TurnInput, TurnGateway } from '../models/turns.js';
 import { runLinkedTurn } from '../models/linked-turn.js';
+import { PLAN_LIMITS, UpdatePlanInputSchema } from '@operation-agent/contracts';
+import { PLAN_TOOL_REGISTRATION } from '../tools/registry.js';
 import type { LinkedProvider } from '@operation-agent/contracts';
 import type { CustomProvider } from '@operation-agent/contracts';
 import type { ToolRouter } from '../tools/router.js';
@@ -63,6 +65,7 @@ export function systemPrompt(project: Project): string {
     'You can only read the project. You cannot modify files, run commands or use the network.',
     'Find before you read: use search_text to locate where something is defined or used, find_files to locate files by name, and list_directory to see the layout. Then read just the part you need with read_file and startLine/lineCount; read a whole file only when you need all of it. Each call costs time, so ask for several independent things in one turn.',
     'Paths are relative to the project root and use / separators.',
+    'For a task with several steps, use update_plan to publish a short plan, update it as you make progress, and review unfinished steps before answering. Simple questions do not need a plan.',
     'Some paths are deliberately unreadable (secrets, keys, .env files, .git internals, anything outside the project). When a tool refuses, accept it and do not look for another way in.',
     'Base your answer on what you actually read, name the files you relied on, and say plainly when the project does not contain the answer.',
   ].join('\n');
@@ -84,6 +87,9 @@ interface Run {
   /** At most one Worker request acts on a task at a time: a model turn, or that turn's tool calls (each at most once). */
   modelInFlight: boolean;
   activeTools: Set<string>;
+  completedTools: Map<string, RunnerReply>;
+  planReminders: number;
+  lastPlanProgress: number;
   stopping: boolean;
   done: boolean;
   finished: Promise<void>;
@@ -153,7 +159,8 @@ export class TaskRunner {
     let settle!: () => void;
     const run: Run = { taskId, project, route, credentials, tools: AGENT_TOOLS, conversation: new Conversation(systemPrompt(project), prompt),
       context: route.provider === 'anthropic' ? (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(route.model) : null,
-      summaryInHistory: false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
+      summaryInHistory: false, turn: 0, abort: undefined, modelInFlight: false, activeTools: new Set(), completedTools: new Map(),
+      planReminders: 0, lastPlanProgress: 0, stopping: false, done: false, finished: new Promise(resolve => { settle = resolve; }), settle: () => settle() };
     this.runs.set(taskId, run);
     this.transition(taskId, 'QUEUED', null);
     const message = this.options.store.addTaskMessage(taskId, 'user', 0, prompt);
@@ -211,6 +218,14 @@ export class TaskRunner {
       ({ kind: 'model.turn', outcome: { status: 'failed', code, retryable, httpStatus: null } });
     if (run.stopping) return failed('cancelled');
     if (run.conversation.status === 'awaiting_tools') run.conversation.closeRound();
+    const plan = this.options.store.getTask(taskId)?.plan;
+    if (plan?.steps.some(step => step.status !== 'completed') && run.planReminders < PLAN_LIMITS.maxReminders &&
+      turn - run.lastPlanProgress >= PLAN_LIMITS.stalledTurns) {
+      run.conversation.remindPlan();
+      this.options.store.appendAgentEvent(taskId, 'plan_stalled', { turn });
+      run.planReminders++;
+      run.lastPlanProgress = turn;
+    }
     const abort = new AbortController(); run.abort = abort;
     const request = (context: ContextPolicy | null) => run.credentials.withKey<AgentTurnResult>(apiKey => {
       const input: Omit<TurnInput, 'model'> = { apiKey, turn, system: run.conversation.system, messages: run.conversation.history(),
@@ -252,8 +267,14 @@ export class TaskRunner {
     if (!run || run.done || turn !== run.turn || run.modelInFlight || run.activeTools.has(toolCallId)) return null;
     const call = run.conversation.pendingCall(toolCallId);
     if (!call) return { kind: 'tool.call', status: 'skipped', summary: 'Unknown tool call' };
+    const repeated = run.completedTools.get(`${turn}:${toolCallId}`);
+    if (repeated) return repeated;
     run.activeTools.add(toolCallId);
-    try { return await this.runToolCall(run, taskId, turn, call); }
+    try {
+      const reply = await this.runToolCall(run, taskId, turn, call);
+      run.completedTools.set(`${turn}:${toolCallId}`, reply);
+      return reply;
+    }
     finally { run.activeTools.delete(toolCallId); }
   }
 
@@ -270,6 +291,21 @@ export class TaskRunner {
       // Express runs the call from its own record of what the model asked for; correlation ids are its own as well.
       const request = { projectId: run.project.id, taskId, toolCallId: randomUUID(), args: call.input };
       switch (name.data) {
+        case PLAN_TOOL_REGISTRATION.toolId: {
+          const parsed = UpdatePlanInputSchema.safeParse(call.input);
+          let summary = 'Plan rejected: use unique stable IDs, valid dependencies, and at most one active step.';
+          let isError = true;
+          if (parsed.success) {
+            const previous = this.options.store.getTask(taskId)?.plan;
+            const { plan } = this.options.store.updateTaskPlan(taskId, call.id, turn, parsed.data);
+            if (!previous || plan.steps.some(step => step.status === 'completed' &&
+              previous.steps.find(old => old.id === step.id)?.status !== 'completed')) run.lastPlanProgress = turn;
+            summary = `Plan updated: ${plan.steps.filter(step => step.status === 'completed').length}/${plan.steps.length} steps completed.`;
+            isError = false;
+          }
+          formatted = { content: summary, summary, isError, status: isError ? 'refused' : 'ok', code: isError ? 'INVALID_PLAN' : null, size: null };
+          break;
+        }
         case 'read_file': {
           const args = ReadFileArgsSchema.safeParse(call.input);
           target = args.success ? args.data.path : '';
@@ -309,7 +345,11 @@ export class TaskRunner {
     const run = this.runs.get(taskId);
     if (!run || run.done) return { kind: 'agent.finish', accepted: false };
     if (run.stopping) this.end(run, 'STOPPED', 'Stopped by the user');
-    else if (outcome === 'completed') this.end(run, 'COMPLETED', reason === 'max_tokens' ? REASONS.max_tokens : null);
+    else if (outcome === 'completed') {
+      const remaining = this.options.store.getTask(taskId)?.plan?.steps.filter(step => step.status !== 'completed').length ?? 0;
+      this.end(run, 'COMPLETED', remaining ? `The model ended with ${remaining} unfinished plan steps` :
+        reason === 'max_tokens' ? REASONS.max_tokens : null);
+    }
     else this.end(run, 'FAILED', REASONS[reason]);
     return { kind: 'agent.finish', accepted: true };
   }

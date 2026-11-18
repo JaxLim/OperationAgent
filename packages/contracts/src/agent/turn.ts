@@ -26,7 +26,7 @@ export const AGENT_RUN_LIMITS = Object.freeze({
   maxConversationBytes: 16 * 1024 * 1024,
 });
 
-export const AgentToolNameSchema = z.enum(['read_file', 'list_directory', 'search_text', 'find_files']);
+export const AgentToolNameSchema = z.enum(['read_file', 'list_directory', 'search_text', 'find_files', 'update_plan']);
 export type AgentToolName = z.infer<typeof AgentToolNameSchema>;
 
 /** Why a turn ended, normalized from the provider's stop_reason. `refusal` is a policy decline (HTTP 200). */
@@ -88,6 +88,21 @@ export type TurnDelta = z.infer<typeof TurnDeltaSchema>;
  * Express still re-validates every input with Zod because model output is untrusted.
  */
 export const AGENT_TOOL_DEFINITIONS = Object.freeze({
+  update_plan: Object.freeze({
+    name: 'update_plan',
+    description: 'Maintain a short plan for a multi-step task. Send the full current step list each time. Keep step IDs stable, ' +
+      'mark completed work honestly, and keep at most one step in_progress. Optional dependsOn lists step IDs that must be completed ' +
+      'before starting or completing that step. Update progress as work proceeds, revise the plan when needed, and check it before finishing.',
+    input_schema: { type: 'object', additionalProperties: false, required: ['steps'], properties: {
+      steps: { type: 'array', minItems: 1, maxItems: 24, items: { type: 'object', additionalProperties: false,
+        required: ['id', 'title', 'status'], properties: {
+          id: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,48}$' },
+          title: { type: 'string', minLength: 1, maxLength: 160 },
+          status: { type: 'string', enum: ['pending', 'in_progress', 'completed'] },
+          dependsOn: { type: 'array', maxItems: 24, items: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,48}$' } },
+        } } },
+    } },
+  }),
   read_file: Object.freeze({
     name: 'read_file',
     description: 'Read a UTF-8 text file in the current project. `path` is relative to the project root and uses / separators. ' +
