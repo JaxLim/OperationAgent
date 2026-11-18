@@ -66,7 +66,9 @@ const canonical = (value: unknown): string => JSON.stringify(value, (_, item: un
 export function createTaskLog(db: Database.Database): TaskLog {
   const taskColumns = `id, project_id AS projectId, state, last_seq AS lastSeq, created_at AS createdAt, updated_at AS updatedAt,
     session_id AS sessionId, previous_task_id AS previousTaskId,
-    (state = 'INTERRUPTED' AND EXISTS (SELECT 1 FROM task_checkpoints WHERE task_id = tasks.id)) AS checkpoint`;
+    (state IN ('INTERRUPTED', 'FAILED', 'STOPPED')
+      AND EXISTS (SELECT 1 FROM task_checkpoints WHERE task_id = tasks.id)
+      AND NOT EXISTS (SELECT 1 FROM tasks next WHERE next.previous_task_id = tasks.id)) AS checkpoint`;
   const selectTask = db.prepare<[string], TaskRow>(`SELECT ${taskColumns} FROM tasks WHERE id = ?`);
   const selectRecent = db.prepare<[number], TaskRow>(`SELECT ${taskColumns} FROM tasks
     WHERE NOT EXISTS (SELECT 1 FROM tasks next WHERE next.previous_task_id = tasks.id)
@@ -162,7 +164,9 @@ export function createTaskLog(db: Database.Database): TaskLog {
         const previous = previousTaskId ? existing(previousTaskId) : null;
         if (previous && previous.projectId !== projectId) throw new Error('NOT_FOUND');
         if (previousTaskId && selectNext.get(previousTaskId)) throw new Error('SESSION_ALREADY_CONTINUED');
-        if (previous && previous.state !== (continuation?.resume ? 'INTERRUPTED' : 'COMPLETED')) throw new Error('SESSION_CONTEXT_UNAVAILABLE');
+        if (previous && (continuation?.resume ? !previous.resumable : previous.state !== 'COMPLETED')) {
+          throw new Error('SESSION_CONTEXT_UNAVAILABLE');
+        }
         const now = new Date().toISOString();
         const event = TaskEventSchema.parse({ eventId: randomUUID(), taskId: randomUUID(), seq: 1, occurredAt: now, requestId,
           type: 'task_created', payload: { projectId, ...(previousTaskId && { previousTaskId }) } });

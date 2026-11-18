@@ -188,14 +188,51 @@ test('missing usage, malformed calls, duplicate ids, undeclared tools and excess
   }
 });
 
+test('compatible turns recover from an explicit rate limit once, and stop after a second rejection', async t => {
+  const rejected = (status: number, after = '0') => new Response('private provider detail', { status, headers: { 'retry-after': after } });
+  const requests = transport(t, rejected(429), answer({ content: null, tool_calls: [call] }, 'tool_calls'),
+    rejected(529, new Date().toUTCString()), rejected(529));
+  const result = await runLinkedTurn('openai', input());
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(result.view.toolCalls, [{ id: call.id, name: 'read_file', input: { path: 'README.md' } }]);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(await requests[0]!.json(), await requests[1]!.json());
+
+  assert.deepEqual(await runLinkedTurn('openai', input()), { status: 'failed', code: 'overloaded', retryable: true, httpStatus: 529 });
+  assert.equal(requests.length, 4);
+});
+
+test('the turn deadline or user cancellation interrupts a pending retry', async t => {
+  const controller = new AbortController();
+  const deadline = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', () => deadline.signal);
+  const rejected = () => new Response(null, { status: 429, headers: { 'retry-after': '3' } });
+  const requests = transport(t, rejected(), rejected());
+
+  const cancelling = runLinkedTurn('openai', { ...input(), signal: controller.signal });
+  await flush();
+  controller.abort();
+  assert.deepEqual(await cancelling, { status: 'failed', code: 'cancelled', retryable: false, httpStatus: null });
+  assert.equal(requests.length, 1);
+
+  const expiring = runLinkedTurn('openai', input());
+  await flush();
+  deadline.abort(new DOMException('deadline', 'TimeoutError'));
+  assert.deepEqual(await expiring, { status: 'failed', code: 'timed_out', retryable: true, httpStatus: null });
+  assert.equal(requests.length, 2);
+});
+
 test('HTTP errors are sanitized, pre-cancellation avoids fetch and the deadline interrupts a pending request', async t => {
-  const requests = transport(t, new Response('private provider detail', { status: 429 }));
+  const requests = transport(t,
+    new Response('private provider detail', { status: 429, headers: { 'retry-after': '3600' } }),
+    new Response('unknown provider failure', { status: 502, headers: { 'retry-after': '0' } }));
   assert.deepEqual(await runLinkedTurn('openai', input()), { status: 'failed', code: 'rate_limited', retryable: true, httpStatus: 429 });
+  assert.deepEqual(await runLinkedTurn('openai', input()), { status: 'failed', code: 'provider_error', retryable: true, httpStatus: 502 });
   const controller = new AbortController();
   controller.abort();
   assert.deepEqual(await runLinkedTurn('openai', { ...input(), signal: controller.signal }),
     { status: 'failed', code: 'cancelled', retryable: false, httpStatus: null });
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2);
   const deadline = new AbortController();
   t.mock.method(AbortSignal, 'timeout', (ms: number) => { assert.equal(ms, AGENT_RUN_LIMITS.turnTimeoutMs); return deadline.signal; });
   t.mock.method(globalThis, 'fetch', (_url: string, init: RequestInit) => new Promise((_resolve, reject) => {

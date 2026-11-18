@@ -69,6 +69,30 @@ function failed(code: TurnFailureCode, httpStatus: number | null = null): AgentT
 }
 const statusCodes: Record<number, TurnFailureCode> = { 401: 'auth_failed', 403: 'permission_denied', 404: 'model_unavailable',
   413: 'context_too_long', 429: 'rate_limited', 529: 'overloaded' };
+const DEFAULT_RETRY_DELAY_MS = 500;
+const MAX_RETRY_DELAY_MS = 5_000;
+
+function retryDelay(response: Response): number | null {
+  if (response.status !== 429 && response.status !== 529) return null;
+  const after = response.headers.get('retry-after');
+  if (after === null) return DEFAULT_RETRY_DELAY_MS;
+  const delay = /^\d+$/.test(after) ? Number(after) * 1_000
+    : /^[a-z]{3}/i.test(after) ? Date.parse(after) - Date.now() : NaN;
+  // A provider asking for a longer wait should get a failure, not an early repeat request.
+  return delay <= MAX_RETRY_DELAY_MS ? Math.max(0, delay) : null;
+}
+
+function waitForRetry(delay: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = () => { clearTimeout(timer); reject(signal.reason); };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delay);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 export type ChatTarget = LinkedProvider | 'huggingface' | { baseUrl: string; allowLocal: boolean };
 export async function runLinkedTurn(provider: ChatTarget, input: Input): Promise<AgentTurnResult> {
@@ -82,8 +106,16 @@ export async function runLinkedTurn(provider: ChatTarget, input: Input): Promise
     const init: RequestInit = { method: 'POST', redirect: 'error', signal,
       headers: { authorization: 'Bearer ' + input.apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({ model: input.model, messages: requestMessages(input), ...(tools.length && { tools }) }) };
-    const response = typeof provider === 'object' ? await sendCustomChat(provider.baseUrl, provider.allowLocal, init) :
-      await fetch(provider === 'huggingface' ? 'https://router.huggingface.co/v1/chat/completions' : PROVIDER_ENDPOINTS[provider] + chatPaths[provider], init);
+    const send = () => typeof provider === 'object' ? sendCustomChat(provider.baseUrl, provider.allowLocal, init) :
+      fetch(provider === 'huggingface' ? 'https://router.huggingface.co/v1/chat/completions' : PROVIDER_ENDPOINTS[provider] + chatPaths[provider], init);
+    let response = await send();
+    const delay = retryDelay(response);
+    if (delay !== null) {
+      await response.body?.cancel();
+      await waitForRetry(delay, signal);
+      signal.throwIfAborted();
+      response = await send();
+    }
     if (!response.ok) {
       await response.body?.cancel();
       return failed(statusCodes[response.status] ?? (response.status >= 500 ? 'provider_error' : 'invalid_request'), response.status);

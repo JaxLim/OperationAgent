@@ -171,6 +171,7 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   const create = await fixture(t); const host = await create();
   const result = await host.command('workbench');
   assert.equal(result.saved.theme, 'dark'); assert.equal(result.saved.stopGraceMs, 10000);
+  assert.equal(result.saved.maxAgentTurns, 10); assert.equal(result.invalidTurnLimit, 'rejected');
   assert.equal(result.tooLong, 'rejected'); assert.match(result.missing, /NOT_FOUND/);
   assert.deepEqual(result.task, { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' });
   assert.equal(result.emptyTask, 'rejected'); assert.equal(result.forged, 'rejected');
@@ -187,6 +188,7 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   const reopened = await create();
   const again = await reopened.command('workbench');
   assert.equal(again.after.theme, 'dark'); assert.equal(again.after.stopGraceMs, 10000);
+  assert.equal(again.after.maxAgentTurns, 10);
   assert.deepEqual(again.runs.runs.slice(0, 2).map(run => run.outcome), ['RUNNING', 'CLEAN']);
 });
 

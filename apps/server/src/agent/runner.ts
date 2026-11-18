@@ -41,6 +41,7 @@ export interface TaskRunnerOptions {
   linkedRoute?: () => LinkedRoute | null;
   live: LiveFeed;
   stopGraceMs: () => number;
+  maxTurns?: () => number | undefined;
   saveCheckpoints?: () => boolean;
   /** Launches and attaches a qualified Worker on demand; absent or rejecting, starts fail closed. */
   ensureWorker?: () => Promise<void>;
@@ -55,10 +56,10 @@ const AGENT_TOOLS: AgentToolName[] = AgentToolNameSchema.options.filter(name => 
 /** Failures that say the provider refused the request itself (HTTP 400, 403, 404), as opposed to load, limits or the key. */
 const REJECTED_OUTRIGHT: readonly string[] = ['invalid_request', 'permission_denied', 'model_unavailable'];
 const READ_ONLY = 'Read-only task: no files were changed';
-const REASONS: Readonly<Record<AgentFinishReason, string>> = Object.freeze({
+const REASONS: Readonly<Record<Exclude<AgentFinishReason, 'turn_limit'>, string>> = Object.freeze({
   end_turn: 'Completed', max_tokens: 'The answer reached the output limit and may be incomplete',
   refusal: 'The model declined this request', context_exhausted: 'The conversation exceeded the model context window',
-  turn_limit: `Stopped after ${AGENT_RUN_LIMITS.maxTurns} model turns`, model_failed: 'The model request failed',
+  model_failed: 'The model request failed',
   cancelled: 'Cancelled', protocol_error: 'The agent worker stopped responding correctly', other: 'The model stopped unexpectedly',
 });
 
@@ -95,6 +96,7 @@ interface Run {
   context: ContextPolicy | null;
   /** The history holds a summary block (even one whose summarization failed): it can only be sent with the feature on. */
   summaryInHistory: boolean;
+  maxTurns: number;
   turn: number;
   abort: AbortController;
   /** At most one Worker request acts on a task at a time: a model turn, or that turn's tool calls (each at most once). */
@@ -173,7 +175,7 @@ export class TaskRunner {
     const parent = previousTaskId ? this.options.store.getTask(previousTaskId) : null;
     if (previousTaskId && (!parent || parent.projectId !== projectId)) throw new Error('NOT_FOUND');
     if (parent && this.options.store.hasContinuation(parent.id)) throw new Error('SESSION_ALREADY_CONTINUED');
-    if (parent && parent.state !== (resume ? 'INTERRUPTED' : 'COMPLETED')) throw new Error('SESSION_CONTEXT_UNAVAILABLE');
+    if (parent && (resume ? !parent.resumable : parent.state !== 'COMPLETED')) throw new Error('SESSION_CONTEXT_UNAVAILABLE');
     if (this.busy) throw new Error('AGENT_BUSY');
     if (!this.link && this.options.ensureWorker) await this.options.ensureWorker().catch(() => undefined);
     if (!this.link) throw new Error('WORKER_ISOLATION_UNAVAILABLE');
@@ -218,6 +220,7 @@ export class TaskRunner {
     const taskId = created.task.id;
     let settle!: () => void;
     const run: Run = { taskId, project, route, credentials, skills, skillRevision,
+      maxTurns: this.options.maxTurns?.() ?? AGENT_RUN_LIMITS.maxTurns,
       tools: skills.length ? [...AGENT_TOOLS, 'load_skill'] : AGENT_TOOLS, conversation, checkpoint: startingCheckpoint,
       context: warm ? warm.context : route.provider === 'anthropic' ? (this.options.contextPolicy ?? (name => CONTEXT_POLICIES[name]))(route.model) : null,
       summaryInHistory: warm?.summaryInHistory ?? false, turn: 0, abort: new AbortController(), modelInFlight: false,
@@ -228,7 +231,7 @@ export class TaskRunner {
     const message = this.options.store.addTaskMessage(taskId, 'user', 0, prompt);
     this.options.store.appendAgentEvent(taskId, 'user_message', { messageId: message.id, chars: prompt.length });
     this.transition(taskId, 'RUNNING', null);
-    try { await link.run({ taskId, tools: run.tools, maxTurns: AGENT_RUN_LIMITS.maxTurns }); }
+    try { await link.run({ taskId, tools: run.tools, maxTurns: run.maxTurns }); }
     catch { this.end(run, 'FAILED', 'The agent worker did not accept the task'); }
     return this.options.store.getTask(taskId)!;
   }
@@ -268,7 +271,7 @@ export class TaskRunner {
   private async modelTurn(taskId: string, turn: number): Promise<RunnerReply> {
     const run = this.runs.get(taskId);
     // Turns are strictly sequential: never while another turn or any of the previous turn's tool calls is running.
-    if (!run || run.done || turn !== run.turn + 1 || run.modelInFlight || run.activeTools.size) return null;
+    if (!run || run.done || turn > run.maxTurns || turn !== run.turn + 1 || run.modelInFlight || run.activeTools.size) return null;
     run.turn = turn;
     run.modelInFlight = true;
     try { return await this.runModelTurn(run, taskId, turn); }
@@ -327,7 +330,7 @@ export class TaskRunner {
       this.options.saveCheckpoints?.() ? run.checkpoint : undefined);
     } catch { return failed('response_invalid'); }
     const ended = result.view.stopReason === 'end_turn' || result.view.stopReason === 'stop_sequence';
-    if (ended && unfinished && !run.stopping && turn < AGENT_RUN_LIMITS.maxTurns &&
+    if (ended && unfinished && !run.stopping && turn < run.maxTurns &&
       run.planReviewAfterTurn === null && run.conversation.requestPlanReview()) {
       run.planReviewAfterTurn = turn;
       // Continue this run via the existing Worker signal. The event above keeps the provider's actual stop reason.
@@ -448,7 +451,7 @@ export class TaskRunner {
       const unfinished = remaining ? `The model ended with ${remaining} unfinished plan steps` : null;
       this.end(run, unfinished && reason === 'end_turn' ? 'FAILED' : 'COMPLETED',
         unfinished ?? (reason === 'max_tokens' ? REASONS.max_tokens : null));
-    } else this.end(run, 'FAILED', REASONS[reason]);
+    } else this.end(run, 'FAILED', reason === 'turn_limit' ? `Stopped after ${run.maxTurns} model turns` : REASONS[reason]);
     return { kind: 'agent.finish', accepted: true };
   }
 }

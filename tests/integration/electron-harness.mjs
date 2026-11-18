@@ -50,7 +50,8 @@ process.on('message', async message => {
       case 'workbench':
         value = await host.window.webContents.executeJavaScript(`(async () => {
           const api = window.operationAgent; const settings = await api.getSettings();
-          const saved = await api.saveSettings({ ...settings, theme: 'dark', stopGraceMs: 10000 });
+          const saved = await api.saveSettings({ ...settings, theme: 'dark', stopGraceMs: 10000, maxAgentTurns: 10 });
+          const invalidTurnLimit = await api.saveSettings({ ...settings, maxAgentTurns: 41 }).then(() => 'allowed', () => 'rejected');
           const tooLong = await api.saveSettings({ ...settings, stopGraceMs: 31000 }).then(() => 'allowed', () => 'rejected');
           const missing = await api.saveSettings({ ...settings, activeProjectId: crypto.randomUUID() }).then(() => 'allowed', error => error.message);
           const task = await api.startTask({ projectId: crypto.randomUUID(), prompt: 'run anything' });
@@ -59,7 +60,7 @@ process.on('message', async message => {
           const missingTask = await api.getTask({ taskId: crypto.randomUUID() }).then(() => 'allowed', error => error.message);
           const missingEvents = await api.listTaskEvents({ taskId: crypto.randomUUID(), afterSeq: 0 }).then(() => 'allowed', error => error.message);
           const badCursor = await api.listTaskEvents({ taskId: crypto.randomUUID(), afterSeq: -1 }).then(() => 'allowed', () => 'rejected');
-          return { saved, tooLong, missing, task, emptyTask, forged, overview: await api.getOverview(), runs: await api.listRuns(),
+          return { saved, tooLong, invalidTurnLimit, missing, task, emptyTask, forged, overview: await api.getOverview(), runs: await api.listRuns(),
             tasks: await api.listTasks(), missingTask, missingEvents, badCursor,
             projects: await api.listProjects(), after: await api.getSettings() };
         })()`);

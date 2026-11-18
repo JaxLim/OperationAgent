@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { LANGUAGES, THEME_IDS } from '@operation-agent/contracts';
+import { AGENT_RUN_LIMITS, LANGUAGES, TASK_TURN_LIMITS, THEME_IDS } from '@operation-agent/contracts';
 import type { Language, ThemeId, UsagePage, UsageQuery, WorkbenchSettings } from '@operation-agent/contracts';
 import { PROVIDER_NAMES } from './ModelSettings';
 import { LANGUAGE_NAMES, resolveLocale } from '../i18n';
@@ -154,6 +154,11 @@ function ChatSection({ settings }: { settings: WorkbenchSettings }) {
       <Row label={t('chat.grace')} scope="global" hint={t('chat.graceHint')}>
         <Segmented value={settings.stopGraceMs} onChange={stopGraceMs => void actions.saveSettings({ stopGraceMs })}
           options={[{ value: 5000, label: '5 s' }, { value: 10000, label: '10 s' }, { value: 30000, label: '30 s' }]} />
+      </Row>
+      <Row label={t('chat.turnLimit')} scope="global" hint={t('chat.turnLimitHint')}>
+        <Segmented value={settings.maxAgentTurns ?? AGENT_RUN_LIMITS.maxTurns}
+          options={TASK_TURN_LIMITS.map(value => ({ value, label: String(value) }))}
+          onChange={maxAgentTurns => void actions.saveSettings({ maxAgentTurns })} />
       </Row>
       <Row label={t('chat.approval')} hint={t('chat.approvalHint')}><Availability>{t('common.notAvailableYet')}</Availability></Row>
       <Row label={t('session.saveCheckpoints')} hint={t('session.saveCheckpointsHint')}>

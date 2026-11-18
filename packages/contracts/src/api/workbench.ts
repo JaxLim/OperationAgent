@@ -4,6 +4,7 @@ import { PROTOCOL_VERSION } from '../version/index.js';
 import { ServiceTreeIdentitySchema } from '../ipc/identity.js';
 import { ModelProviderSchema, SearchProviderSchema } from './providers.js';
 import { GITHUB_SKILL_LIMITS, GITHUB_SKILL_SOURCES, GitHubSkillSourceSchema, gitHubSkillSourceKey } from '../agent/skills.js';
+import { AGENT_RUN_LIMITS } from '../agent/turn.js';
 
 // Product-shell domain owned by Express: preferences, registered project metadata and run history.
 // A project is only a remembered folder path. P1 never reads, lists or writes workspace files.
@@ -32,6 +33,7 @@ export const THEME_CANVAS: Readonly<Record<ThemeId, { readonly light: Canvas; re
 });
 /** default: the chosen provider; any: whichever configured provider fits; off: no web search. */
 export const WEB_SEARCH_MODES = ['default', 'any', 'off'] as const;
+export const TASK_TURN_LIMITS = [10, 20, AGENT_RUN_LIMITS.maxTurns] as const;
 
 export const WorkbenchSettingsSchema = z.strictObject({
   theme: z.enum(['system', 'light', 'dark']),
@@ -43,6 +45,7 @@ export const WorkbenchSettingsSchema = z.strictObject({
   saveCheckpoints: z.boolean().optional(),
   // ADR-009: default 5 s, allowed 5–30 s; out-of-range values are rejected, never clamped.
   stopGraceMs: z.number().int().min(5_000).max(30_000),
+  maxAgentTurns: z.literal(TASK_TURN_LIMITS).optional(),
   activeProjectId: z.uuid().nullable(),
   /** Which linked provider new chats would use once the agent loop exists. */
   defaultProvider: ModelProviderSchema,

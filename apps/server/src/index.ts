@@ -429,7 +429,7 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
     const requestId = String(req.headers['x-oa-request-id']);
     const taskInput = input.data;
     const resuming = 'resumeFrom' in taskInput;
-    const prompt = resuming ? 'Continue the interrupted task from the saved checkpoint.' : taskInput.prompt;
+    const prompt = resuming ? 'Continue the unfinished task from the saved checkpoint.' : taskInput.prompt;
     const previous = resuming ? taskInput.resumeFrom : taskInput.followUpTo;
     void runner.start(taskInput.projectId, prompt, requestId, previous ? { taskId: previous, resume: resuming } : undefined)
       .then(task => res.status(201).json(TaskStartResultSchema.parse({ accepted: true, task })),

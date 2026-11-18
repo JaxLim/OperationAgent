@@ -102,7 +102,7 @@ async function withAgent(endpoint: string, run: (harness: Harness) => Promise<vo
   const live = new LiveFeed();
   const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store, ...(options.adapter ? { adapter: options.adapter } : {}) }),
     model: options.model ?? (() => 'claude-sonnet-5-5'), live, stopGraceMs: () => 5_000,
-    saveCheckpoints: () => store.getSettings().saveCheckpoints === true });
+    saveCheckpoints: () => store.getSettings().saveCheckpoints === true, maxTurns: () => store.getSettings().maxAgentTurns });
   const identity = { expressRunId: randomUUID(), workerRunId: randomUUID() };
   const toWorker = new Inbox(); const toExpress: Uint8Array[] = [];
   const express: { session?: RpcSession } = {};
@@ -221,6 +221,49 @@ test('conversation: reopen SQLite and explicitly continue from model progress an
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
+test('conversation: failed and stopped runs continue from their checkpoints only on request', async () => {
+  const cache = resolve('.cache');
+  mkdirSync(cache, { recursive: true });
+  for (const state of ['FAILED', 'STOPPED'] as const) {
+    const base = mkdtempSync(resolve(cache, 'agent-checkpoint-'));
+    const progress = 'Listed the project. The report is still needed.';
+    try {
+      await withProvider([
+        res => sse(res, [start, ...text(0, progress), ...tool(1, 'toolu_list', 'list_directory', { path: '.' }), ...stop('tool_use')]),
+        res => state === 'FAILED' ? sse(res, [start, ...stop('refusal')]) : sse(res, [start, ...text(0, 'UNCOMMITTED_STREAM')], false),
+        res => sse(res, [start, ...text(0, 'Report complete.'), ...stop('end_turn')]),
+      ], async (endpoint, bodies) => {
+        let oldTask = '';
+        await withAgent(endpoint, async ({ store, runner, projectId }) => {
+          store.saveSettings({ ...store.getSettings(), saveCheckpoints: true });
+          oldTask = (await runner.start(projectId, 'Write a project report', randomUUID())).id;
+          await until(() => bodies.length === 2);
+          if (state === 'STOPPED') await runner.stop(oldTask);
+          await until(() => store.getTask(oldTask)?.state === state);
+        }, { base });
+
+        await withAgent(endpoint, async ({ store, runner, projectId, root }) => {
+          assert.equal(bodies.length, 2, 'reopening SQLite does not start a new task');
+          assert.equal(store.getTask(oldTask)?.resumable, true);
+          const continuation = { taskId: oldTask, resume: true };
+          const other = store.addProject({ name: 'Other project', path: resolve(root, 'src') });
+          await assert.rejects(runner.start(other.id, 'Continue', randomUUID(), continuation), /NOT_FOUND/);
+          const next = await runner.start(projectId, 'Continue', randomUUID(), continuation);
+          await until(() => store.getTask(next.id)?.state === 'COMPLETED');
+          assert.notEqual(next.id, oldTask);
+          assert.equal(next.previousTaskId, oldTask);
+          assert.equal(store.getTask(oldTask)?.state, state);
+          assert.equal(store.getTask(oldTask)?.resumable, undefined);
+          const resumed = JSON.stringify(bodies[2]?.messages);
+          assert.ok(resumed.includes('Write a project report') && resumed.includes(progress));
+          assert.doesNotMatch(resumed, /tool_result|toolu_list|UNCOMMITTED_STREAM/);
+          await assert.rejects(runner.start(projectId, 'Continue again', randomUUID(), continuation), /SESSION_ALREADY_CONTINUED/);
+        }, { base });
+      });
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  }
+});
+
 test('agent loop: a read-only task explores, reads, answers and completes; Express builds every tool result', async () => {
   await withProvider([
     res => sse(res, [start, ...text(0, 'Let me look around.'), ...tool(1, 'toolu_list', 'list_directory', { path: '.' }),
@@ -313,6 +356,20 @@ test('agent session: heartbeats keep an idle session alive; tool summaries alway
     assert.ok(summary.length <= 256, summary);
     assert.match(summary, /file\.ts/, 'the file name stays visible');
   }
+});
+
+test('agent loop: the saved turn limit stops a task and bounds actual model calls', async () => {
+  const pause: Script = res => sse(res, [start, ...text(0, 'Still working.'), ...stop('pause_turn')]);
+  await withProvider(Array.from({ length: 11 }, () => pause), async (endpoint, bodies) => {
+    await withAgent(endpoint, async ({ runner, store, projectId, finished }) => {
+      store.saveSettings({ ...store.getSettings(), maxAgentTurns: 10 });
+      const task = await runner.start(projectId, 'Inspect this project.', randomUUID());
+      await until(() => finished.has(task.id));
+      assert.equal(store.getTask(task.id)?.state, 'FAILED');
+      assert.equal(bodies.length, 10);
+      assert.deepEqual(finished.get(task.id), { outcome: 'failed', reason: 'turn_limit', turns: 10 });
+    });
+  });
 });
 
 test('agent loop: Stop aborts a streaming turn, the loop confirms, and the task is STOPPED with cleanup confirmed', async () => {

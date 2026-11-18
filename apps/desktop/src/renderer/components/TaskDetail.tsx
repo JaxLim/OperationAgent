@@ -156,6 +156,7 @@ export function TaskDetail({ task, children }: { task: TaskSnapshot; children?: 
   const [resuming, setResuming] = useState(false);
   const ready = useStore(s => s.connection === 'ready' && s.overview?.agentReady === true);
   const persist = useStore(s => s.settings?.saveCheckpoints === true);
+  const canResume = task.resumable === true && persist;
   const view = useStore(s => s.taskViews[task.id]);
   const stopping = useStore(s => s.conversations[task.id]?.stopping ?? false);
   const events = view?.events ?? [];
@@ -189,11 +190,12 @@ export function TaskDetail({ task, children }: { task: TaskSnapshot; children?: 
         </div>
       </header>
       <div className="scroll"><div className="column">
-        {task.state === 'INTERRUPTED' && (
+        {(task.state === 'INTERRUPTED' || canResume) && (
           <div className="notice tone-notice-warn task-banner"><IconAlert size={14} /><div>
-            <div className="notice-text">{t(unknown ? 'task.interruptedUnknown' : 'task.interrupted')}</div>
-            <div className="notice-detail">{t(task.resumable && persist ? 'task.interruptedText' : 'session.noCheckpoint')}</div>
-          </div>{task.resumable && persist ? <button className="btn btn-xs" disabled={!ready || resuming}
+            <div className="notice-text">{task.state === 'INTERRUPTED'
+              ? t(unknown ? 'task.interruptedUnknown' : 'task.interrupted') : stateLabel(task.state, t)}</div>
+            <div className="notice-detail">{t(canResume ? 'task.interruptedText' : 'session.noCheckpoint')}</div>
+          </div>{canResume ? <button type="button" className="btn btn-xs" disabled={!ready || resuming}
             onClick={() => { setResuming(true); void actions.resumeTask(task.projectId, task.id).finally(() => setResuming(false)); }}>
             {t('session.resume')}
           </button> : <IconLock size={13} />}</div>
