@@ -384,6 +384,8 @@ export const ja: Readonly<Record<MessageKey, string>> = {
   'skills.githubTab': 'GitHub カタログ',
   'catalog.lead': 'GitHub の公開リポジトリを参照し、スキルの指示をプレビューします。',
   'catalog.add': 'ソースを追加',
+  'catalog.remove': 'ソースを削除',
+  'catalog.search': 'スキル名またはパスを検索',
   'catalog.repo': '公開リポジトリ',
   'catalog.directory': 'サブディレクトリ（任意）',
   'catalog.browse': 'リポジトリを表示',

@@ -742,8 +742,9 @@ Codex 评审额度已用完，PR #18～#20 没有得到它的独立评审；本 
 
 ## M6.2 项目技能与工作台状态（2026-11-18）
 
-- 「设置 → 项目技能」扫描当前登记项目的三个技能目录。每个项目最多启用 8 个技能。能被启用的 `SKILL.md` 整文件上限为 24 KiB。识别 YAML frontmatter 的 `name` 和 `description`，通过既有 Read Adapter 检查路径并读取。
+- 「设置 → 项目技能」扫描当前登记项目的四个技能目录。每个项目最多启用 8 个技能。能被启用的 `SKILL.md` 整文件上限为 24 KiB。识别 YAML frontmatter 的 `name` 和 `description`，通过既有 Read Adapter 检查路径并读取。
 - 迁移 014 按项目保存技能相对路径和整文件 SHA-256。启用、任务启动和 `load_skill` 分别复验。从应用移除项目时清理关联授权。模型首轮只收到已启用技能的目录信息，正文按需读取并作为工具结果传入。技能授权变更后，后续追问从摘要开始。
 - 工作台「文件」与「结果」读取已提交的任务数据。能力状态读取当前运行时和 Read Adapter，变更和审批仍由 P3b 门禁控制。
-- Windows x64 本地 `pnpm check` 退出 0。自动化测试 223 项，真实 Electron 与 Express 集成 23 项，原生模块接口测试 3 项。补充验证覆盖撤销技能后追问、项目移除清理授权、重启读回和变更后重新授权。
-- 当前分支的安装后烟测、一次性 Windows runner 隔离验收和真实供应商联调待完成。隔离 Agent 验收已增加 `load_skill` 场景。
+- Windows x64 本地 `OA_LIVE_GITHUB_SKILLS=1 pnpm check` 退出 0。单元测试 225 项，真实 Electron 与 Express 集成 23 项，原生模块接口测试 3 项。GitHub 目录通过真实仓库验证预览、原文、添加来源、重启读回和移除。项目技能覆盖撤销后追问、项目移除清理授权以及文件变更后重新授权。
+- GitHub 技能目录参考 OpenChamber 的来源、列表和详情浏览流程。可搜索已扫描的公开仓库，预览 Markdown 或查看原文，自定义来源写入现有工作台设置。集成页使用分类与搜索入口，可打开 GitHub 技能目录、模型供应商、网页搜索和 MCP 配置。MCP Host、插件安装与目录导入仍走各自的审批及验收。
+- 一次性 runner 的安装包构建与安装后 SEC-18 烟测通过，见 [Windows x64 运行记录](https://github.com/JaxLim/OperationAgent/actions/runs/44251985978)。真实模型供应商联调仍待完成。

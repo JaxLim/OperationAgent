@@ -3,6 +3,7 @@ import { TaskSnapshotSchema } from '../events/task.js';
 import { PROTOCOL_VERSION } from '../version/index.js';
 import { ServiceTreeIdentitySchema } from '../ipc/identity.js';
 import { ModelProviderSchema, SearchProviderSchema } from './providers.js';
+import { GITHUB_SKILL_LIMITS, GITHUB_SKILL_SOURCES, GitHubSkillSourceSchema, gitHubSkillSourceKey } from '../agent/skills.js';
 
 // Product-shell domain owned by Express: preferences, registered project metadata and run history.
 // A project is only a remembered folder path. P1 never reads, lists or writes workspace files.
@@ -49,6 +50,11 @@ export const WorkbenchSettingsSchema = z.strictObject({
   // Off by default: a search sends the query to a third party, so it is opted into, never assumed.
   webSearchMode: z.enum(WEB_SEARCH_MODES),
   webSearchProvider: SearchProviderSchema,
+  githubSkillSources: z.array(GitHubSkillSourceSchema).max(GITHUB_SKILL_LIMITS.maxSources - GITHUB_SKILL_SOURCES.length)
+    .refine(sources => {
+      const keys = [...GITHUB_SKILL_SOURCES, ...sources].map(gitHubSkillSourceKey);
+      return new Set(keys).size === keys.length;
+    }).optional(),
 });
 export type WorkbenchSettings = z.infer<typeof WorkbenchSettingsSchema>;
 export const DEFAULT_WORKBENCH_SETTINGS: WorkbenchSettings = Object.freeze({

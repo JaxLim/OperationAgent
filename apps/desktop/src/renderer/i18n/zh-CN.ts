@@ -384,6 +384,8 @@ export const zhCN: Readonly<Record<MessageKey, string>> = {
   'skills.githubTab': 'GitHub 技能目录',
   'catalog.lead': '浏览 GitHub 公开仓库并预览技能说明。',
   'catalog.add': '添加来源',
+  'catalog.remove': '移除来源',
+  'catalog.search': '搜索技能名称或路径',
   'catalog.repo': '公开仓库',
   'catalog.directory': '子目录（可选）',
   'catalog.browse': '浏览仓库',

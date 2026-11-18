@@ -384,6 +384,8 @@ export const en = {
   'skills.githubTab': 'GitHub catalog',
   'catalog.lead': 'Browse public GitHub repositories and preview skill instructions.',
   'catalog.add': 'Add source',
+  'catalog.remove': 'Remove source',
+  'catalog.search': 'Search skill names and paths',
   'catalog.repo': 'Public repository',
   'catalog.directory': 'Subdirectory (optional)',
   'catalog.browse': 'Browse repository',

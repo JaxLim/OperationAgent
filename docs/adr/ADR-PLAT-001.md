@@ -59,7 +59,7 @@ M6.1 在同一聊天中为每次追问或恢复创建新的任务记录。Expres
 
 **D6 技能（只读）。** 技能是含 `SKILL.md` 的目录（YAML frontmatter 至少含 `name`、`description`，与通行的 Agent Skills 格式兼容）。来源限于当前项目内的 `.operationagent/skills/`（并兼容读取 `.claude/skills/`、`.agents/skills/`）。按项目逐个启用，记录正文哈希，内容变化后需重新启用。任务开始时把已启用技能的名称与描述固定进系统提示（有数量与长度上限），正文由 `load_skill` 工具经 Read Adapter 按需读取。技能不能声明或获得工具能力；技能附带的脚本在 M3 沙箱可用之前不可执行。
 
-D6 目录增补（2026-11-18）。项目内追加 OpenCode 通用目录 `.opencode/skills/`，预览沿用同一 Read Adapter 和哈希复验。用户明确授权通过固定 GitHub 公共 HTTPS API 浏览公开仓库和预览 `SKILL.md`。Express 只发匿名 GET 请求，按已发现的 blob 哈希读取并校验正文。远程预览没有项目授权、安装、脚本执行、账号接入或 MCP 权限。这些能力继续按各自门禁评审。
+D6 目录增补（2026-11-18）。项目内追加 OpenCode 通用目录 `.opencode/skills/`，预览沿用同一 Read Adapter 和哈希复验。用户明确授权通过固定 GitHub 公共 HTTPS API 浏览公开仓库和预览 `SKILL.md`。Express 只发匿名 GET 请求，按已发现的 blob 哈希读取并校验正文。工作台既有设置可保存最多五个自定义公开仓库与子目录。远程预览没有项目授权、安装、脚本执行、账号接入或 MCP 权限。这些能力继续按各自门禁评审。
 
 ### B 类：改变边界，需要用户对具体决策另行批准
 

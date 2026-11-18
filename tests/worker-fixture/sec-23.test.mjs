@@ -51,7 +51,7 @@ test('SEC-23 Windows x64: write_file and bash run in an AppContainer with scoped
           'if (mode === "acl") {',
           '  fs.writeFileSync("allowed.txt", "allowed");',
           '  for (const path of ["../outside.txt", ".git/config"]) {',
-          '    assert.throws(() => fs.appendFileSync(path, "probe"), { code: "EACCES" });',
+          '    assert.throws(() => fs.appendFileSync(path, "probe"), error => ["EACCES", "EPERM"].includes(error.code));',
           '  }',
           '} else if (mode === "hold") {',
           '  const child = spawn(process.execPath, ["--preserve-symlinks", "--preserve-symlinks-main", __filename, "child"], { stdio: "inherit" });',

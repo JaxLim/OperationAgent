@@ -8,3 +8,5 @@
 - SEC-23 先证明允许的文件写入成功，再检查越界和 `.git` 内容保持原样。默认网络使用有主机正向对照的本地 TCP 监听验证。挂起子进程使用真实 PID 验证回收。缺少可丢弃 runner 时记录 BLOCKED。
 
 P3a 测试产物只在构建和验收阶段使用。现有发布能力门禁继续要求 P3b，届时还需核验真实项目权限、所有敏感路径、网络协议覆盖、审批、工具输出和取消行为。
+
+Windows runner `b071554` 的合成写文件、环回网络拒绝和 Job 进程树回收用例通过。ACL 用例观测到工作区外写入返回 `EPERM`，随后因原用例只接受 `EACCES` 提前结束。独立复验保留两处写入的权限错误与原文件内容检查。Git for Windows 的 MSYS Bash 在创建 `\\BaseNamedObjects` 命名空间对象时返回 `0xC0000022`，SEC-23 整体未通过。见 [Windows runner](https://github.com/JaxLim/OperationAgent/actions/runs/44253164952/job/134628474449) 和 [MSYS 上游兼容性记录](https://github.com/microsoft/mxc/issues/1061)。

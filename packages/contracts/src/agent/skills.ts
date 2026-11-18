@@ -37,7 +37,7 @@ export const ProjectSkillPreviewSchema = z.strictObject({ body: z.string().max(P
 export type ProjectSkillPreview = z.infer<typeof ProjectSkillPreviewSchema>;
 export const LoadSkillArgsSchema = z.strictObject({ path: SkillPathSchema });
 
-export const GITHUB_SKILL_LIMITS = Object.freeze({ maxEntries: 150, maxSources: 8, timeoutMs: 9000, maxPathChars: 360 });
+export const GITHUB_SKILL_LIMITS = Object.freeze({ maxEntries: 150, maxSources: 8, timeoutMs: 9000, maxPathChars: 360, maxDirectoryChars: 140 });
 export const GITHUB_SKILL_SOURCES = Object.freeze([
   { label: 'Anthropic', repo: 'anthropics/skills', subdirectory: 'skills' },
   { label: 'OpenAI', repo: 'openai/skills', subdirectory: 'skills' },
@@ -47,9 +47,11 @@ const GitHubRepoSchema = z.string().trim().max(140)
   .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$/)
   .transform(repo => repo.toLowerCase());
 const catalogPath = z.string().max(GITHUB_SKILL_LIMITS.maxPathChars)
-  .refine(path => path.split('/').every(part => !!part && part !== '.' && part !== '..' && !/[\\\p{Cc}\p{Cf}]/u.test(part)));
-export const GitHubSkillSourceSchema = z.strictObject({ repo: GitHubRepoSchema, subdirectory: z.union([z.literal(''), catalogPath]) });
+  .refine(path => path.split('/').every(part => !!part && part !== '.' && part !== '..' && !/[\\\p{Cc}\p{Cf}\p{Cs}]/u.test(part)));
+export const GitHubSkillSourceSchema = z.strictObject({ repo: GitHubRepoSchema,
+  subdirectory: z.union([z.literal(''), catalogPath.refine(path => path.length <= GITHUB_SKILL_LIMITS.maxDirectoryChars)]) });
 export type GitHubSkillSource = z.infer<typeof GitHubSkillSourceSchema>;
+export const gitHubSkillSourceKey = (source: GitHubSkillSource): string => `${source.repo}:${source.subdirectory}`;
 const GitObjectHashSchema = z.string().length(40).regex(/^[a-f0-9]{40}$/);
 export const GitHubSkillEntrySchema = z.strictObject({
   name: z.string().min(1).max(128), path: catalogPath.refine(path => path === 'SKILL.md' || path.endsWith('/SKILL.md')), sha: GitObjectHashSchema,

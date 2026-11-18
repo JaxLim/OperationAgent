@@ -45,6 +45,19 @@ test('settings: older saved shapes gain new defaults, invalid values fall back, 
   }
 });
 
+test('GitHub skill sources round-trip with settings and stay within the stored settings budget', () => withStore(store => {
+  const githubSkillSources = Array.from({ length: 5 }, (_, index) => ({
+    repo: `Owner-${index}/${'a'.repeat(100)}`, subdirectory: '技'.repeat(140),
+  }));
+  const saved = store.saveSettings({ ...store.getSettings(), githubSkillSources });
+  assert.equal(saved.githubSkillSources?.length, 5);
+  assert.match(saved.githubSkillSources![0]!.repo, /^owner-0\//);
+  assert.deepEqual(store.getSettings(), saved);
+  assert.ok(Buffer.byteLength(JSON.stringify(saved), 'utf8') < 4096);
+  assert.equal(WorkbenchSettingsSchema.safeParse({ ...saved, githubSkillSources: [...githubSkillSources, githubSkillSources[0]] }).success, false);
+  assert.equal(WorkbenchSettingsSchema.safeParse({ ...saved, githubSkillSources: [githubSkillSources[0], githubSkillSources[0]] }).success, false);
+}));
+
 test('provider and agent contracts: fixed slots, inert ids, bounded definitions, safe MCP URLs', () => {
   assert.equal(ProviderKeyInputSchema.safeParse({ provider: 'openai', apiKey: KEY }).success, true);
   assert.equal(ProviderKeyInputSchema.safeParse({ provider: 'anthropic', apiKey: KEY }).success, false, 'Anthropic keeps its own operation');

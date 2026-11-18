@@ -380,7 +380,12 @@ test('project skills and integration catalog: real Electron previews, authorizes
     if (process.env.OA_LIVE_GITHUB_SKILLS === '1') {
       const remote = await reopened.command('github-skills-live');
       assert.ok(remote.count > 0 && remote.previewChars > 0);
+      assert.equal(remote.customHasMetadata, false);
+      assert.equal(remote.rawHasMetadata, true);
       await reopened.command('capture', `m6/${process.platform}-${process.arch}/github-skills.png`);
+      await reopened.close();
+      const restarted = await create();
+      assert.equal((await restarted.command('github-skills-live', { remove: true })).removed, true);
     }
   });
 

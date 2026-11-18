@@ -182,17 +182,41 @@ process.on('message', async message => {
         value = await host.window.webContents.executeJavaScript(`(async () => {
           const wait = async selector => {
             for (let attempts = 0; attempts < 240; attempts++) {
-              const result = document.querySelector(selector);
+              const result = typeof selector === 'function' ? selector() : document.querySelector(selector);
               if (result) return result;
               await new Promise(done => setTimeout(done, 50));
             }
             throw new Error('GITHUB_SKILLS_UI_TIMEOUT: ' + selector);
           };
+          await wait('.app[data-loaded="true"]');
+          if (!document.querySelector('.settings-nav')) window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));
           (await wait('.settings-nav button[data-section="integrations"]')).click();
           (await wait('[data-integration="github-skills"]')).click();
+          const savedSource = '[data-catalog-source="anthropics/skills"][data-catalog-directory="skills/algorithmic-art"]';
+          if (${JSON.stringify(message.input?.remove === true)}) {
+            (await wait(savedSource + ':enabled')).click();
+            (await wait('[data-action="remove-catalog-source"]:enabled')).click();
+            await wait(() => !document.querySelector(savedSource) && !document.querySelector('[data-catalog-preview]'));
+            const removed = !(await window.operationAgent.getSettings()).githubSkillSources?.length;
+            return { removed };
+          }
+          (await wait('[data-action="add-catalog-source"]:enabled')).click();
+          for (const [name, value] of [['repository', 'anthropics/skills'], ['directory', 'skills/algorithmic-art']]) {
+            const input = await wait('.skill-source-form input[name="' + name + '"]');
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          (await wait('.skill-source-form button[type="submit"]:enabled')).click();
+          await wait(savedSource + ':enabled');
+          const customPreview = await wait('[data-catalog-preview="preview"]');
+          const customHasMetadata = customPreview.textContent.includes('name: algorithmic-art');
+          const sourceButton = [...document.querySelectorAll('.skill-preview-header button')].find(button => button.textContent === 'Source');
+          sourceButton.click();
+          const original = await wait('[data-catalog-preview="source"] pre');
+          const rawHasMetadata = original.textContent.includes('name: algorithmic-art');
           (await wait('[data-catalog-source="anthropics/skills"]:enabled')).click();
-          const preview = await wait('[data-catalog-preview]');
-          return { count: document.querySelectorAll('.skill-index-row').length, previewChars: preview.textContent.length };
+          const preview = await wait('[data-catalog-preview="preview"]');
+          return { count: document.querySelectorAll('.skill-index-row').length, previewChars: preview.textContent.length, customHasMetadata, rawHasMetadata };
         })()`);
         break;
       }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { GITHUB_SKILL_LIMITS, GITHUB_SKILL_SOURCES, GitHubSkillSourceSchema, PROJECT_SKILL_ROOTS } from '@operation-agent/contracts';
+import { GITHUB_SKILL_LIMITS, GITHUB_SKILL_SOURCES, GitHubSkillSourceSchema, gitHubSkillSourceKey, PROJECT_SKILL_ROOTS } from '@operation-agent/contracts';
 import type { GitHubSkillCatalog, GitHubSkillEntry, GitHubSkillSource, Project, ProjectSkills as SkillsView } from '@operation-agent/contracts';
 import { useT } from '../locale';
-import { errorCode, useStore } from '../state';
+import { actions, errorCode, store, useStore } from '../state';
 import { IconCheck, IconFolder, IconPuzzle, IconRetry, IconSearch } from './Icons';
 import { Markdown } from './Markdown';
 import { Segmented } from './Modal';
@@ -20,12 +20,11 @@ export function ProjectSkills({ initialTab = 'project' }: { initialTab?: 'projec
   const t = useT();
   const project = useStore(s => s.projects.find(item => item.id === s.settings?.activeProjectId));
   const [tab, setTab] = useState<'project' | 'github'>(initialTab);
-  const [sources, setSources] = useState<GitHubSkillSource[]>([]);
   return <>
     <div className="skill-toolbar skill-tabs"><Segmented value={tab} onChange={setTab} options={[
       { value: 'project', label: t('skills.projectTab') }, { value: 'github', label: t('skills.githubTab') },
     ]} /></div>
-    {tab === 'github' ? <GitHubCatalog sources={sources} onAdd={source => setSources(current => [...current, source])} />
+    {tab === 'github' ? <GitHubCatalog />
       : project ? <ProjectSkillList key={project.id} project={project} /> : <p className="muted">{t('skills.selectProject')}</p>}
   </>;
 }
@@ -148,9 +147,11 @@ function SkillDetail({ projectId, skill, canEdit, onToggle }: {
   </section>;
 }
 
-function GitHubCatalog({ sources, onAdd }: { sources: GitHubSkillSource[]; onAdd: (source: GitHubSkillSource) => void }) {
+function GitHubCatalog() {
   const t = useT();
   const ready = useStore(s => s.connection === 'ready');
+  const sources = useStore(s => s.settings?.githubSkillSources) ?? [];
+  const saving = useStore(s => s.saveStatus.state === 'saving');
   const [repo, setRepo] = useState('');
   const [subdirectory, setSubdirectory] = useState('');
   const [adding, setAdding] = useState(false);
@@ -160,23 +161,39 @@ function GitHubCatalog({ sources, onAdd }: { sources: GitHubSkillSource[]; onAdd
   const [view, setView] = useState<GitHubSkillCatalog | null>(null);
   const [query, setQuery] = useState('');
   const [selectedPath, select] = useState('');
-  const curated = GITHUB_SKILL_SOURCES.map(item => ({ ...item }));
-  const cards = [...curated, ...sources.map(item => ({ ...item, label: item.repo }))];
+  const cards = [...GITHUB_SKILL_SOURCES, ...sources.map(item => ({ ...item, label: item.repo }))];
+  const activeKey = source && gitHubSkillSourceKey(source);
+  const customSelected = sources.some(item => gitHubSkillSourceKey(item) === activeKey);
   const scan = async (next: GitHubSkillSource, add = false): Promise<void> => {
     setBusy(true); setError(null); setSource(next); setView(null); select('');
     try {
       const catalog = await window.operationAgent.listGitHubSkills(next);
       setView(catalog);
-      if (add) { onAdd(next); setAdding(false); setRepo(''); setSubdirectory(''); }
+      if (add) {
+        const saved = store.get().settings?.githubSkillSources ?? [];
+        const key = gitHubSkillSourceKey(next);
+        if (!saved.some(item => gitHubSkillSourceKey(item) === key)) {
+          await actions.saveSettings({ githubSkillSources: [...saved, next] });
+        }
+        if (store.get().settings?.githubSkillSources?.some(item => gitHubSkillSourceKey(item) === key)) {
+          setAdding(false); setRepo(''); setSubdirectory('');
+        }
+      }
     } catch (error) { setError(errorCode(error)); }
     finally { setBusy(false); }
   };
   const submit = (): void => {
     const parsed = GitHubSkillSourceSchema.safeParse({ repo, subdirectory: subdirectory.trim() });
     if (!parsed.success) { setError('VALIDATION_ERROR'); return; }
-    const duplicate = cards.some(item => item.repo === parsed.data.repo && item.subdirectory === parsed.data.subdirectory);
+    const duplicate = cards.some(item => gitHubSkillSourceKey(item) === gitHubSkillSourceKey(parsed.data));
     void scan(parsed.data, !duplicate);
     if (duplicate) setAdding(false);
+  };
+  const remove = async (): Promise<void> => {
+    await actions.saveSettings({ githubSkillSources: sources.filter(item => gitHubSkillSourceKey(item) !== activeKey) });
+    if (!store.get().settings?.githubSkillSources?.some(item => gitHubSkillSourceKey(item) === activeKey)) {
+      setSource(null); setView(null); setError(null); select('');
+    }
   };
   const filter = query.trim().toLowerCase();
   const entries = view?.skills.filter(item => item.path.toLowerCase().includes(filter) || item.name.toLowerCase().includes(filter)) ?? [];
@@ -184,36 +201,39 @@ function GitHubCatalog({ sources, onAdd }: { sources: GitHubSkillSource[]; onAdd
   return <div className="skill-library" aria-busy={busy}>
     <div className="skill-toolbar">
       <span className="muted small">{t('catalog.lead')}</span>
-      <button type="button" className="btn btn-pill btn-xs" disabled={busy || sources.length >= GITHUB_SKILL_LIMITS.maxSources - curated.length}
+      {customSelected && <button type="button" className="btn btn-pill btn-xs" data-action="remove-catalog-source" disabled={!ready || busy || saving}
+        onClick={() => void remove()}>{t('catalog.remove')}</button>}
+      <button type="button" className="btn btn-pill btn-xs" data-action="add-catalog-source" disabled={busy || cards.length >= GITHUB_SKILL_LIMITS.maxSources}
         onClick={() => setAdding(value => !value)}>{t('catalog.add')}</button>
     </div>
     {adding && <form className="skill-source-form" onSubmit={event => { event.preventDefault(); submit(); }}>
-      <label className="field"><span className="field-label">{t('catalog.repo')}</span><input className="text-input" value={repo}
+      <label className="field"><span className="field-label">{t('catalog.repo')}</span><input className="text-input" name="repository" value={repo}
         placeholder="owner/repo" maxLength={140} onChange={event => setRepo(event.target.value)} /></label>
-      <label className="field"><span className="field-label">{t('catalog.directory')}</span><input className="text-input" value={subdirectory}
-        placeholder="skills" maxLength={GITHUB_SKILL_LIMITS.maxPathChars} onChange={event => setSubdirectory(event.target.value)} /></label>
-      <button type="submit" className="btn btn-pill btn-xs btn-accent" disabled={!ready || busy || !repo.trim()}>{t('catalog.browse')}</button>
+      <label className="field"><span className="field-label">{t('catalog.directory')}</span><input className="text-input" name="directory" value={subdirectory}
+        placeholder="skills" maxLength={GITHUB_SKILL_LIMITS.maxDirectoryChars} onChange={event => setSubdirectory(event.target.value)} /></label>
+      <button type="submit" className="btn btn-pill btn-xs btn-accent" disabled={!ready || busy || saving || !repo.trim()}>{t('catalog.browse')}</button>
     </form>}
     <div className="integration-grid">
-      {cards.map(card => <button className="integration-entry" type="button" key={card.repo + ':' + card.subdirectory}
-        aria-pressed={source?.repo === card.repo && source.subdirectory === card.subdirectory}
-        data-catalog-source={card.repo} disabled={!ready || busy} onClick={() => void scan({ repo: card.repo, subdirectory: card.subdirectory })}>
+      {cards.map(card => <button className="integration-entry" type="button" key={gitHubSkillSourceKey(card)}
+        aria-pressed={activeKey === gitHubSkillSourceKey(card)}
+        data-catalog-source={card.repo} data-catalog-directory={card.subdirectory} disabled={!ready || busy}
+        onClick={() => void scan({ repo: card.repo, subdirectory: card.subdirectory })}>
         <span className="feature-empty-icon"><IconFolder size={16} /></span>
-        <span><strong>{card.label}</strong><span className="mono muted small">{card.repo}</span></span>
+        <span><strong>{card.label}</strong><span className="mono muted small">{card.label === card.repo ? card.subdirectory || '/' : card.repo}</span></span>
       </button>)}
     </div>
     {error && <p className="field-error" role="alert">{t(error === 'VALIDATION_ERROR' ? 'catalog.invalid' : 'skills.error', { code: error })}</p>}
     {busy && <p className="muted small">{t('catalog.loading')}</p>}
     {view && source && <>
       <label className="settings-search skill-search"><IconSearch size={15} /><input value={query} maxLength={128}
-        onChange={event => setQuery(event.target.value)} placeholder={t('skills.search')} aria-label={t('skills.search')} /></label>
+        onChange={event => setQuery(event.target.value)} placeholder={t('catalog.search')} aria-label={t('catalog.search')} /></label>
       {view.partial && <p className="muted small">{t('skills.partial')}</p>}
       {selected ? <div className="skill-workspace">
         <div className="skill-index" aria-label={t('skills.githubTab')}>
           {entries.map(item => <button type="button" key={item.path} className="skill-index-row" aria-pressed={item.path === selected.path}
             onClick={() => select(item.path)}><strong>{item.name}</strong></button>)}
         </div>
-        <GitHubSkillDetail key={source.repo + selected.path + selected.sha} source={source} skill={selected}
+        <GitHubSkillDetail key={`${activeKey}:${selected.path}:${selected.sha}`} source={source} skill={selected}
           onRescan={() => void scan(source)} />
       </div> : <div className="feature-empty"><span>{t(view.skills.length ? 'skills.noMatch' : 'catalog.empty')}</span></div>}
     </>}
@@ -222,6 +242,7 @@ function GitHubCatalog({ sources, onAdd }: { sources: GitHubSkillSource[]; onAdd
 
 function GitHubSkillDetail({ source, skill, onRescan }: { source: GitHubSkillSource; skill: GitHubSkillEntry; onRescan: () => void }) {
   const t = useT();
+  const [format, setFormat] = useState<'preview' | 'source'>('preview');
   const [state, setState] = useState<{ body: string } | { error: string } | null>(null);
   const { repo, subdirectory } = source;
   const { path, sha } = skill;
@@ -231,10 +252,16 @@ function GitHubSkillDetail({ source, skill, onRescan }: { source: GitHubSkillSou
       value => { if (current) setState(value); }, error => { if (current) setState({ error: errorCode(error) }); });
     return () => { current = false; };
   }, [repo, subdirectory, path, sha]);
+  const markdown = state && 'body' in state ? state.body.replace(/^\uFEFF?---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/u, '') : '';
   return <section className="skill-detail">
     <div className="skill-detail-heading"><div><h4>{skill.name}</h4><p className="mono small muted skill-path">{repo} · {path}</p></div></div>
-    {!state ? <p className="muted small">{t('skills.loadingPreview')}</p> : 'body' in state ?
-      <div className="skill-preview" data-catalog-preview><Markdown text={state.body} /></div> :
+    {!state ? <p className="muted small">{t('skills.loadingPreview')}</p> : 'body' in state ? <>
+      <div className="skill-preview-header">
+        <strong>{t('skills.instructions')}</strong>
+        <Segmented value={format} options={[{ value: 'preview', label: t('skills.preview') }, { value: 'source', label: t('skills.sourceText') }]} onChange={setFormat} />
+      </div>
+      <div className="skill-preview" data-catalog-preview={format}>{format === 'source' ? <pre>{state.body}</pre> : <Markdown text={markdown || state.body} />}</div>
+    </> :
       <p className="field-error" role="alert">{t('skills.error', { code: state.error })}
         {state.error === 'RECORD_CONFLICT' && <button className="btn btn-xs" onClick={onRescan}>{t('catalog.browse')}</button>}
       </p>}
