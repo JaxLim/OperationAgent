@@ -14,7 +14,7 @@ const disposableRunner = windows && process.env.GITHUB_ACTIONS === 'true' && pro
 // Windows stages the isolated agent runtime, which needs the native launcher and channel addons first.
 const commands = [
   ['scripts/workspace.mjs', 'build'],
-  ...(windows ? [['scripts/build-worker-native.mjs'], ['--test', 'tests/worker-fixture/sec-23.test.mjs']] : []),
+  ...(windows ? [['scripts/build-worker-native.mjs']] : []),
   ['scripts/stage-sidecar.mjs'],
   ['scripts/prepare-electron.mjs'],
   ['--test', '--test-concurrency=1', '--test-timeout=180000', 'tests/integration/sidecar.test.mjs', 'tests/integration/electron.test.mjs'],
@@ -22,6 +22,7 @@ const commands = [
   ...(disposableRunner ? [['--test', '--test-concurrency=1', '--test-timeout=240000', 'tests/worker-fixture/isolated-fixture.test.mjs'],
     ['--test', '--test-concurrency=1', '--test-timeout=240000', 'tests/worker-fixture/sec-w01.test.mjs'],
     ['--test', '--test-concurrency=1', '--test-timeout=240000', 'tests/worker-fixture/agent-runtime.test.mjs']] : []),
+  ...(windows ? [['--test', 'tests/worker-fixture/sec-23.test.mjs']] : []),
 ];
 const workerFixture = () => {
   if (!windows) return 'NOT_RUN_NO_NATIVE_LAUNCHER';

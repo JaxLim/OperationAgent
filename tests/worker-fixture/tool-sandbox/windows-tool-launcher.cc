@@ -185,13 +185,14 @@ std::wstring quote(const fs::path& path) {
   return L"\"" + value + L"\"";
 }
 
-int execute(const fs::path& fixture, bool write, const std::wstring& name, DWORD timeout) {
+int execute(const fs::path& fixture, const std::wstring& mode, const std::wstring& argument, DWORD timeout) {
   const fs::path runtime = fixture / L"runtime", workspace = fixture / L"workspace";
   const fs::path bash = runtime / L"usr" / L"bin" / L"bash.exe", node = runtime / L"node.exe";
-  const fs::path writer = runtime / L"write-file.mjs";
-  const fs::path tool = write ? node : bash;
+  const bool shell = mode == L"bash";
+  const fs::path script = runtime / (mode == L"write_file" ? L"write-file.mjs" : L"probe.cjs");
+  const fs::path tool = shell ? bash : node;
   requireObject(tool, false);
-  if (write) requireObject(writer, false);
+  if (!shell) requireObject(script, false);
 
   Handle hostToken, restricted;
   if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY, &hostToken.value)) fail("OPEN_LAUNCHER_TOKEN");
@@ -227,8 +228,8 @@ int execute(const fs::path& fixture, bool write, const std::wstring& name, DWORD
   std::vector<wchar_t> env;
   for (const auto& entry : entries) { env.insert(env.end(), entry.begin(), entry.end()); env.push_back(L'\0'); }
   env.push_back(L'\0');
-  std::wstring command = quote(tool) + (write ? L" --preserve-symlinks --preserve-symlinks-main " + quote(writer) + L" " + name
-    : L" --noprofile --norc -s");
+  std::wstring command = quote(tool) + (shell ? L" --noprofile --norc -s"
+    : L" --preserve-symlinks --preserve-symlinks-main " + quote(script) + L" " + argument);
   STARTUPINFOEXW startup{};
   startup.StartupInfo.cb = sizeof(startup);
   startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
@@ -264,16 +265,20 @@ int wmain(int argc, wchar_t** argv) {
     if (argc < 4 || argc > 5) throw std::runtime_error("INVALID_TOOL_REQUEST");
     const std::wstring tool = argv[2], deadline = argv[3];
     const bool write = tool == L"write_file";
-    if ((!write && tool != L"bash") || argc != (write ? 5 : 4) || deadline.empty() || deadline.size() > 5 ||
+    const bool probe = tool == L"probe";
+    if ((!write && !probe && tool != L"bash") || argc != (write || probe ? 5 : 4) || deadline.empty() || deadline.size() > 5 ||
       deadline.find_first_not_of(L"0123456789") != std::wstring::npos) throw std::runtime_error("INVALID_TOOL_REQUEST");
     const DWORD timeout = std::stoul(deadline);
     if (timeout < 1000 || timeout > 30000) throw std::runtime_error("INVALID_TOOL_TIMEOUT");
-    const std::wstring name = write ? argv[4] : L"";
-    if (write && (name.empty() || name.size() > 80 || name[0] == L'.' || name.back() == L'.' ||
-        name.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.") != std::wstring::npos)) {
+    const std::wstring argument = argc == 5 ? argv[4] : L"";
+    if (write && (argument.empty() || argument.size() > 80 || argument[0] == L'.' || argument.back() == L'.' ||
+        argument.find_first_not_of(L"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.") != std::wstring::npos)) {
       throw std::runtime_error("INVALID_WRITE_NAME");
     }
-    return execute(requireFixture(argv[1]), write, name, timeout);
+    if (probe && argument != L"hold" && argument != L"acl" &&
+        (argument.empty() || argument.size() > 5 || argument.find_first_not_of(L"0123456789") != std::wstring::npos ||
+         std::stoul(argument) == 0 || std::stoul(argument) > 65535)) throw std::runtime_error("INVALID_PROBE_REQUEST");
+    return execute(requireFixture(argv[1]), tool, argument, timeout);
   } catch (const std::exception& error) {
     std::fprintf(stderr, "SANDBOX_UNAVAILABLE: %s\n", error.what());
     return 1;
