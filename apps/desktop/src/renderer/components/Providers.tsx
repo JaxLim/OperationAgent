@@ -374,6 +374,7 @@ export function WebSearchSection({ settings, initialProvider = null }: { setting
   useEffect(() => { void actions.refreshProviders(); }, []);
   const credential = (id: SearchProvider): CredentialStatus | null => overview?.search.find(item => item.provider === id)?.credential ?? null;
   const mode = settings.webSearchMode;
+  const configured = mode === 'any' ? overview?.search.some(item => item.credential.configured) : credential(settings.webSearchProvider)?.configured;
   return (
     <>
       <div className="settings-group">
@@ -381,6 +382,7 @@ export function WebSearchSection({ settings, initialProvider = null }: { setting
         <Segmented value={mode} disabled={!ready} onChange={webSearchMode => void actions.saveSettings({ webSearchMode })}
           options={[{ value: 'default', label: t('search.mode.default') }, { value: 'any', label: t('search.mode.any') }, { value: 'off', label: t('search.mode.off') }]} />
         <p className="setting-hint">{t(`search.modeHint.${mode}`)}</p>
+        {mode !== 'off' && overview && !configured && <p className="setting-hint" role="status">{t('search.missingKey')}</p>}
       </div>
       <div className="settings-group">
         <h3 className="settings-group-title">{t('search.providers')}</h3>

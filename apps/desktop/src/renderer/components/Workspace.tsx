@@ -3,7 +3,7 @@ import { CLAUDE_MODELS, DEFAULT_CLAUDE_MODEL, LINKED_PROVIDERS, WORKBENCH_LIMITS
 import type { ModelProvider, Project } from '@operation-agent/contracts';
 import type { MessageKey } from '../i18n';
 import { useLocale, useT } from '../locale';
-import { actions, composePrompt, useStore } from '../state';
+import { actions, composePrompt, selectedTask, useStore } from '../state';
 import type { Submission } from '../state';
 import { relativeTime } from './format';
 import { TaskDetail } from './TaskDetail';
@@ -362,7 +362,7 @@ export const Workspace = forwardRef<ComposerHandle, { onOpenSettings: (target: S
   const submissions = useStore(s => s.submissions);
   const project = projects.find(item => item.id === activeId);
   const mine = submissions.filter(item => item.projectId === activeId);
-  const selected = useStore(s => s.tasks.find(task => task.id === s.selectedTaskId && task.projectId === activeId));
+  const selected = useStore(selectedTask);
   const canFollowUp = useStore(s => Boolean(selected?.state === 'COMPLETED' &&
     s.taskViews[selected.id]?.events.some(event => event.type === 'user_message')));
   const end = useRef<HTMLDivElement>(null);

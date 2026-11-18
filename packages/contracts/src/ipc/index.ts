@@ -3,7 +3,8 @@ import { PROTOCOL_VERSION } from '../version/index.js';
 import type { ControlHealth, SmokeBatch, SmokeRecords } from '../api/index.js';
 import type { ControlOverview, ControlRunList, ProjectList, ProjectRef, TaskStartInput, TaskStartResult, WorkbenchSettings } from '../api/workbench.js';
 import { ProjectSchema } from '../api/workbench.js';
-import type { TaskEventPage, TaskEventsQuery, TaskList, TaskLivePage, TaskLiveQuery, TaskMessagePage, TaskMessagesQuery, TaskRef } from '../api/tasks.js';
+import type { TaskEventPage, TaskEventsQuery, TaskHistorySearch, TaskHistorySearchInput, TaskList, TaskLivePage, TaskLiveQuery,
+  TaskMessagePage, TaskMessagesQuery, TaskRef } from '../api/tasks.js';
 import type { TaskSnapshot } from '../events/task.js';
 import type { UsagePage, UsageQuery } from '../agent/usage.js';
 import type { ApiKeyInput, ModelChoice, ModelSettingsView, ModelTestResult } from '../api/model.js';
@@ -27,7 +28,7 @@ export const IPC_CHANNELS = Object.freeze({
   getSettings: 'oa:settings-get', saveSettings: 'oa:settings-save', listProjects: 'oa:projects-list',
   listUsage: 'oa:settings-usage',
   addProject: 'oa:projects-add', removeProject: 'oa:projects-remove', listRuns: 'oa:runs-list', startTask: 'oa:tasks-start',
-  listTasks: 'oa:tasks-list', getTask: 'oa:tasks-snapshot', listTaskEvents: 'oa:tasks-events',
+  listTasks: 'oa:tasks-list', searchTaskHistory: 'oa:tasks-history-search', getTask: 'oa:tasks-snapshot', listTaskEvents: 'oa:tasks-events',
   listTaskMessages: 'oa:tasks-messages', readTaskLive: 'oa:tasks-live', stopTask: 'oa:tasks-stop',
   getModelSettings: 'oa:model-settings-get', saveModelChoice: 'oa:model-choice-save', setApiKey: 'oa:model-key-set',
   clearApiKey: 'oa:model-key-clear', testModelConnection: 'oa:model-test',
@@ -78,6 +79,7 @@ export interface DesktopApi {
   startTask(input: TaskStartInput): Promise<TaskStartResult>;
   /** Read-only task views (P2.2): committed snapshots and cursor pages; nothing here starts or changes a task. */
   listTasks(): Promise<TaskList>;
+  searchTaskHistory(input: TaskHistorySearchInput): Promise<TaskHistorySearch>;
   getTask(input: TaskRef): Promise<TaskSnapshot>;
   listTaskEvents(input: TaskEventsQuery): Promise<TaskEventPage>;
   /** M2 conversation: prompt and answer text (never tool results), live stream deltas, and the user's Stop. */

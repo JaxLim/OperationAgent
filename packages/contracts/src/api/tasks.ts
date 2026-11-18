@@ -24,6 +24,21 @@ export type TaskEventsQuery = z.infer<typeof TaskEventsQuerySchema>;
 export const TaskListSchema = z.strictObject({ tasks: z.array(TaskSnapshotSchema).max(TASK_API_LIMITS.maxTasks) });
 export type TaskList = z.infer<typeof TaskListSchema>;
 
+export const TASK_HISTORY_LIMITS = Object.freeze({
+  maxQueryChars: 128, maxHits: 24, maxScannedMessages: 512, maxScannedBytesPerMessage: 8192, maxExcerptChars: 200,
+});
+export const TaskHistorySearchInputSchema = z.strictObject({
+  projectId: z.uuid(), query: z.string().trim().min(1).max(TASK_HISTORY_LIMITS.maxQueryChars),
+});
+export type TaskHistorySearchInput = z.infer<typeof TaskHistorySearchInputSchema>;
+export const TaskHistorySearchSchema = z.strictObject({
+  hits: z.array(z.strictObject({
+    task: TaskSnapshotSchema, excerpt: z.string().max(TASK_HISTORY_LIMITS.maxExcerptChars), role: z.enum(['user', 'assistant']),
+  })).max(TASK_HISTORY_LIMITS.maxHits),
+  partial: z.boolean(),
+});
+export type TaskHistorySearch = z.infer<typeof TaskHistorySearchSchema>;
+
 /**
  * One page of a task's log. The shape itself proves it continues the cursor without gaps, belongs to one task, and
  * makes progress whenever `hasMore` is true, so a client loop always terminates.

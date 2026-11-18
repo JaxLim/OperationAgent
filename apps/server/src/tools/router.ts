@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { FindFilesArgsSchema, FindFilesResultSchema, ListDirectoryArgsSchema, ListDirectoryResultSchema, ReadFileArgsSchema, READ_FILE_LIMITS,
-  ReadFileResultSchema, SearchTextArgsSchema, SearchTextResultSchema, ToolAuditInputSchema } from '@operation-agent/contracts';
-import type { DirectoryEntry, FindFilesResult, ListDirectoryResult, Project, ReadFileResult, SearchMatch, SearchTextResult, ToolAuditEntry,
+  ReadFileResultSchema, SearchTextArgsSchema, SearchTextResultSchema, ToolAuditInputSchema, WebSearchArgsSchema } from '@operation-agent/contracts';
+import type { DirectoryEntry, FindFilesResult, ListDirectoryResult, Project, ReadFileResult, SearchMatch, SearchProvider, SearchTextResult, ToolAuditEntry,
   ToolAuditInput } from '@operation-agent/contracts';
 import { createReadAdapter } from './read-adapter.js';
 import type { ReadAdapter } from './read-adapter.js';
@@ -10,15 +10,17 @@ import { LIST_SKIP_DIRECTORIES, SENSITIVE_FILE_POLICY, TREE_SKIP_SEQUENCES, insi
 import type { PathDecision } from './read-path.js';
 import { TOOL_REGISTRY, currentPlatform } from './registry.js';
 import type { PlatformKey, ToolId } from './registry.js';
+import type { SearchGateway, WebSearchResult } from './web-search.js';
 
 // Tool Router (ARCHITECTURE §5.1): validate → platform gate → path policy → Read Adapter child → audit. It decides the
-// route only; it never opens a workspace file itself. Every decision, allowed or not, is written to the audit table.
+// route only; it never opens a workspace file itself. Read decisions go to the SEC-08 audit table, with other tool
+// results recorded by the task runner's event log.
 
 export interface ToolRouterStore {
   getProject(id: string): Project | null;
   recordToolAudit(entry: ToolAuditInput): ToolAuditEntry;
 }
-export interface ToolRouterOptions { store: ToolRouterStore; adapter?: ReadAdapter; platform?: PlatformKey }
+export interface ToolRouterOptions { store: ToolRouterStore; adapter?: ReadAdapter; platform?: PlatformKey; search?: SearchGateway }
 export interface ReadFileCall { projectId: string; taskId?: string | null; toolCallId?: string | null; args: unknown; signal?: AbortSignal }
 export type ListDirectoryCall = ReadFileCall;
 export interface ToolRouter {
@@ -26,6 +28,8 @@ export interface ToolRouter {
   listDirectory(call: ListDirectoryCall): Promise<ListDirectoryResult>;
   searchText(call: ReadFileCall): Promise<SearchTextResult>;
   findFiles(call: ReadFileCall): Promise<FindFilesResult>;
+  webSearch(provider: SearchProvider, args: unknown, signal: AbortSignal): Promise<WebSearchResult>;
+  selectSearchProvider(): SearchProvider | null;
   readonly adapter: ReadAdapter;
   readonly readAvailable: boolean;
 }
@@ -64,6 +68,12 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
 
   return {
     adapter,
+    selectSearchProvider: () => options.search?.selectProvider() ?? null,
+    async webSearch(provider, args, signal) {
+      const parsed = WebSearchArgsSchema.safeParse(args);
+      if (!parsed.success) return { status: 'refused', code: 'VALIDATION_ERROR' };
+      return options.search ? options.search.search(provider, parsed.data, signal) : { status: 'refused', code: 'WEB_SEARCH_DISABLED' };
+    },
     get readAvailable() {
       return TOOL_REGISTRY.read_file.readGatePlatforms.includes(platform) && adapter.snapshot().available;
     },

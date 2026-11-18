@@ -18,7 +18,7 @@ export const zones = [
 const ipcOperations = ['health', 'listRecords', 'writeRecords', 'desktopStatus', 'retryControlPlane', 'overview', 'getSettings',
   'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask',
   // P2.2 read-only task views: committed snapshots and cursor pages; none creates, starts or changes a task.
-  'listTasks', 'getTask', 'listTaskEvents',
+  'listTasks', 'searchTaskHistory', 'getTask', 'listTaskEvents',
   // M2 conversation: committed prompt/answer text, transient live deltas, and the user's Stop of a running task.
   'listTaskMessages', 'readTaskLive', 'stopTask',
   // M2 model settings: the model choice and a write-only API key; replies never carry key material.

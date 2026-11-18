@@ -20,6 +20,31 @@ function withStore(run: (directory: string, open: () => Store) => void): void {
 }
 const project = (store: Store): string => store.addProject({ name: 'repo', path: `C:/work/${randomUUID()}` }).id;
 
+test('history search reads committed messages within one project and treats search text literally', () => withStore((_, open) => {
+  const store = open();
+  try {
+    const projectId = project(store);
+    const otherProjectId = project(store);
+    const saved = (id: string, text: string): string => {
+      const task = store.createTask(id, randomUUID()).task;
+      store.transitionTask(task.id, 'QUEUED', { requestId: randomUUID() });
+      store.addTaskMessage(task.id, 'user', 0, 'Find Deployment-42.');
+      store.transitionTask(task.id, 'RUNNING', { requestId: randomUUID() });
+      store.addTaskMessage(task.id, 'assistant', 1, text);
+      store.transitionTask(task.id, 'COMPLETED', { requestId: randomUUID() });
+      return task.id;
+    };
+    const taskId = saved(projectId, 'The 配置 value for DEPLOYMENT-42 is 50%_ready.');
+    saved(otherProjectId, 'Other project: 50%_ready');
+    const match = store.searchTaskHistory({ projectId, query: 'deployment-42' });
+    assert.deepEqual(match, { hits: [{ task: store.getTask(taskId), excerpt: 'The 配置 value for DEPLOYMENT-42 is 50%_ready.', role: 'assistant' }], partial: false });
+    assert.deepEqual(store.searchTaskHistory({ projectId, query: '%_ready' }).hits.map(hit => hit.task.id), [taskId]);
+    assert.deepEqual(store.searchTaskHistory({ projectId, query: 'Other project' }).hits, []);
+    saved(projectId, 'x'.repeat(8192) + 'Only after the search boundary.');
+    assert.deepEqual(store.searchTaskHistory({ projectId, query: 'Only after' }), { hits: [], partial: true });
+  } finally { store.close(true); }
+}));
+
 test('a task and its seq-1 event commit together, and an unknown project writes nothing', () => withStore((_, open) => {
   const store = open();
   try {

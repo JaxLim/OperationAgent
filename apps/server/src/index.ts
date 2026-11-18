@@ -5,7 +5,8 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, Au
   ControlHealthSchema, ControlOverviewSchema, EmptyInputSchema, LINKED_PROVIDERS, LinkedProviderRefSchema, McpServerListSchema, McpServerRefSchema,
   McpServerSaveSchema, MODEL_PROVIDER, ModelChoiceSchema, ProviderKeyInputSchema, ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema,
   ProviderRefSchema, ProviderTestResultSchema, SEARCH_PROVIDERS, ModelSettingsSchema, ModelTestResultSchema, PROTOCOL_VERSION,
-  ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
+  ProjectInputSchema, ProjectRefSchema, TASK_API_LIMITS, TaskEventPageSchema, TaskEventsQuerySchema, TaskHistorySearchInputSchema, TaskHistorySearchSchema,
+  TaskListSchema, TaskRefSchema, TaskSnapshotSchema,
   TaskStartInputSchema, TaskStartResultSchema, WorkbenchSettingsSchema, TASK_VIEW_LIMITS, TaskLivePageSchema, TaskLiveQuerySchema,
   TaskMessagePageSchema, TaskMessagesQuerySchema, requestProof, responseProof, SmokeBatchSchema } from '@operation-agent/contracts';
 import type { Bootstrap, AuthHeaders, ControlError, CredentialSlot, ModelSettings, ModelTestResult, ProviderOverview } from '@operation-agent/contracts';
@@ -204,6 +205,14 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   // Read-only task views (P2.2). Every value comes from committed SQLite rows, never from process memory.
   app.get(CONTROL_ROUTES.tasks, (_req, res) => {
     try { res.json(TaskListSchema.parse({ tasks: store.listTasks(TASK_API_LIMITS.maxTasks) })); } catch (error) { failure(res, error); }
+  });
+  app.post(CONTROL_ROUTES.taskHistorySearch, (req, res) => {
+    const input = TaskHistorySearchInputSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    try {
+      if (!store.getProject(input.data.projectId)) { res.status(404).json({ error: 'NOT_FOUND' }); return; }
+      res.json(TaskHistorySearchSchema.parse(store.searchTaskHistory(input.data)));
+    } catch (error) { failure(res, error); }
   });
   app.post(CONTROL_ROUTES.taskSnapshot, (req, res) => {
     const input = TaskRefSchema.safeParse(req.body);

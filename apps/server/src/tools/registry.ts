@@ -43,3 +43,8 @@ export const currentPlatform = (): PlatformKey => `${process.platform}-${process
 
 /** Internal planning only; this registration grants no OS capability. */
 export const PLAN_TOOL_REGISTRATION = Object.freeze({ toolId: 'update_plan', capability: 'plan', channel: 'control-plane' } as const);
+
+/** A fixed provider gateway. Only the search query chosen by Express can leave the process. */
+export const WEB_SEARCH_TOOL_REGISTRATION = Object.freeze({
+  toolId: 'web_search', capability: 'web-search', channel: 'search-gateway', timeoutMs: 12_000,
+} as const);

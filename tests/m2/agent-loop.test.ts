@@ -6,17 +6,19 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
-import { PROTOCOL_VERSION, TaskEventSchema } from '../../packages/contracts/dist/index.js';
-import type { ClaudeModel, RpcRequest, TaskEvent } from '../../packages/contracts/dist/index.js';
+import { PROTOCOL_VERSION, SEARCH_PROVIDERS, TaskEventSchema } from '../../packages/contracts/dist/index.js';
+import type { ClaudeModel, RpcRequest, SearchProvider, TaskEvent } from '../../packages/contracts/dist/index.js';
 import { RpcSession } from '../../packages/worker-transport/dist/index.js';
 import { openStore } from '../../apps/server/dist/persistence/store.js';
 import type { Store } from '../../apps/server/dist/persistence/store.js';
 import { createCredentialService } from '../../apps/server/dist/credentials/service.js';
 import type { CryptoBridge } from '../../apps/server/dist/credentials/bridge.js';
+import type { CredentialService } from '../../apps/server/dist/credentials/service.js';
 import { createTurnGateway } from '../../apps/server/dist/models/turns.js';
 import { createReadAdapter } from '../../apps/server/dist/tools/read-adapter.js';
 import type { ReadAdapter } from '../../apps/server/dist/tools/read-adapter.js';
 import { createToolRouter } from '../../apps/server/dist/tools/router.js';
+import { createSearchGateway } from '../../apps/server/dist/tools/web-search.js';
 import { LiveFeed } from '../../apps/server/dist/agent/live.js';
 import { TaskRunner } from '../../apps/server/dist/agent/runner.js';
 import { createAgentSession } from '../../apps/server/dist/agent/host.js';
@@ -88,7 +90,7 @@ class Inbox {
 interface Harness { store: Store; runner: TaskRunner; projectId: string; root: string; base: string; live: LiveFeed; finished: Map<string, AgentResult>;
   crash(): void; workerDone: Promise<void>; framesToWorker(): number }
 async function withAgent(endpoint: string, run: (harness: Harness) => Promise<void>,
-  options: { configured?: boolean; base?: string; model?: () => ClaudeModel; adapter?: ReadAdapter } = {}): Promise<void> {
+  options: { configured?: boolean; base?: string; model?: () => ClaudeModel; adapter?: ReadAdapter; searchRequest?: typeof fetch } = {}): Promise<void> {
   const cache = resolve('.cache'); mkdirSync(cache, { recursive: true });
   const base = options.base ?? mkdtempSync(resolve(cache, 'agent-loop-'));
   const root = resolve(base, 'workspace'); mkdirSync(resolve(root, 'src'), { recursive: true });
@@ -99,8 +101,12 @@ async function withAgent(endpoint: string, run: (harness: Harness) => Promise<vo
   const projectId = store.listProjects()[0]?.id ?? store.addProject({ name: 'demo', path: root }).id;
   const credentials = createCredentialService(store, fakeBridge());
   if (options.configured !== false) await credentials.set(KEY);
+  const keys = Object.fromEntries(SEARCH_PROVIDERS.map(provider => [provider, createCredentialService(store.credentialStore(provider), fakeBridge())])) as
+    Record<SearchProvider, CredentialService>;
+  const search = createSearchGateway({ settings: () => store.getSettings(), credentials: keys, ...(options.searchRequest ? { request: options.searchRequest } : {}) });
   const live = new LiveFeed();
-  const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store, ...(options.adapter ? { adapter: options.adapter } : {}) }),
+  const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }),
+    tools: createToolRouter({ store, search, ...(options.adapter ? { adapter: options.adapter } : {}) }),
     model: options.model ?? (() => 'claude-sonnet-5-5'), live, stopGraceMs: () => 5_000,
     saveCheckpoints: () => store.getSettings().saveCheckpoints === true, maxTurns: () => store.getSettings().maxAgentTurns });
   const identity = { expressRunId: randomUUID(), workerRunId: randomUUID() };
@@ -135,6 +141,47 @@ const until = async (check: () => boolean, ms = 10_000): Promise<void> => {
 };
 const events = (store: Store, taskId: string): TaskEvent[] => store.listTaskEvents(taskId, 0);
 const states = (list: TaskEvent[]): string[] => list.flatMap(event => event.type === 'task_state_changed' ? [event.payload.to] : []);
+
+test('agent search: configured search returns references to the model and audits only metadata; off stays local', async () => {
+  const query = 'public-reference-' + randomUUID();
+  const key = 'tvly-test-' + randomUUID();
+  const url = 'https://example.com/public-guide';
+  const observed: { url: string; init: RequestInit }[] = [];
+  await withProvider([res => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ results: [{ title: 'Public guide', url, content: 'Available reference snippet' }] }));
+  }], async (searchEndpoint, searchBodies) => withProvider([
+    res => sse(res, [start, ...tool(0, 'toolu_public', 'web_search', { query, maxResults: 2 }), ...stop('tool_use')]),
+    res => sse(res, [start, ...text(0, `[Public guide](${url})`), ...stop('end_turn')]),
+    res => sse(res, [start, ...text(0, 'Web search is off'), ...stop('end_turn')]),
+  ], async (endpoint, modelBodies) => withAgent(endpoint, async ({ store, runner, projectId }) => {
+    await createCredentialService(store.credentialStore('tavily'), fakeBridge()).set(key);
+    store.saveSettings({ ...store.getSettings(), webSearchMode: 'any', webSearchProvider: 'exa' });
+    const task = await runner.start(projectId, 'Locate public documentation', randomUUID());
+    await until(() => store.getTask(task.id)?.state === 'COMPLETED');
+    assert.deepEqual(searchBodies, [{ query, max_results: 2, search_depth: 'basic', include_raw_content: false }]);
+    assert.equal(observed[0]?.url, 'https://api.tavily.com/search');
+    assert.equal(new Headers(observed[0]?.init.headers).get('authorization'), `Bearer ${key}`);
+    assert.equal(observed[0]?.init.redirect, 'error');
+    assert.match(JSON.stringify(modelBodies[1]?.messages), /untrusted reference data/);
+    assert.match(JSON.stringify(modelBodies[1]?.messages), /example\.com\/public-guide/);
+    assert.doesNotMatch(JSON.stringify(modelBodies), new RegExp(key));
+    const timeline = events(store, task.id);
+    const audit = timeline.find(event => event.type === 'tool_call');
+    assert.ok(audit?.type === 'tool_call' && audit.payload.tool === 'web_search' && audit.payload.target === 'tavily' && audit.payload.status === 'ok');
+    assert.equal(JSON.stringify(timeline).includes(query), false);
+    assert.equal(JSON.stringify(timeline).includes(url), false);
+
+    store.saveSettings({ ...store.getSettings(), webSearchMode: 'off' });
+    const offline = await runner.start(projectId, 'Work without web search', randomUUID());
+    await until(() => store.getTask(offline.id)?.state === 'COMPLETED');
+    assert.equal((modelBodies[2]?.tools as { name: string }[]).some(item => item.name === 'web_search'), false);
+    assert.equal(observed.length, 1);
+  }, { searchRequest: (input, init) => {
+    observed.push({ url: String(input), init: init! });
+    return fetch(searchEndpoint, init);
+  } })));
+});
 
 test('conversation: follow-up reuses the running control plane history with checkpoint saving off', async () => {
   await withProvider([

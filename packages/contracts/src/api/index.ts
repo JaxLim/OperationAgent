@@ -14,7 +14,7 @@ export const CONTROL_POLICY = Object.freeze({ handshakeMs: 10_000, requestMs: 2_
 export const SIDECAR_ENVIRONMENT = Object.freeze(['SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'LOCALAPPDATA', 'HOME', 'TMPDIR', 'LANG'] as const);
 export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '/v1/heartbeat', records: '/v1/smoke-records', taskStart: '/v1/tasks/start',
   overview: '/v1/overview', settings: '/v1/settings', projects: '/v1/projects', projectRemove: '/v1/projects/remove', runs: '/v1/runs',
-  tasks: '/v1/tasks', taskSnapshot: '/v1/tasks/snapshot', taskEvents: '/v1/tasks/events',
+  tasks: '/v1/tasks', taskHistorySearch: '/v1/tasks/history-search', taskSnapshot: '/v1/tasks/snapshot', taskEvents: '/v1/tasks/events',
   usage: '/v1/settings/usage',
   saveCustomProvider: '/v1/providers/custom/save', removeCustomProvider: '/v1/providers/custom/remove',
   beginHfLogin: '/v1/providers/hf/begin', pollHfLogin: '/v1/providers/hf/poll', cancelHfLogin: '/v1/providers/hf/cancel', configureHf: '/v1/providers/hf/configure',

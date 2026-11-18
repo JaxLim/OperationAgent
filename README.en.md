@@ -26,7 +26,9 @@ The project is delivered in gated phases, each with evidence that can be re-chec
 - Browse curated public repositories, save custom sources and preview versioned `SKILL.md` files in the GitHub skill catalog. **Settings → Integrations** links to the skill catalog and existing model, web search and MCP configuration.
 - The **Files** panel lists successful file reads. **Results** shows the task state and latest saved response.
 - Task infrastructure: a task state machine, an append-only task event store, snapshot and cursor-paged APIs, and the task list, conversation and event timeline in the workbench. A build run from source does not launch the isolated worker, so there a submitted request is refused and no task is created.
-- Model provider settings: for Anthropic, OpenAI, Google Gemini and OpenRouter you can enter an API key, load the model list and test the connection; keys for web-search providers (Exa, Tavily, Brave, Firecrawl) can be saved. Every key is encrypted by the operating system (Electron `safeStorage`) before it is stored, and the database holds only ciphertext.
+- Model provider settings let you save API keys, load model lists and test connections for Anthropic, OpenAI, Google Gemini and OpenRouter. The app encrypts keys with Electron `safeStorage` before writing them to the database.
+- Enable web search in Settings and supply a key for Exa, Tavily, Brave or Firecrawl. The agent can retrieve titles, links and snippets from the selected provider. Web search is off by default.
+- Search saved prompts and answers for the current project from the sidebar, and open matches beyond the recent task list.
 - Agent profiles and MCP server definitions: you can create and edit them, but for now they are configuration only; nothing runs, launches or connects.
 - The interface is available in English, Simplified Chinese and Japanese, with System, Light and Dark themes and eight colour palettes.
 - Diagnostics: control-plane state, a database self-test, run history and the current state of every security capability.
@@ -35,7 +37,7 @@ The project is delivered in gated phases, each with evidence that can be re-chec
 **Not implemented yet**
 
 - A recorded run against the real Claude API: the agent has been verified end to end on the CI runner against a local stand-in for the model service, not against the real service. Treat the first real use as untested.
-- Sandboxes for file writes and shell commands, approvals, the web-search tool, the MCP host.
+- Sandboxes for file writes and shell commands, approvals and the MCP host.
 - Custom providers accept an OpenAI-compatible base URL, model ID and dedicated key. Local HTTP requires opt-in. Hugging Face device login uses the public OAuth client ID registered for your app. Real account authorization has not been exercised. [Registration](https://huggingface.co/docs/hub/oauth)
 - ChatGPT plan and GitHub Copilot account sign-in are pending.
 - Process-level acceptance and SEC-W01 on macOS and Linux (currently NOT_RUN).

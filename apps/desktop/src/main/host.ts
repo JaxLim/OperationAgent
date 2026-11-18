@@ -11,7 +11,8 @@ import { AgentListSchema, AgentRefSchema, AgentSaveSchema, ApiKeyInputSchema, CO
   ModelSettingsViewSchema, ModelTestResultSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, EmptyInputSchema,
   IPC_CHANNELS, ProjectAddResultSchema, ProjectInputSchema, ProjectListSchema, ProjectRefSchema, ProjectSchema, ProviderKeyInputSchema,
   ProviderModelChoiceSchema, ProviderModelListSchema, ProviderOverviewSchema, ProviderOverviewViewSchema, ProviderRefSchema, ProviderTestResultSchema,
-  SmokeBatchSchema, THEME_CANVAS, TaskEventPageSchema, TaskEventsQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema,
+  SmokeBatchSchema, THEME_CANVAS, TaskEventPageSchema, TaskEventsQuerySchema, TaskHistorySearchInputSchema, TaskHistorySearchSchema,
+  TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema,
   TaskStartRefusalSchema, TaskStartResultSchema, WorkbenchSettingsSchema, WORKBENCH_LIMITS, TASK_VIEW_LIMITS, TaskLivePageSchema, TaskLiveQuerySchema,
   TaskMessagePageSchema, TaskMessagesQuerySchema } from '@operation-agent/contracts';
 import type { DesktopStatus, ModelSettings, ModelSettingsView, ProjectAddResult, ProviderOverview, ProviderOverviewView, TaskStartResult, ThemeId,
@@ -148,6 +149,8 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
     }
   });
   register(IPC_CHANNELS.listTasks, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.tasks, TaskListSchema); });
+  register(IPC_CHANNELS.searchTaskHistory, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.taskHistorySearch, TaskHistorySearchSchema, TaskHistorySearchInputSchema.parse(input)));
   register(IPC_CHANNELS.getTask, async input => supervisor.call('POST', CONTROL_ROUTES.taskSnapshot, TaskSnapshotSchema, TaskRefSchema.parse(input)));
   register(IPC_CHANNELS.listTaskMessages, async input =>
     supervisor.call('POST', CONTROL_ROUTES.taskMessages, TaskMessagePageSchema, TaskMessagesQuerySchema.parse(input)));

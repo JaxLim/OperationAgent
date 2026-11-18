@@ -66,7 +66,7 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
   assert.equal(first.renderer.node, 'undefined'); assert.equal(first.renderer.require, 'undefined');
   assert.deepEqual(first.renderer.keys.sort(), ['getFoundationInfo', 'getControlPlaneHealth', 'listSmokeRecords', 'writeSmokeRecords', 'getDesktopStatus',
     'retryControlPlane', 'getOverview', 'getSettings', 'saveSettings', 'listProjects', 'addProject', 'removeProject', 'listRuns', 'startTask', 'stopTask', 'listTaskMessages', 'readTaskLive',
-    'listTasks', 'getTask', 'listTaskEvents', 'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
+    'listTasks', 'searchTaskHistory', 'getTask', 'listTaskEvents', 'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
     'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel', 'listUsage',
     'saveCustomProvider', 'removeCustomProvider', 'beginHfLogin', 'pollHfLogin', 'cancelHfLogin', 'configureHf',
     'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer', 'listProjectSkills', 'setProjectSkill',
@@ -226,6 +226,41 @@ test('the Workbench lists committed tasks, replays their events and resyncs afte
   // The new Express instance serves the same committed log; the view resumes from its cursor.
   const after = await host.command('task-ui', { taskId: running, entries: 4, fresh: true });
   assert.deepEqual([after.entries, after.rows], [4, 2]); assert.match(after.meta, /4 ?\/ ?4 events/);
+});
+
+test('project history searches committed text outside the recent list and opens the matching task', { timeout: 60_000 }, async t => {
+  const create = await fixture(t);
+  const seed = openStore(resolve(create.directory, 'database'), randomUUID());
+  const projectId = seed.addProject({ name: 'Active project', path: 'C:/OperationAgent/history' }).id;
+  const otherProjectId = seed.addProject({ name: 'Other project', path: 'C:/OperationAgent/other-history' }).id;
+  const query = '历史记录-50%_ready';
+  const saved = id => {
+    const task = seed.createTask(id, randomUUID()).task;
+    seed.transitionTask(task.id, 'QUEUED', { requestId: randomUUID() });
+    const prompt = seed.addTaskMessage(task.id, 'user', 0, 'Find the old project notes.');
+    seed.appendAgentEvent(task.id, 'user_message', { messageId: prompt.id, chars: prompt.text.length });
+    seed.transitionTask(task.id, 'RUNNING', { requestId: randomUUID() });
+    const answer = seed.addTaskMessage(task.id, 'assistant', 1, `Found <em data-injected-history>${query}</em>.`);
+    seed.appendAgentEvent(task.id, 'assistant_turn', { turn: 1, model: 'claude-sonnet-5-5', messageId: answer.id, stopReason: 'end_turn',
+      toolCalls: 0, fallback: false, usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 } });
+    seed.transitionTask(task.id, 'COMPLETED', { requestId: randomUUID() });
+    return task.id;
+  };
+  const taskId = saved(projectId);
+  const otherTaskId = saved(otherProjectId);
+  for (let i = 0; i < 55; i++) {
+    const task = seed.createTask(projectId, randomUUID()).task;
+    seed.transitionTask(task.id, 'QUEUED', { requestId: randomUUID() });
+    seed.transitionTask(task.id, 'RUNNING', { requestId: randomUUID() });
+    seed.transitionTask(task.id, 'COMPLETED', { requestId: randomUUID() });
+  }
+  seed.saveSettings({ ...seed.getSettings(), activeProjectId: projectId, language: 'en' });
+  seed.close(true);
+
+  const host = await create();
+  const result = await host.command('task-history-ui', { taskId, otherTaskId, query });
+  assert.ok(result.excerpt.includes(query));
+  assert.deepEqual([result.recent, result.outside, result.renderedMarkup, result.stillOpen], [false, false, false, true]);
 });
 
 test('M2 conversation: a committed agent task shows its prompt, Markdown answers, tool calls and outcome; model text stays inert', { timeout: 90_000 }, async t => {

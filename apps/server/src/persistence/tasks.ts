@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { USAGE_PAGE_SIZE, UsagePageSchema } from '@operation-agent/contracts';
 import type { UsagePage, UsageQuery } from '@operation-agent/contracts';
-import { AGENT_EVENT_TYPES, CHECKPOINT_LIMITS, TASK_MESSAGE_LIMITS, TERMINAL_TASK_STATES, TaskCheckpointSchema, TaskEventSchema, TaskMessageSchema, TaskSnapshotSchema, TaskStateSchema,
+import { AGENT_EVENT_TYPES, CHECKPOINT_LIMITS, TASK_HISTORY_LIMITS, TASK_MESSAGE_LIMITS, TERMINAL_TASK_STATES, TaskCheckpointSchema, TaskEventSchema, TaskMessageSchema, TaskSnapshotSchema, TaskStateSchema,
   TaskPlanSchema, ToolCallViewSchema, ToolOutputSummarySchema, UpdatePlanInputSchema, checkTaskTransition } from '@operation-agent/contracts';
-import type { AgentEventType, SideEffectStatus, TaskEvent, TaskMessage, TaskSnapshot, TaskState, ToolOutputSummary,
+import type { AgentEventType, SideEffectStatus, TaskEvent, TaskHistorySearch, TaskHistorySearchInput, TaskMessage, TaskSnapshot, TaskState, ToolOutputSummary,
   TaskCheckpoint, TaskPlan, TransitionContext, UpdatePlanInput } from '@operation-agent/contracts';
 
 // ARCHITECTURE §7.3: every state change and its event commit in one transaction, the per-task seq is gap-free,
@@ -45,6 +45,7 @@ export interface TaskLog {
   taskForRequest(requestId: string): TaskSnapshot | null;
   /** Most recently created first; omits plans to keep the bounded list response small. */
   listTasks(limit: number): TaskSnapshot[];
+  searchTaskHistory(input: TaskHistorySearchInput): TaskHistorySearch;
   /** Events after the cursor in seq order, at most one page. Throws NOT_FOUND for an unknown task. */
   listTaskEvents(taskId: string, afterSeq: number, limit?: number): TaskEvent[];
   /**
@@ -73,6 +74,16 @@ export function createTaskLog(db: Database.Database): TaskLog {
   const selectRecent = db.prepare<[number], TaskRow>(`SELECT ${taskColumns} FROM tasks
     WHERE NOT EXISTS (SELECT 1 FROM tasks next WHERE next.previous_task_id = tasks.id)
     ORDER BY created_at DESC, id LIMIT ?`);
+  const selectSearchableMessages = db.prepare<[string, number, number], { taskId: string; role: TaskMessage['role']; text: Buffer }>(`
+    WITH recent AS MATERIALIZED (
+      SELECT message.rowid AS message_id
+      FROM tasks JOIN task_messages message ON message.task_id = tasks.id
+      WHERE tasks.project_id = ?
+      ORDER BY message.rowid DESC LIMIT ?
+    )
+    SELECT message.task_id AS taskId, message.role, substr(CAST(message.text AS BLOB), 1, ?) AS text
+    FROM recent JOIN task_messages message ON message.rowid = recent.message_id
+    ORDER BY recent.message_id DESC`);
   const selectCheckpoint = db.prepare<[string], { checkpoint: string }>('SELECT checkpoint FROM task_checkpoints WHERE task_id = ?');
   const writeCheckpoint = db.prepare(`INSERT INTO task_checkpoints(task_id, checkpoint) VALUES (?, ?)
     ON CONFLICT(task_id) DO UPDATE SET checkpoint = excluded.checkpoint`);
@@ -269,6 +280,30 @@ export function createTaskLog(db: Database.Database): TaskLog {
     listTasks(limit) {
       if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error('VALIDATION_ERROR');
       return selectRecent.all(limit).map(view);
+    },
+    searchTaskHistory({ projectId, query }) {
+      const { maxScannedMessages, maxScannedBytesPerMessage, maxHits, maxExcerptChars } = TASK_HISTORY_LIMITS;
+      const rows = selectSearchableMessages.all(projectId, maxScannedMessages + 1, maxScannedBytesPerMessage + 1);
+      const needle = query.toLowerCase();
+      const hits: TaskHistorySearch['hits'] = [];
+      const matched = new Set<string>();
+      let partial = rows.length > maxScannedMessages;
+      for (const row of rows.slice(0, maxScannedMessages)) {
+        if (matched.has(row.taskId)) continue;
+        const clipped = row.text.length > maxScannedBytesPerMessage;
+        partial ||= clipped;
+        const text = clipped ? new TextDecoder().decode(row.text.subarray(0, maxScannedBytesPerMessage), { stream: true }) : row.text.toString('utf8');
+        const position = text.toLowerCase().indexOf(needle);
+        if (position < 0) continue;
+        if (hits.length === maxHits) { partial = true; break; }
+        const snapshot = selectTask.get(row.taskId)!;
+        const start = Math.max(0, position - 36);
+        const end = start + maxExcerptChars - 2;
+        const excerpt = (start ? '…' : '') + text.slice(start, end).replace(/\s+/gu, ' ').trim() + (text.length > end || clipped ? '…' : '');
+        matched.add(row.taskId);
+        hits.push({ task: view(snapshot), excerpt, role: row.role });
+      }
+      return { hits, partial };
     },
     listTaskEvents(taskId, afterSeq, limit = TASK_LOG_LIMITS.maxEventsPerPage) {
       if (!Number.isSafeInteger(afterSeq) || afterSeq < 0 || !Number.isInteger(limit) || limit < 1 || limit > TASK_LOG_LIMITS.maxEventsPerPage) {

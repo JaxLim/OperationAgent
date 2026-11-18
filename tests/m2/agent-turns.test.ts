@@ -4,8 +4,9 @@ import { createServer } from 'node:http';
 import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import { AGENT_RUN_LIMITS, AGENT_TOOL_DEFINITIONS, ListDirectoryArgsSchema, ReadFileArgsSchema, TurnDeltaSchema, TurnOutcomeSchema,
-  TurnViewSchema } from '../../packages/contracts/dist/index.js';
-import type { TurnDelta } from '../../packages/contracts/dist/index.js';
+  TurnViewSchema, WebSearchArgsSchema } from '../../packages/contracts/dist/index.js';
+import type { SearchProvider, TurnDelta, WorkbenchSettings } from '../../packages/contracts/dist/index.js';
+import { createSearchGateway } from '../../apps/server/dist/tools/web-search.js';
 import { createTurnGateway, failureOf, guardedFetch, replayContent, stopReasonOf } from '../../apps/server/dist/models/turns.js';
 import { Conversation, NOT_EXECUTED } from '../../apps/server/dist/agent/conversation.js';
 
@@ -61,7 +62,7 @@ const input = (overrides: Record<string, unknown> = {}) => ({ apiKey: KEY, model
   messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'What does README.md say?' }] }], tools: ['read_file', 'list_directory'] as const, ...overrides });
 
 test('agent contracts: tool JSON schemas match the Zod argument contracts; views, deltas and outcomes are strict', () => {
-  for (const [name, schema] of [['read_file', ReadFileArgsSchema], ['list_directory', ListDirectoryArgsSchema]] as const) {
+  for (const [name, schema] of [['read_file', ReadFileArgsSchema], ['list_directory', ListDirectoryArgsSchema], ['web_search', WebSearchArgsSchema]] as const) {
     const json = AGENT_TOOL_DEFINITIONS[name].input_schema as { required: string[]; properties: Record<string, unknown>; additionalProperties: boolean };
     assert.equal(json.additionalProperties, false);
     assert.deepEqual(Object.keys(json.properties).sort(), Object.keys(schema.shape).sort(), name);
@@ -78,6 +79,79 @@ test('agent contracts: tool JSON schemas match the Zod argument contracts; views
   assert.equal(TurnViewSchema.safeParse({ ...view, toolCalls: [{ id: 'bad id!', name: 'read_file', input: {} }] }).success, false);
   assert.equal(TurnDeltaSchema.safeParse({ kind: 'text', text: '' }).success, false);
   assert.equal(TurnOutcomeSchema.safeParse({ status: 'failed', code: 'rate_limited', retryable: true, httpStatus: 429, body: 'x' }).success, false);
+});
+
+test('web search: fixed provider requests, projected results, access checks and cancellation', async () => {
+  const modes: { webSearchMode: WorkbenchSettings['webSearchMode']; webSearchProvider: SearchProvider } =
+    { webSearchMode: 'default', webSearchProvider: 'exa' };
+  const searchKey = 'search-key-canary';
+  let configured = true;
+  const key = {
+    status: () => configured ? { configured: true as const, hint: 'nary', updatedAt: new Date().toISOString() } : { configured: false as const },
+    async withKey<T>(run: (key: string) => Promise<T>) {
+      return configured ? { ok: true as const, value: await run(searchKey) } : { ok: false as const, reason: 'not_configured' as const };
+    },
+  };
+  const rows = [
+    { url: 'file:///C:/sensitive', title: 'Never use as a source' },
+    { url: 'https://example.com/key', title: searchKey },
+    { url: 'https://example.com/source', title: 'Source', description: 'x'.repeat(4_000) },
+    { url: 'https://example.com/second', title: 'Too many results' },
+  ];
+  const cases = [
+    ['exa', 'https://api.exa.ai/search', 'x-api-key', searchKey, { results: rows }],
+    ['tavily', 'https://api.tavily.com/search', 'authorization', `Bearer ${searchKey}`, { results: rows }],
+    ['brave', 'https://api.search.brave.com/res/v1/web/search', 'x-subscription-token', searchKey, { web: { results: rows } }],
+    ['firecrawl', 'https://api.firecrawl.dev/v2/search', 'authorization', `Bearer ${searchKey}`, { success: true, data: { web: rows } }],
+  ] as const;
+  const calls: { url: string; headers: Headers; body: string | null; redirect: RequestInit['redirect'] }[] = [];
+  let reply = '{}', status = 200;
+  let waitForCancellation = false;
+  const gateway = createSearchGateway({
+    settings: () => modes, credentials: { exa: key, tavily: key, brave: key, firecrawl: key },
+    request: async (url, options) => {
+      calls.push({ url: String(url), headers: new Headers(options?.headers), body: typeof options?.body === 'string' ? options.body : null,
+        redirect: options?.redirect });
+      if (waitForCancellation) await new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new Error('request aborted')), { once: true });
+      });
+      return new Response(reply, { status });
+    },
+  });
+  const input = { query: 'find public guidance', maxResults: 1 };
+  const signal = new AbortController().signal;
+  for (const [provider, url, header, expectedKey, response] of cases) {
+    modes.webSearchProvider = provider;
+    reply = JSON.stringify(response);
+    assert.equal(gateway.selectProvider(), provider);
+    assert.deepEqual(await gateway.search(provider, input, signal), {
+      status: 'ok', hits: [{ title: 'Source', url: 'https://example.com/source', snippet: 'x'.repeat(800) }],
+    });
+    const call = calls.at(-1)!;
+    assert.equal(call.url, url);
+    assert.equal(call.headers.get(header), expectedKey);
+    assert.equal(call.redirect, 'error');
+    assert.equal(Object.values(JSON.parse(call.body!)).includes(input.query), true);
+  }
+  modes.webSearchMode = 'off';
+  assert.equal(gateway.selectProvider(), null);
+  assert.deepEqual(await gateway.search('firecrawl', input, signal), { status: 'refused', code: 'WEB_SEARCH_DISABLED' });
+  modes.webSearchMode = 'default';
+  configured = false;
+  assert.equal(gateway.selectProvider(), null);
+  assert.deepEqual(await gateway.search('firecrawl', input, signal), { status: 'refused', code: 'WEB_SEARCH_NOT_CONFIGURED' });
+  assert.equal(calls.length, 4);
+  configured = true;
+  status = 429;
+  assert.deepEqual(await gateway.search('firecrawl', input, signal), { status: 'failed', code: 'WEB_SEARCH_RATE_LIMITED' });
+  status = 200;
+  reply = 'x'.repeat(256 * 1024 + 1);
+  assert.deepEqual(await gateway.search('firecrawl', input, signal), { status: 'failed', code: 'WEB_SEARCH_INVALID_RESPONSE' });
+  waitForCancellation = true;
+  const controller = new AbortController();
+  const pending = gateway.search('firecrawl', input, controller.signal);
+  controller.abort();
+  assert.deepEqual(await pending, { status: 'failed', code: 'CANCELLED' });
 });
 
 test('streaming turn: deltas arrive live, thinking replays verbatim, tool input is assembled, and the request is cached and strict', async () => {

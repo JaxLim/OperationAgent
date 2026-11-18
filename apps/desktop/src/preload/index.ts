@@ -5,7 +5,8 @@ import { CustomProviderInputSchema, CustomProviderRefSchema, HfConfigSchema, HfL
   HfLoginStateSchema, HfSessionSchema, UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
 import { ApiKeyInputSchema, ControlHealthSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, FoundationInfoSchema, IPC_CHANNELS,
   PROTOCOL_VERSION, ProjectAddResultSchema, ProjectListSchema, ProjectRefSchema, SmokeBatchSchema, SmokeRecordsSchema,
-  TaskEventPageSchema, TaskEventsQuerySchema, TaskLivePageSchema, TaskLiveQuerySchema, TaskMessagePageSchema, TaskMessagesQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
+  TaskEventPageSchema, TaskEventsQuerySchema, TaskHistorySearchInputSchema, TaskHistorySearchSchema, TaskLivePageSchema, TaskLiveQuerySchema,
+  TaskMessagePageSchema, TaskMessagesQuerySchema, TaskListSchema, TaskRefSchema, TaskSnapshotSchema, TaskStartInputSchema, TaskStartResultSchema,
   WorkbenchSettingsSchema, ModelChoiceSchema, ModelSettingsViewSchema, ModelTestResultSchema, ProviderKeyInputSchema, ProviderOverviewViewSchema,
   ProviderRefSchema, LinkedProviderRefSchema, ProviderTestResultSchema, ProviderModelListSchema, ProviderModelChoiceSchema, AgentListSchema, AgentSaveSchema,
   AgentRefSchema, McpServerListSchema, McpServerSaveSchema, McpServerRefSchema } from '@operation-agent/contracts';
@@ -30,6 +31,8 @@ const api: DesktopApi = {
   listRuns: async () => ControlRunListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listRuns, {})),
   startTask: async input => TaskStartResultSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.startTask, TaskStartInputSchema.parse(input))),
   listTasks: async () => TaskListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listTasks, {})),
+  searchTaskHistory: async input =>
+    TaskHistorySearchSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.searchTaskHistory, TaskHistorySearchInputSchema.parse(input))),
   getTask: async input => TaskSnapshotSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.getTask, TaskRefSchema.parse(input))),
   listTaskMessages: async input => TaskMessagePageSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listTaskMessages, TaskMessagesQuerySchema.parse(input))),
   readTaskLive: async input => TaskLivePageSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.readTaskLive, TaskLiveQuerySchema.parse(input))),

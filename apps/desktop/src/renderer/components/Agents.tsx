@@ -13,7 +13,7 @@ import { IconBox, IconInfo, IconLock, IconPlus, IconPuzzle, IconSearch, IconShie
 
 /** The gate that must pass before a tool can do anything; asking for a tool in a profile never lifts it. */
 const TOOL_GATE: Readonly<Record<AgentTool, string>> = {
-  read_file: 'AGENT_PROFILE_UNAVAILABLE', git_read: 'SEC-22', web_search: 'WEB_SEARCH_UNAVAILABLE', mcp: 'MCP_HOST_UNAVAILABLE',
+  read_file: 'AGENT_PROFILE_UNAVAILABLE', git_read: 'SEC-22', web_search: 'AGENT_PROFILE_UNAVAILABLE', mcp: 'MCP_HOST_UNAVAILABLE',
   write_file: 'SANDBOX_UNAVAILABLE', bash: 'SANDBOX_UNAVAILABLE',
 };
 const BUILT_IN_TEXT: Readonly<Record<string, MessageKey>> = { general: 'agent.general', plan: 'agent.plan', explore: 'agent.explore', review: 'agent.review' };

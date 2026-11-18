@@ -65,6 +65,39 @@ process.on('message', async message => {
             projects: await api.listProjects(), after: await api.getSettings() };
         })()`);
         break;
+      case 'task-history-ui': {
+        const input = JSON.stringify(message.input);
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const input = ${input};
+          const wait = async check => {
+            for (let attempt = 0; attempt < 240; attempt++) {
+              const result = check();
+              if (result) return result;
+              await new Promise(done => setTimeout(done, 50));
+            }
+            throw new Error('TASK_HISTORY_UI_TIMEOUT');
+          };
+          const field = await wait(() => document.querySelector('.app[data-loaded="true"] .nav-search input'));
+          const recent = await window.operationAgent.listTasks();
+          const setQuery = value => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(field, value);
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+          };
+          setQuery(input.query);
+          const hit = await wait(() => document.querySelector('button[data-task-id="' + input.taskId + '"][data-history-hit]'));
+          const excerpt = hit.querySelector('[data-history-excerpt]').textContent;
+          const renderedMarkup = !!hit.querySelector('[data-injected-history]');
+          const outside = !!document.querySelector('button[data-task-id="' + input.otherTaskId + '"][data-history-hit]');
+          hit.click();
+          const detail = await wait(() => document.querySelector('section[data-task-id="' + input.taskId + '"] .conversation'));
+          await wait(() => detail.querySelector('.conv-answer')?.textContent?.includes(input.query));
+          setQuery('');
+          await wait(() => !document.querySelector('[data-history-hit]'));
+          return { excerpt, renderedMarkup, outside, recent: recent.tasks.some(task => task.id === input.taskId),
+            stillOpen: detail.isConnected };
+        })()`);
+        break;
+      }
       case 'task-ui': {
         // Drives the real Workbench DOM: optionally clicks a task row, then waits until its committed log is synced.
         const { taskId, click, entries, fresh, language } = message.input;

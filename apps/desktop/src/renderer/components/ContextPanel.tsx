@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { MessageKey } from '../i18n';
 import { useT } from '../locale';
-import { useStore } from '../state';
+import { selectedTask, useStore } from '../state';
 import { duration, shortId } from './format';
 import { IconCheck, IconDiff, IconFile, IconFlask, IconInfo, IconLock, IconShield, IconX } from './Icons';
 import { Markdown } from './Markdown';
@@ -75,7 +75,7 @@ function StatusTab() {
 
 function TaskTab({ tab }: { tab: 'files' | 'results' }) {
   const t = useT();
-  const task = useStore(s => s.tasks.find(item => item.id === s.selectedTaskId && item.projectId === s.settings?.activeProjectId));
+  const task = useStore(selectedTask);
   const view = useStore(s => task ? s.taskViews[task.id] : undefined);
   const messages = useStore(s => task ? s.conversations[task.id]?.messages : undefined);
   if (!task) return <div className="panel-empty"><p className="panel-empty-text">{t('panel.selectTask')}</p></div>;

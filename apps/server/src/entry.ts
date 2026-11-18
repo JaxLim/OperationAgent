@@ -1,18 +1,20 @@
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { BootstrapSchema, CONTROL_POLICY, PROTOCOL_VERSION, ShutdownSchema } from '@operation-agent/contracts';
-import type { Bootstrap } from '@operation-agent/contracts';
+import { BootstrapSchema, CONTROL_POLICY, PROTOCOL_VERSION, SEARCH_PROVIDERS, ShutdownSchema } from '@operation-agent/contracts';
+import type { Bootstrap, SearchProvider } from '@operation-agent/contracts';
 import { createControlPlane } from './index.js';
 import { openStore } from './persistence/store.js';
 import type { Store } from './persistence/store.js';
 import { createIpcCryptoBridge } from './credentials/bridge.js';
 import type { IpcCryptoBridge } from './credentials/bridge.js';
 import { createCredentialService } from './credentials/service.js';
+import type { CredentialService } from './credentials/service.js';
 import { createTurnGateway } from './models/turns.js';
 import { createModelConnections } from './models/connections.js';
 import { createToolRouter } from './tools/router.js';
 import { ProjectSkillService } from './tools/project-skills.js';
+import { createSearchGateway } from './tools/web-search.js';
 import { LiveFeed } from './agent/live.js';
 import { TaskRunner } from './agent/runner.js';
 import { AgentWorkerSupervisor } from './agent/supervisor.js';
@@ -52,7 +54,10 @@ async function start(message: unknown): Promise<void> {
   // The Task Runner exists only when Main handed over a verified isolated Worker runtime (packaged Windows x64 builds).
   let runner: TaskRunner | undefined;
   const connections = createModelConnections(store, bridge);
-  const tools = createToolRouter({ store });
+  const keys = Object.fromEntries(SEARCH_PROVIDERS.map(provider => [provider, createCredentialService(store!.credentialStore(provider), bridge!)])) as
+    Record<SearchProvider, CredentialService>;
+  const search = createSearchGateway({ settings: () => store!.getSettings(), credentials: keys });
+  const tools = createToolRouter({ store, search });
   const skills = new ProjectSkillService(store, tools);
   if (input.agentRuntime) {
     const openStore = store;

@@ -45,6 +45,7 @@ export interface AppState {
   taskViews: Readonly<Record<string, TaskView>>;
   conversations: Readonly<Record<string, ConversationView>>;
   selectedTaskId: string | null;
+  selectedHistoryTask: TaskSnapshot | null;
   /** Model choice and credential status as Express reports them; never key material. */
   model: ModelSettingsView | null;
   modelTest: { state: 'idle' | 'running' } | { state: 'done'; result: ModelTestResult } | { state: 'failed'; code: string };
@@ -57,7 +58,8 @@ export interface AppState {
 }
 
 let state: AppState = { connection: 'connecting', desktop: null, overview: null, settings: null, projects: [], runs: [],
-  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, conversations: {}, selectedTaskId: null, model: null, modelTest: { state: 'idle' },
+  submissions: [], notices: [], loaded: false, tasks: [], taskViews: {}, conversations: {}, selectedTaskId: null, selectedHistoryTask: null,
+  model: null, modelTest: { state: 'idle' },
   providers: null, agents: null, mcpServers: null, saveStatus: { state: 'idle' } };
 const listeners = new Set<() => void>();
 function set(next: Partial<AppState>): void { state = { ...state, ...next }; for (const listener of listeners) listener(); }
@@ -67,6 +69,11 @@ export const store = {
 };
 export function useStore<T>(select: (value: AppState) => T): T {
   return useSyncExternalStore(store.subscribe, () => select(state));
+}
+
+export function selectedTask(value: AppState): TaskSnapshot | undefined {
+  const task = value.tasks.find(item => item.id === value.selectedTaskId) ?? value.selectedHistoryTask;
+  return task && task.id === value.selectedTaskId && task.projectId === value.settings?.activeProjectId ? task : undefined;
 }
 
 const api = (): DesktopApi => window.operationAgent;
@@ -102,20 +109,35 @@ async function loadDomain(): Promise<void> {
     const fallback = projects.projects[0]?.id ?? null;
     if (fallback !== settings.activeProjectId) active = await api().saveSettings({ ...settings, activeProjectId: fallback });
   }
+  if (state.selectedHistoryTask && state.selectedHistoryTask.projectId !== active.activeProjectId) actions.selectTask(null);
   set({ settings: active, projects: projects.projects, runs: runs.runs, overview, model, providers, loaded: true });
 }
 
 const EMPTY_VIEW: TaskView = { events: [], appliedSeq: 0, replayed: null, sync: 'syncing', error: null, syncedAt: 0 };
 const syncing = new Set<string>();
+
+function tracksTask(taskId: string): boolean {
+  return state.selectedTaskId === taskId || state.tasks.some(task => task.id === taskId);
+}
+
+function applySnapshot(snapshot: TaskSnapshot): void {
+  if (state.tasks.some(task => task.id === snapshot.id)) {
+    set({ tasks: state.tasks.map(task => task.id === snapshot.id ? snapshot : task) });
+  } else if (state.selectedTaskId === snapshot.id && state.settings?.activeProjectId === snapshot.projectId) {
+    set({ selectedHistoryTask: snapshot });
+  }
+}
 /**
  * Snapshot first, then pull the events after this window's cursor (ARCHITECTURE §7.3 rule 5). Nothing depends on
  * the Express instance's memory, so a restart simply resumes from the cursor. A cursor the log no longer reaches,
  * or any inconsistent page, restarts from zero once; a second failure is shown as out of sync.
  */
 async function syncTask(taskId: string): Promise<void> {
-  if (syncing.has(taskId)) return;
+  if (syncing.has(taskId) || !tracksTask(taskId)) return;
   syncing.add(taskId);
-  const put = (view: TaskView): void => set({ taskViews: { ...state.taskViews, [taskId]: view } });
+  const put = (view: TaskView): void => {
+    if (tracksTask(taskId)) set({ taskViews: { ...state.taskViews, [taskId]: view } });
+  };
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
       const cached = attempt === 0 ? state.taskViews[taskId] ?? EMPTY_VIEW : EMPTY_VIEW;
@@ -123,7 +145,8 @@ async function syncTask(taskId: string): Promise<void> {
       let snapshot: TaskSnapshot;
       try { snapshot = await api().getTask({ taskId }); }
       catch (error) { put({ ...cached, sync: 'error', error: errorCode(error) }); return; }
-      set({ tasks: state.tasks.map(task => task.id === taskId ? snapshot : task) });
+      if (!tracksTask(taskId)) return;
+      applySnapshot(snapshot);
       if (cached.appliedSeq > snapshot.lastSeq) continue;
       let result: Awaited<ReturnType<typeof catchUpTaskEvents>>;
       try { result = await catchUpTaskEvents(taskId, cached.appliedSeq, cached.replayed, afterSeq => api().listTaskEvents({ taskId, afterSeq })); }
@@ -141,9 +164,11 @@ async function syncTask(taskId: string): Promise<void> {
 }
 async function loadTasks(): Promise<void> {
   const { tasks } = await api().listTasks();
-  const prior = state.tasks.find(task => task.id === state.selectedTaskId);
-  set({ tasks: tasks.map(task => task.id === prior?.id && prior.plan ? { ...task, plan: prior.plan } : task) });
-  const selected = tasks.find(task => task.id === state.selectedTaskId);
+  const prior = selectedTask(state);
+  const listed = tasks.find(task => task.id === state.selectedTaskId);
+  set({ tasks: tasks.map(task => task.id === prior?.id && prior.plan ? { ...task, plan: prior.plan } : task),
+    selectedHistoryTask: listed ? null : prior ?? null });
+  const selected = listed ?? prior;
   if (!selected) return;
   if (selected.lastSeq !== (state.taskViews[selected.id]?.appliedSeq ?? -1)) { await syncTask(selected.id); await syncMessages(selected.id); }
   // A message pull that failed or was overtaken is retried here even when the event cursor is already current
@@ -156,8 +181,9 @@ const ACTIVE: readonly TaskState[] = ['CREATED', 'QUEUED', 'RUNNING', 'STOPPING'
  * Every conversation change is applied to the view as it is at that moment, never to a copy read before an await: the
  * message pull and the live poll overlap, and writing back an older copy would undo the other one's progress.
  */
-const updateConversation = (taskId: string, update: (current: ConversationView) => ConversationView): void =>
-  set({ conversations: { ...state.conversations, [taskId]: update(state.conversations[taskId] ?? EMPTY_CONVERSATION) } });
+const updateConversation = (taskId: string, update: (current: ConversationView) => ConversationView): void => {
+  if (tracksTask(taskId)) set({ conversations: { ...state.conversations, [taskId]: update(state.conversations[taskId] ?? EMPTY_CONVERSATION) } });
+};
 const taskEvents = (taskId: string): readonly TaskEvent[] => state.taskViews[taskId]?.events ?? [];
 const messageSync = new Set<string>();
 /**
@@ -169,6 +195,7 @@ const messagesWanted = new Map<string, number>();
 let messageGeneration = 0;
 /** Pulls committed messages after the ones already shown; a turn's live stream gives way to its committed answer. */
 async function syncMessages(taskId: string): Promise<void> {
+  if (!tracksTask(taskId)) return;
   messagesWanted.set(taskId, ++messageGeneration);
   if (messageSync.has(taskId)) return;
   messageSync.add(taskId);
@@ -177,6 +204,7 @@ async function syncMessages(taskId: string): Promise<void> {
       const asked = messagesWanted.get(taskId);
       const shown = (state.conversations[taskId] ?? EMPTY_CONVERSATION).messages.length;
       const result = await api().listTaskMessages({ taskId, after: shown });
+      if (!tracksTask(taskId)) return;
       updateConversation(taskId, current => withMessages(current, shown, result.messages, taskEvents(taskId), taskId));
       if (!result.hasMore && messagesWanted.get(taskId) === asked) { messagesWanted.delete(taskId); return; }
     }
@@ -186,9 +214,9 @@ async function syncMessages(taskId: string): Promise<void> {
 let liveBusy = false;
 /** Reads stream deltas for the selected task while it runs; a new turn or a tool call also refreshes the committed views. */
 async function pollLive(): Promise<void> {
-  const taskId = state.selectedTaskId;
-  const task = state.tasks.find(item => item.id === taskId);
-  if (liveBusy || !taskId || !task || !ACTIVE.includes(task.state) || state.connection !== 'ready') return;
+  const task = selectedTask(state);
+  if (liveBusy || !task || !ACTIVE.includes(task.state) || state.connection !== 'ready') return;
+  const taskId = task.id;
   liveBusy = true;
   try {
     const afterSeq = (state.conversations[taskId] ?? EMPTY_CONVERSATION).liveSeq;
@@ -238,8 +266,19 @@ export function startPolling(): void {
 /** Bumped on every model or key change; a connection test result only lands if nothing changed while it ran. */
 let modelRevision = 0;
 export const actions = {
-  selectTask(taskId: string | null): void {
-    set({ selectedTaskId: taskId });
+  selectTask(taskId: string | null, snapshot?: TaskSnapshot): void {
+    const prior = state.selectedHistoryTask;
+    const fallback = snapshot ?? prior;
+    const selectedHistoryTask = fallback?.id === taskId && fallback.projectId === state.settings?.activeProjectId &&
+      !state.tasks.some(task => task.id === taskId) ? fallback : null;
+    if (prior && prior.id !== taskId) {
+      const taskViews = { ...state.taskViews };
+      const conversations = { ...state.conversations };
+      delete taskViews[prior.id];
+      delete conversations[prior.id];
+      messagesWanted.delete(prior.id);
+      set({ selectedTaskId: taskId, selectedHistoryTask, taskViews, conversations });
+    } else set({ selectedTaskId: taskId, selectedHistoryTask });
     if (taskId) void syncTask(taskId).then(() => syncMessages(taskId));
   },
   /** Asks Express to stop the task; the view then follows the committed state (STOPPED, or INTERRUPTED if unconfirmed). */
@@ -248,7 +287,7 @@ export const actions = {
     updateConversation(taskId, current => ({ ...current, stopping: true }));
     try {
       const snapshot = await api().stopTask({ taskId });
-      set({ tasks: state.tasks.map(task => task.id === taskId ? snapshot : task) });
+      applySnapshot(snapshot);
     } catch (error) { notify('danger', tr('notice.stopFailed', { code: errorCode(error) })); }
     finally { updateConversation(taskId, current => ({ ...current, stopping: false })); await syncTask(taskId); await syncMessages(taskId); }
   },
@@ -272,13 +311,13 @@ export const actions = {
     }
   },
   resetSaveStatus(): void { if (state.saveStatus.state !== 'saving') set({ saveStatus: { state: 'idle' } }); },
-  async selectProject(id: string): Promise<void> { set({ selectedTaskId: null }); await actions.saveSettings({ activeProjectId: id }); },
+  async selectProject(id: string): Promise<void> { actions.selectTask(null); await actions.saveSettings({ activeProjectId: id }); },
   async addProject(): Promise<void> {
     try {
       const result = await api().addProject();
       if (result.status === 'cancelled') return;
       set({ projects: (await api().listProjects()).projects });
-      await actions.saveSettings({ activeProjectId: result.project.id });
+      await actions.selectProject(result.project.id);
       notify('ok', tr('notice.projectAdded', { name: result.project.name }));
     } catch (error) {
       const code = errorCode(error);
@@ -288,6 +327,7 @@ export const actions = {
   async removeProject(id: string): Promise<void> {
     try {
       const list = await api().removeProject({ id });
+      if (state.selectedHistoryTask?.projectId === id) actions.selectTask(null);
       set({ projects: list.projects, submissions: state.submissions.filter(item => item.projectId !== id) });
       set({ settings: await api().getSettings() });
       if (state.settings && !state.settings.activeProjectId && list.projects[0]) await actions.selectProject(list.projects[0].id);

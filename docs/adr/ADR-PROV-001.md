@@ -14,6 +14,8 @@ M2 设置扩展（本 ADR 同批提交）已经实现 **API Key 型** 供应商�
 - 每个供应商只有一个**代码中固定的官方端点**（`PROVIDER_ENDPOINTS`）；网关禁止重定向、限制回复大小，只返回经 Schema 校验的模型 ID 和归一化状态。
 - 打包后的应用拒绝任何端点覆盖（PR #8 的 `MODEL_ENDPOINT_OVERRIDE_REJECTED`）。
 
+网页搜索增补（2026-11-18）。用户批准四家搜索服务的实际查询。Express 只向固定 HTTPS 地址发送搜索词和必要的请求参数，逐次使用对应密钥，拒绝重定向。任务开始时选择一家供应商，搜索关闭时停用调用。任务审计保留供应商、状态、响应大小与耗时。工具把原始查询及结果作为模型上下文处理，模型回答照常保存。 [Exa](https://exa.ai/docs/reference/search) [Tavily](https://docs.tavily.com/documentation/api-reference/endpoint/search) [Brave](https://api-dashboard.search.brave.com/api-reference/web/search/post) [Firecrawl](https://docs.firecrawl.dev/api-reference/endpoint/search)
+
 用户还要求两项能力，它们会改变 AGENTS.md §9 与 ARCHITECTURE §6 的凭据和网络边界，因此不能作为“实现细节”直接加入：
 
 1. **账号登录（OAuth / 设备码）**：例如 ChatGPT 套餐、GitHub Copilot。
