@@ -39,6 +39,7 @@ export const WorkbenchSettingsSchema = z.strictObject({
   language: LanguageSchema,
   density: z.enum(['comfortable', 'compact']),
   contextPanel: z.boolean(),
+  saveCheckpoints: z.boolean().optional(),
   // ADR-009: default 5 s, allowed 5–30 s; out-of-range values are rejected, never clamped.
   stopGraceMs: z.number().int().min(5_000).max(30_000),
   activeProjectId: z.uuid().nullable(),
@@ -81,10 +82,15 @@ export type ControlRun = z.infer<typeof ControlRunSchema>;
 export const ControlRunListSchema = z.strictObject({ runs: z.array(ControlRunSchema).max(WORKBENCH_LIMITS.maxRuns) });
 export type ControlRunList = z.infer<typeof ControlRunListSchema>;
 
-export const TaskStartInputSchema = z.strictObject({ projectId: z.uuid(), prompt: z.string().trim().min(1).max(WORKBENCH_LIMITS.maxPromptChars) });
+const taskPrompt = z.string().trim().min(1).max(WORKBENCH_LIMITS.maxPromptChars);
+export const TaskStartInputSchema = z.union([
+  z.strictObject({ projectId: z.uuid(), prompt: taskPrompt, followUpTo: z.uuid().optional() }),
+  z.strictObject({ projectId: z.uuid(), resumeFrom: z.uuid() }),
+]);
 export type TaskStartInput = z.infer<typeof TaskStartInputSchema>;
 /** A start either creates and runs a task, or is refused before anything is scheduled, with the reason. */
-export const TaskStartRefusalSchema = z.enum(['WORKER_ISOLATION_UNAVAILABLE', 'MODEL_NOT_CONFIGURED', 'AGENT_BUSY']);
+export const TaskStartRefusalSchema = z.enum(['WORKER_ISOLATION_UNAVAILABLE', 'MODEL_NOT_CONFIGURED', 'AGENT_BUSY',
+  'SESSION_CONTEXT_UNAVAILABLE', 'SESSION_MODEL_CHANGED', 'SESSION_ALREADY_CONTINUED']);
 export const TaskStartResultSchema = z.discriminatedUnion('accepted', [
   z.strictObject({ accepted: z.literal(true), task: TaskSnapshotSchema }),
   z.strictObject({ accepted: z.literal(false), error: TaskStartRefusalSchema }),
@@ -102,7 +108,7 @@ export const ControlOverviewSchema = z.strictObject({
   agentReady: z.boolean(),
   startedAt: z.iso.datetime(), uptimeMs: z.number().int().nonnegative(),
   runtime: z.strictObject({ node: z.string().max(32), abi: z.string().max(8), sqlite: z.string().max(32), platform: z.string().max(16), arch: z.string().max(16) }),
-  database: z.strictObject({ version: z.literal(12), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
+  database: z.strictObject({ version: z.literal(13), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
     runs: z.number().int().nonnegative(), records: z.number().int().nonnegative() }),
   // Per-platform Worker qualification (SEC-W01) is a build record (build/agent-status.json); at runtime the control plane
   // reports only whether this installation has an isolated Worker runtime and what its supervisor is doing.

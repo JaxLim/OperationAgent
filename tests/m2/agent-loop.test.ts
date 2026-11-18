@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { PROTOCOL_VERSION, TaskEventSchema } from '../../packages/contracts/dist/index.js';
-import type { RpcRequest, TaskEvent } from '../../packages/contracts/dist/index.js';
+import type { ClaudeModel, RpcRequest, TaskEvent } from '../../packages/contracts/dist/index.js';
 import { RpcSession } from '../../packages/worker-transport/dist/index.js';
 import { openStore } from '../../apps/server/dist/persistence/store.js';
 import type { Store } from '../../apps/server/dist/persistence/store.js';
@@ -85,20 +85,22 @@ class Inbox {
 
 interface Harness { store: Store; runner: TaskRunner; projectId: string; root: string; base: string; live: LiveFeed; finished: Map<string, AgentResult>;
   crash(): void; workerDone: Promise<void>; framesToWorker(): number }
-async function withAgent(endpoint: string, run: (harness: Harness) => Promise<void>, options: { configured?: boolean } = {}): Promise<void> {
+async function withAgent(endpoint: string, run: (harness: Harness) => Promise<void>,
+  options: { configured?: boolean; base?: string; model?: () => ClaudeModel } = {}): Promise<void> {
   const cache = resolve('.cache'); mkdirSync(cache, { recursive: true });
-  const base = mkdtempSync(resolve(cache, 'agent-loop-'));
+  const base = options.base ?? mkdtempSync(resolve(cache, 'agent-loop-'));
   const root = resolve(base, 'workspace'); mkdirSync(resolve(root, 'src'), { recursive: true });
   writeFileSync(resolve(root, 'README.md'), `# Demo\n${CANARY}\n`);
   writeFileSync(resolve(root, 'src', 'index.ts'), 'export const answer = 42;\n');
   writeFileSync(resolve(root, '.env'), 'TOKEN=secret');
   const store = openStore(resolve(base, 'data'), randomUUID());
-  const projectId = store.addProject({ name: 'demo', path: root }).id;
+  const projectId = store.listProjects()[0]?.id ?? store.addProject({ name: 'demo', path: root }).id;
   const credentials = createCredentialService(store, fakeBridge());
   if (options.configured !== false) await credentials.set(KEY);
   const live = new LiveFeed();
   const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store }),
-    model: () => 'claude-sonnet-5-5', live, stopGraceMs: () => 5_000 });
+    model: options.model ?? (() => 'claude-sonnet-5-5'), live, stopGraceMs: () => 5_000,
+    saveCheckpoints: () => store.getSettings().saveCheckpoints === true });
   const identity = { expressRunId: randomUUID(), workerRunId: randomUUID() };
   const toWorker = new Inbox(); const toExpress: Uint8Array[] = [];
   const express: { session?: RpcSession } = {};
@@ -122,7 +124,7 @@ async function withAgent(endpoint: string, run: (harness: Harness) => Promise<vo
     if (!crashed) { toWorker.close(); agent.session.close(); }
     await workerDone.catch(() => {});
     store.close(true);
-    if (base.startsWith(cache + sep)) rmSync(base, { recursive: true, force: true });
+    if (!options.base && base.startsWith(cache + sep)) rmSync(base, { recursive: true, force: true });
   }
 }
 const until = async (check: () => boolean, ms = 10_000): Promise<void> => {
@@ -131,6 +133,80 @@ const until = async (check: () => boolean, ms = 10_000): Promise<void> => {
 };
 const events = (store: Store, taskId: string): TaskEvent[] => store.listTaskEvents(taskId, 0);
 const states = (list: TaskEvent[]): string[] => list.flatMap(event => event.type === 'task_state_changed' ? [event.payload.to] : []);
+
+test('conversation: follow-up reuses the running control plane history with checkpoint saving off', async () => {
+  await withProvider([
+    res => sse(res, [start, ...text(0, 'The selected color is violet.'), ...stop('end_turn')]),
+    res => sse(res, [start, ...text(0, 'Violet.'), ...stop('end_turn')]),
+  ], async (endpoint, bodies) => withAgent(endpoint, async ({ store, runner, projectId }) => {
+    const first = await runner.start(projectId, 'Choose a color', randomUUID());
+    await until(() => store.getTask(first.id)?.state === 'COMPLETED');
+    assert.equal(store.getCheckpoint(first.id), null);
+    const requestId = randomUUID();
+    const continuation = { taskId: first.id, resume: false };
+    const next = await runner.start(projectId, 'Which one?', requestId, continuation);
+    await until(() => store.getTask(next.id)?.state === 'COMPLETED');
+    assert.deepEqual(bodies[1]?.messages.map(message => message.role), ['user', 'assistant', 'user']);
+    assert.match(JSON.stringify(bodies[1]?.messages[1]), /selected color is violet/);
+    assert.equal(next.sessionId, first.id);
+    assert.equal((await runner.start(projectId, 'Which one?', requestId, continuation)).id, next.id);
+    await assert.rejects(runner.start(projectId, 'Different reply', randomUUID(), continuation), /SESSION_ALREADY_CONTINUED/);
+    assert.deepEqual(store.listTasks(10).map(task => task.id), [next.id]);
+    assert.deepEqual(store.pageSessionMessages(next.id, 0).messages.map(message => message.text),
+      ['Choose a color', 'The selected color is violet.', 'Which one?', 'Violet.']);
+    assert.equal(store.getCheckpoint(next.id), null);
+  }));
+});
+
+test('conversation: reopen SQLite and explicitly continue from model progress and the last plan', async () => {
+  const cache = resolve('.cache'); mkdirSync(cache, { recursive: true });
+  const base = mkdtempSync(resolve(cache, 'agent-checkpoint-'));
+  const progress = 'Read the README. Still need to check the setup instructions.';
+  const plan = { steps: [{ id: 'inspect', title: 'Read the README', status: 'completed' },
+    { id: 'verify', title: 'Check setup instructions', status: 'in_progress', dependsOn: ['inspect'] }] };
+  try {
+    await withProvider([
+      res => sse(res, [start, ...text(0, progress), ...tool(1, 'toolu_plan', 'update_plan', plan),
+        ...tool(2, 'toolu_read', 'read_file', { path: 'README.md' }), ...stop('tool_use')]),
+      res => sse(res, [start, ...text(0, 'UNCOMMITTED_STREAM')], false),
+      res => sse(res, [start, ...text(0, 'Checked setup.'), ...stop('end_turn')]),
+    ], async (endpoint, bodies) => {
+      let oldTask = '';
+      await withAgent(endpoint, async ({ store, runner, projectId, crash }) => {
+        store.saveSettings({ ...store.getSettings(), saveCheckpoints: true });
+        oldTask = (await runner.start(projectId, 'Audit the setup', randomUUID())).id;
+        await until(() => bodies.length === 2);
+        assert.equal(store.getCheckpoint(oldTask)?.summary, progress);
+        assert.equal(store.getCheckpoint(oldTask)?.usage.inputTokens, 50);
+        crash();
+        await until(() => store.getTask(oldTask)?.state === 'INTERRUPTED');
+      }, { base });
+      let model: ClaudeModel = 'claude-haiku-5-5';
+      await withAgent(endpoint, async ({ store, runner, projectId }) => {
+        assert.equal(bodies.length, 2, 'reopening the store does not schedule a run');
+        assert.equal(store.getTask(oldTask)?.resumable, true);
+        await assert.rejects(runner.start(projectId, 'Follow-up', randomUUID(), { taskId: oldTask, resume: false }), /SESSION_CONTEXT_UNAVAILABLE/);
+        await assert.rejects(runner.start(projectId, 'Continue', randomUUID(), { taskId: oldTask, resume: true }), /SESSION_MODEL_CHANGED/);
+        assert.equal(bodies.length, 2, 'the checkpoint is never sent to a different model');
+        model = 'claude-sonnet-5-5';
+        const next = await runner.start(projectId, 'Continue from the checkpoint', randomUUID(), { taskId: oldTask, resume: true });
+        await until(() => store.getTask(next.id)?.state === 'COMPLETED');
+        assert.equal(store.getTask(oldTask)?.state, 'INTERRUPTED');
+        assert.deepEqual(next.plan?.steps.map(step => [step.id, step.status]), [['inspect', 'completed'], ['verify', 'in_progress']]);
+        const request = JSON.stringify(bodies[2]?.messages);
+        assert.match(request, /Audit the setup/);
+        assert.ok(request.includes(progress) && request.includes('Check setup instructions'));
+        assert.doesNotMatch(request, /tool_result|toolu_read|UNCOMMITTED_STREAM/);
+        assert.ok(!request.includes(CANARY) && !request.includes(KEY));
+        store.saveSettings({ ...store.getSettings(), saveCheckpoints: false });
+        assert.equal(store.getCheckpoint(oldTask), null);
+        assert.equal(store.getCheckpoint(next.id), null);
+        assert.equal(store.getTask(oldTask)?.resumable, undefined);
+        assert.equal(store.pageSessionMessages(next.id, 0).messages.length, 4);
+      }, { base, model: () => model });
+    });
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
 
 test('agent loop: a read-only task explores, reads, answers and completes; Express builds every tool result', async () => {
   await withProvider([

@@ -185,10 +185,13 @@ function ProjectChip({ project }: { project: Project }) {
   );
 }
 
-const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolean; docked: boolean; onOpenSettings: (target: SettingsTarget) => void }>(
-  function Composer({ project, disabled, docked, onOpenSettings }, handle) {
+const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolean; docked: boolean; followUpTo?: string;
+  onOpenSettings: (target: SettingsTarget) => void }>(
+  function Composer({ project, disabled, docked, followUpTo, onOpenSettings }, handle) {
     const t = useT(); const locale = useLocale();
-    const saved = drafts.get(project.id);
+    const agentReady = useStore(s => s.overview?.agentReady === true);
+    const draftKey = followUpTo ?? project.id;
+    const saved = drafts.get(draftKey);
     const [text, setText] = useState(saved?.text ?? '');
     const [goal, setGoal] = useState<string | null>(saved?.goal ?? null);
     const [goalDraft, setGoalDraft] = useState<string | null>(null);
@@ -200,8 +203,8 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
     useEffect(() => { if (focusOnMount) { focusOnMount = false; ref.current?.focus(); } }, []);
     useEffect(() => {
       if (sending) return;
-      if (text || goal) drafts.set(project.id, { text, goal }); else drafts.delete(project.id);
-    }, [project.id, text, goal, sending]);
+      if (text || goal) drafts.set(draftKey, { text, goal }); else drafts.delete(draftKey);
+    }, [draftKey, text, goal, sending]);
     useLayoutEffect(() => {
       const element = ref.current;
       if (!element) return;
@@ -221,8 +224,11 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
       // The first request swaps the centered composer for the docked one, which mounts while the request is recorded:
       // drop the draft first so it starts empty, and let whichever composer is mounted afterwards take focus.
       focusOnMount = true;
-      drafts.delete(project.id);
-      try { await actions.submitTask(project.id, prompt, goal); setText(''); setGoal(null); } finally { setSending(false); ref.current?.focus(); }
+      try {
+        if (await actions.submitTask(project.id, prompt, goal, followUpTo)) {
+          drafts.delete(draftKey); setText(''); setGoal(null);
+        } else focusOnMount = false;
+      } finally { setSending(false); ref.current?.focus(); }
     };
     const closeGoal = (save: boolean, refocus: boolean): void => {
       const value = goalDraft?.trim() ?? '';
@@ -280,8 +286,8 @@ const Composer = forwardRef<ComposerHandle, { project: Project; disabled: boolea
         <div className="composer-meta">
           <span className="meta-chip is-static" title={t('composer.thisComputerTitle')}><IconLaptop size={14} />{t('composer.thisComputer')}</span>
           <ProjectChip project={project} />
-          <span className="meta-chip is-static is-gate" title={t('composer.agentUnavailableTitle')}>
-            <IconLock size={13} />{t('composer.agentUnavailable')}</span>
+          {!agentReady && <span className="meta-chip is-static is-gate" title={t('composer.agentUnavailableTitle')}>
+            <IconLock size={13} />{t('composer.agentUnavailable')}</span>}
         </div>
       </div>
     );
@@ -353,6 +359,8 @@ export const Workspace = forwardRef<ComposerHandle, { onOpenSettings: (target: S
   const project = projects.find(item => item.id === activeId);
   const mine = submissions.filter(item => item.projectId === activeId);
   const selected = useStore(s => s.tasks.find(task => task.id === s.selectedTaskId && task.projectId === activeId));
+  const canFollowUp = useStore(s => Boolean(selected?.state === 'COMPLETED' &&
+    s.taskViews[selected.id]?.events.some(event => event.type === 'user_message')));
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [mine.length]);
 
@@ -376,7 +384,12 @@ export const Workspace = forwardRef<ComposerHandle, { onOpenSettings: (target: S
       </div></section>
     );
   }
-  if (selected) return <TaskDetail task={selected} />;
+  if (selected) return (
+    <TaskDetail key={selected.id} task={selected}>
+      {canFollowUp && <Composer key={selected.id} ref={handle} project={project} disabled={connection !== 'ready'} docked
+        followUpTo={selected.id} onOpenSettings={onOpenSettings} />}
+    </TaskDetail>
+  );
   if (mine.length === 0) {
     return (
       <section className="center is-empty">

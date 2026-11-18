@@ -53,7 +53,7 @@ const eventBase = {
   requestId: z.uuid().nullable(),
 };
 export const TaskCreatedEventSchema = z.strictObject({ ...eventBase, type: z.literal('task_created'),
-  payload: z.strictObject({ projectId: z.uuid() }) });
+  payload: z.strictObject({ projectId: z.uuid(), previousTaskId: z.uuid().optional() }) });
 export const TaskStateChangedEventSchema = z.strictObject({ ...eventBase, type: z.literal('task_state_changed'),
   payload: z.strictObject({ from: TaskStateSchema, to: TaskStateSchema, sideEffects: SideEffectStatusSchema.nullable(),
     // Redacted, user-safe text; never raw tool output or provider errors.
@@ -119,6 +119,16 @@ export function replayTaskEvents(taskId: string, afterSeq: number, state: TaskSt
 
 /** Express's committed view of one task; `lastSeq` is the cursor a client resumes events from. */
 export const TaskSnapshotSchema = z.strictObject({ id: z.uuid(), projectId: z.uuid(), state: TaskStateSchema,
+  sessionId: z.uuid().optional(), previousTaskId: z.uuid().optional(), resumable: z.literal(true).optional(),
   plan: TaskPlanSchema.optional(),
   lastSeq: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() });
 export type TaskSnapshot = z.infer<typeof TaskSnapshotSchema>;
+
+export const CHECKPOINT_LIMITS = Object.freeze({ requestChars: 4_000, summaryChars: 3_500, visibleRuns: 5 });
+export const TaskCheckpointSchema = z.strictObject({
+  route: z.string().regex(/^[a-f0-9]{64}$/),
+  request: z.string().min(1).max(CHECKPOINT_LIMITS.requestChars),
+  summary: z.string().max(CHECKPOINT_LIMITS.summaryChars),
+  usage: TurnUsageSchema,
+});
+export type TaskCheckpoint = z.infer<typeof TaskCheckpointSchema>;

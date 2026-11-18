@@ -66,7 +66,11 @@ export async function runAgentRuntime(options: RuntimeOptions): Promise<void> {
       const result = await call('tool.call', { taskId, turn, toolCallId }, 'tool.call') as { status: ToolCallStatus; summary: string };
       return { status: result.status, summary: result.summary };
     },
-    async finish(taskId: string, outcome: AgentFinishOutcome, reason: AgentFinishReason) { await call('agent.finish', { taskId, outcome, reason }, 'agent.finish'); },
+    async finish(taskId: string, outcome: AgentFinishOutcome, reason: AgentFinishReason) {
+      // Express can expose the completed task as soon as it commits this request.
+      if (running?.taskId === taskId) running = undefined;
+      await call('agent.finish', { taskId, outcome, reason }, 'agent.finish');
+    },
   };
 
   async function handle(request: RpcRequest): Promise<void> {

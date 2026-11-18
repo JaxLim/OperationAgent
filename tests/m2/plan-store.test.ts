@@ -180,7 +180,7 @@ test('011 databases upgrade without losing events, request uniqueness or append-
   } finally { legacy.close(); }
   const store = open();
   try {
-    assert.equal(store.databaseVersion, 12);
+    assert.equal(store.databaseVersion, 13);
     assert.equal(Object.hasOwn(store.getTask(id)!, 'plan'), false);
     assert.deepEqual(store.listTaskEvents(id, 0)[0], { taskId: id, seq: 1, eventId, type: 'task_created', requestId,
       occurredAt: timestamp, payload: { projectId } });

@@ -23,9 +23,9 @@ export const MAX_LIVE_CHARS = 200_000;
 export const MAX_LIVE_TOOLS = 64;
 
 /** The highest turn Express has committed, as far as the answers and events applied in this window show. */
-export function committedTurn(messages: readonly TaskMessageView[], events: readonly TaskEvent[]): number {
+export function committedTurn(messages: readonly TaskMessageView[], events: readonly TaskEvent[], taskId?: string): number {
   let turn = 0;
-  for (const message of messages) if (message.role === 'assistant' && message.turn > turn) turn = message.turn;
+  for (const message of messages) if ((!taskId || message.taskId === taskId) && message.role === 'assistant' && message.turn > turn) turn = message.turn;
   for (const event of events) if (event.type === 'assistant_turn' && event.payload.turn > turn) turn = event.payload.turn;
   return turn;
 }
@@ -34,10 +34,10 @@ export function committedTurn(messages: readonly TaskMessageView[], events: read
  * Appends messages pulled after the first `shown` ones; a live turn that is now committed gives way to its committed
  * answer. Everything else in the view, in particular live text and the live cursor, is kept exactly as it is now.
  */
-export function withMessages(view: ConversationView, shown: number, pulled: readonly TaskMessageView[], events: readonly TaskEvent[]): ConversationView {
+export function withMessages(view: ConversationView, shown: number, pulled: readonly TaskMessageView[], events: readonly TaskEvent[], taskId?: string): ConversationView {
   if (view.messages.length !== shown) return view;
   const messages = [...view.messages, ...pulled];
-  return { ...view, messages, live: view.live && view.live.turn <= committedTurn(messages, events) ? null : view.live };
+  return { ...view, messages, live: view.live && view.live.turn <= committedTurn(messages, events, taskId) ? null : view.live };
 }
 
 /**
@@ -45,9 +45,9 @@ export function withMessages(view: ConversationView, shown: number, pulled: read
  * again (a new turn began, a tool call was announced, or the stream ended).
  */
 export function withLivePage(view: ConversationView, page: Pick<TaskLivePage, 'afterSeq' | 'nextSeq' | 'deltas' | 'gap' | 'done'>,
-  events: readonly TaskEvent[]): { view: ConversationView; refresh: boolean } {
+  events: readonly TaskEvent[], taskId?: string): { view: ConversationView; refresh: boolean } {
   if (page.afterSeq !== view.liveSeq) return { view, refresh: false };
-  const committed = committedTurn(view.messages, events);
+  const committed = committedTurn(view.messages, events, taskId);
   let live = view.live; let refresh = page.done && page.deltas.length === 0;
   for (const { turn, delta } of page.deltas) {
     // The tail of a turn that is already committed adds nothing: its answer is shown from the committed text.
