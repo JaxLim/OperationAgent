@@ -1,4 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import { GitHubSkillCatalogSchema, GitHubSkillPreviewRequestSchema, GitHubSkillSourceSchema, ProjectSkillPreviewRequestSchema,
+  ProjectSkillPreviewSchema, ProjectSkillsSchema, SetProjectSkillSchema } from '@operation-agent/contracts';
 import { CustomProviderInputSchema, CustomProviderRefSchema, HfConfigSchema, HfLoginChallengeSchema, HfLoginInputSchema,
   HfLoginStateSchema, HfSessionSchema, UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
 import { ApiKeyInputSchema, ControlHealthSchema, ControlOverviewSchema, ControlRunListSchema, DesktopStatusSchema, FoundationInfoSchema, IPC_CHANNELS,
@@ -66,6 +68,14 @@ const api: DesktopApi = {
   saveProviderModel: async input =>
     ProviderOverviewViewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.saveProviderModel, ProviderModelChoiceSchema.parse(input))),
   listAgents: async () => AgentListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listAgents, {})),
+  listProjectSkills: async input =>
+    ProjectSkillsSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listProjectSkills, ProjectRefSchema.parse(input))),
+  previewProjectSkill: async input =>
+    ProjectSkillPreviewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.previewProjectSkill, ProjectSkillPreviewRequestSchema.parse(input))),
+  listGitHubSkills: async input => GitHubSkillCatalogSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listGitHubSkills, GitHubSkillSourceSchema.parse(input))),
+  previewGitHubSkill: async input =>
+    ProjectSkillPreviewSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.previewGitHubSkill, GitHubSkillPreviewRequestSchema.parse(input))),
+  setProjectSkill: async input => { await ipcRenderer.invoke(IPC_CHANNELS.setProjectSkill, SetProjectSkillSchema.parse(input)); },
   saveAgent: async input => AgentListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.saveAgent, AgentSaveSchema.parse(input))),
   removeAgent: async input => AgentListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.removeAgent, AgentRefSchema.parse(input))),
   listMcpServers: async () => McpServerListSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.listMcpServers, {})),

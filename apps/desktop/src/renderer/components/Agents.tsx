@@ -13,7 +13,7 @@ import { IconBox, IconInfo, IconLock, IconPlus, IconPuzzle, IconSearch, IconShie
 
 /** The gate that must pass before a tool can do anything; asking for a tool in a profile never lifts it. */
 const TOOL_GATE: Readonly<Record<AgentTool, string>> = {
-  read_file: 'READ_ADAPTER_UNAVAILABLE', git_read: 'READ_ADAPTER_UNAVAILABLE', web_search: 'AGENT_LOOP_NOT_IMPLEMENTED', mcp: 'MCP_HOST_UNAVAILABLE',
+  read_file: 'AGENT_PROFILE_UNAVAILABLE', git_read: 'SEC-22', web_search: 'WEB_SEARCH_UNAVAILABLE', mcp: 'MCP_HOST_UNAVAILABLE',
   write_file: 'SANDBOX_UNAVAILABLE', bash: 'SANDBOX_UNAVAILABLE',
 };
 const BUILT_IN_TEXT: Readonly<Record<string, MessageKey>> = { general: 'agent.general', plan: 'agent.plan', explore: 'agent.explore', review: 'agent.review' };
@@ -268,11 +268,11 @@ function McpForm({ server, onDone }: { server?: McpServer; onDone: () => void })
   );
 }
 
-export function McpSection() {
+export function McpSection({ initialServer = null }: { initialServer?: string | null }) {
   const t = useT();
   const servers = useStore(s => s.mcpServers);
   const ready = useStore(s => s.connection === 'ready');
-  const [editing, setEditing] = useState<string | 'new' | null>(null);
+  const [editing, setEditing] = useState<string | null>(initialServer);
   const [confirm, setConfirm] = useState<McpServer | null>(null);
   useEffect(() => { void actions.refreshMcp(); }, []);
   const toggle = (server: McpServer, enabled: boolean): void => {

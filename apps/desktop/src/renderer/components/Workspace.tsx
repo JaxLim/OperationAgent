@@ -14,7 +14,7 @@ import { IconAlert, IconCheck, IconChevronDown, IconFolder, IconFolderPlus, Icon
 import type { SectionId } from './Settings';
 
 export interface ComposerHandle { focus(): void }
-export type SettingsTarget = Extract<SectionId, 'providers' | 'chat' | 'mcp' | 'usage'>;
+export type SettingsTarget = Extract<SectionId, 'providers' | 'chat' | 'integrations' | 'skills' | 'usage'>;
 
 let focusOnMount = false;
 /** Focuses the composer now, or when it next mounts (an open task replaces it). No animation-frame timing. */
@@ -108,8 +108,8 @@ function AddMenu({ onGoal, hasGoal, onOpenSettings }: { onGoal: () => void; hasG
           <MenuItem icon={<IconPaperclip size={16} />} label={t('composer.files')} unavailable hint={t('composer.filesHint')} />
           <MenuSeparator />
           <MenuLabel>{t('composer.extend')}</MenuLabel>
-          <MenuItem icon={<IconPuzzle size={16} />} label={t('composer.tools')} unavailable hint={t('composer.toolsHint')} />
-          <MenuItem label={t('composer.toolsSettings')} onSelect={() => { close(); onOpenSettings('mcp'); }} />
+          <MenuItem icon={<IconPuzzle size={16} />} label={t('section.skills.title')} onSelect={() => { close(); onOpenSettings('skills'); }} />
+          <MenuItem label={t('section.integrations.title')} onSelect={() => { close(); onOpenSettings('integrations'); }} />
         </>
       )}
     </Popover>
@@ -321,25 +321,29 @@ const AVAILABLE: readonly (readonly [MessageKey, MessageKey])[] = [
   ['cap.controlPlane', 'cap.controlPlaneText'], ['cap.persistence', 'cap.persistenceText'], ['cap.projects', 'cap.projectsText'],
   ['cap.models', 'cap.modelsText'], ['cap.config', 'cap.configText'],
 ];
-const LOCKED: readonly (readonly [MessageKey, string])[] = [
-  ['cap.tasks', 'WORKER_ISOLATION_UNAVAILABLE'], ['cap.files', 'READ_ADAPTER_UNAVAILABLE'], ['cap.shell', 'SANDBOX_UNAVAILABLE'],
-];
-
 function Capabilities({ open = false }: { open?: boolean }) {
   const t = useT();
+  const overview = useStore(s => s.connection === 'ready' ? s.overview : null);
+  const available = [...AVAILABLE];
+  const locked: [MessageKey, string][] = [];
+  if (overview?.agentReady) available.push(['cap.tasks', 'cap.tasksText']);
+  else locked.push(['cap.tasks', 'WORKER_ISOLATION_UNAVAILABLE']);
+  if (overview?.tools.read === 'available') available.push(['cap.files', 'cap.filesText']);
+  else locked.push(['cap.files', 'READ_ADAPTER_UNAVAILABLE']);
+  locked.push(['cap.shell', overview?.tools.highRisk ?? 'SANDBOX_UNAVAILABLE']);
   return (
     <details className="capabilities" open={open}>
       <summary><IconShield size={14} />{t('cap.title')}<IconChevronDown size={13} className="capabilities-chev" /></summary>
       <div className="capabilities-grid">
         <div>
           <h3 className="section-label">{t('cap.working')}</h3>
-          {AVAILABLE.map(([title, text]) => (
+          {available.map(([title, text]) => (
             <div key={title} className="capability"><IconCheck size={14} className="tone-text-ok" /><span><strong>{t(title)}</strong><span className="muted">{t(text)}</span></span></div>
           ))}
         </div>
         <div>
           <h3 className="section-label">{t('cap.locked')}</h3>
-          {LOCKED.map(([title, code]) => (
+          {locked.map(([title, code]) => (
             <div key={title} className="capability"><IconLock size={14} className="muted" /><span><strong>{t(title)}</strong><span className="mono muted">{code}</span></span></div>
           ))}
           <div className="capability"><IconAlert size={14} className="tone-text-warn" /><span className="muted">{t('cap.failClosed')}</span></div>

@@ -11,20 +11,24 @@ import { actions, useStore } from '../state';
 import { THEME_NAMES, swatch } from '../themes';
 import type { Variant } from '../themes';
 import { Modal, Row, Segmented, Toggle, useModalClose } from './Modal';
-import { ProvidersSection, WebSearchSection } from './Providers';
+import { IntegrationsSection, ProvidersSection, WebSearchSection } from './Providers';
+import type { IntegrationTarget } from './Providers';
 import { AgentsSection, McpSection } from './Agents';
+import { ProjectSkills } from './ProjectSkills';
 import { SearchSelect } from './Select';
 import { IconBell, IconChart, IconCheck, IconCloud, IconGlobe, IconInfo, IconLaptop, IconLock, IconPalette, IconPuzzle, IconRobot, IconSearch, IconShield,
   IconSliders, IconTerminal, IconWrench, IconX } from './Icons';
 
-export type SectionId = 'appearance' | 'chat' | 'notifications' | 'usage' | 'providers' | 'search' | 'agents' | 'mcp' | 'advanced';
+export type SectionId = 'appearance' | 'chat' | 'notifications' | 'usage' | 'providers' | 'search' | 'integrations' | 'agents' | 'skills' | 'mcp' | 'advanced';
 interface Section { id: SectionId; icon: ReactNode; wide?: true }
 const GROUPS: readonly { label: MessageKey; sections: readonly Section[] }[] = [
   { label: 'nav.group.app', sections: [
     { id: 'appearance', icon: <IconPalette size={16} /> }, { id: 'chat', icon: <IconSliders size={16} /> },
     { id: 'notifications', icon: <IconBell size={16} /> }, { id: 'usage', icon: <IconChart size={16} /> }] },
   { label: 'nav.group.models', sections: [{ id: 'providers', icon: <IconCloud size={16} />, wide: true }, { id: 'search', icon: <IconGlobe size={16} />, wide: true }] },
-  { label: 'nav.group.agents', sections: [{ id: 'agents', icon: <IconRobot size={16} />, wide: true }, { id: 'mcp', icon: <IconPuzzle size={16} /> }] },
+  { label: 'nav.group.agents', sections: [{ id: 'integrations', icon: <IconPuzzle size={16} />, wide: true },
+    { id: 'agents', icon: <IconRobot size={16} />, wide: true },
+    { id: 'skills', icon: <IconPuzzle size={16} />, wide: true }, { id: 'mcp', icon: <IconPuzzle size={16} /> }] },
   { label: 'nav.group.system', sections: [{ id: 'advanced', icon: <IconWrench size={16} /> }] },
 ];
 const ALL = GROUPS.flatMap(group => group.sections);
@@ -33,7 +37,8 @@ const title = (t: Translate, id: SectionId): string => t(`section.${id}.title`);
 const ENGLISH_KEYWORDS: Readonly<Record<SectionId, string>> = {
   appearance: 'appearance theme color mode light dark palette density language', chat: 'chat execution stop grace approval', notifications: 'voice notifications',
   usage: 'usage tokens quota storage', providers: 'providers model api key anthropic openai google gemini openrouter', search: 'web search exa tavily brave firecrawl',
-  agents: 'agents subagent sub-agent', mcp: 'mcp server plugin skill', advanced: 'advanced about security diagnostics shortcuts',
+  integrations: 'integrations catalog plugins marketplace', agents: 'agents subagent sub-agent',
+  skills: 'project skills skill.md opencode claude', mcp: 'mcp server plugin', advanced: 'advanced about security diagnostics shortcuts',
 };
 
 function SaveIndicator() {
@@ -230,17 +235,19 @@ function NotificationsSection() {
 function AdvancedSection({ onOpenDiagnostics }: { onOpenDiagnostics: () => void }) {
   const t = useT();
   const desktop = useStore(s => s.desktop);
-  const overview = useStore(s => s.overview);
+  const overview = useStore(s => s.connection === 'ready' ? s.overview : null);
+  const canRead = overview?.tools.read === 'available';
   const shortcuts: readonly [string, MessageKey][] = [['Ctrl N', 'kbd.newChat'], ['Ctrl K', 'kbd.search'], ['Ctrl O', 'kbd.projects'], ['Ctrl ,', 'kbd.settings'],
     ['Ctrl B', 'kbd.sidebar'], ['Ctrl \\', 'kbd.panel'], ['Enter', 'kbd.send'], ['Shift Enter', 'kbd.newline']];
   return (
     <>
       <h3 className="settings-group-title">{t('adv.security')}</h3>
       <ul className="security-list">
-        <li><IconLock size={14} /><span><strong>{t('adv.worker')}</strong> — <span className="mono">agentReady = {String(overview?.agentReady ?? false)}</span>
+        <li>{overview?.agentReady ? <IconCheck size={14} /> : <IconLock size={14} />}<span><strong>{t('adv.worker')}</strong> — <span className="mono">agentReady = {String(overview?.agentReady ?? false)}</span>
           {overview?.worker.state === 'unavailable' || !overview ? <>; {t('adv.taskStartReturns')}{' '}<span className="mono">WORKER_ISOLATION_UNAVAILABLE</span></> : null}</span></li>
         <li><IconLock size={14} /><span><strong>{t('adv.highRisk')}</strong> (bash, write_file) — <span className="mono">{overview?.tools.highRisk ?? 'SANDBOX_UNAVAILABLE'}</span></span></li>
-        <li><IconLock size={14} /><span><strong>read_file / git read</strong> — <span className="mono">{overview?.tools.read ?? 'READ_ADAPTER_UNAVAILABLE'}</span></span></li>
+        <li>{canRead ? <IconCheck size={14} /> : <IconLock size={14} />}<span><strong>read_file</strong> — <span className="mono">{overview?.tools.read ?? 'READ_ADAPTER_UNAVAILABLE'}</span></span></li>
+        <li><IconLock size={14} /><span><strong>git_status / git_diff</strong> — <span className="mono">{overview?.capabilities.gitRead ?? 'unavailable'}</span></span></li>
         <li><IconInfo size={14} /><span><strong>{t('adv.isolation')}</strong> — {t('adv.isolationText', { status: overview?.capabilities.workerIsolation ?? 'unverified' })}</span></li>
       </ul>
       <div className="settings-note"><IconShield size={14} /><span>{t('adv.windowNote')}</span></div>
@@ -262,6 +269,7 @@ export function SettingsDialog({ onClose, initialSection = 'appearance', onOpenD
   const t = useT();
   const settings = useStore(s => s.settings);
   const [active, setActive] = useState<SectionId>(initialSection);
+  const [integration, setIntegration] = useState<IntegrationTarget | null>(null);
   const [query, setQuery] = useState('');
   const nav = useRef<HTMLElement>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -278,7 +286,7 @@ export function SettingsDialog({ onClose, initialSection = 'appearance', onOpenD
     if (next === null || !visible.length) return;
     event.preventDefault();
     const target = visible[(next + visible.length) % visible.length]!;
-    setActive(target.id); focusNav(target.id);
+    setIntegration(null); setActive(target.id); focusNav(target.id);
   };
   const needsSettings = shown && ['appearance', 'chat', 'search'].includes(shown.id);
   return (
@@ -302,7 +310,7 @@ export function SettingsDialog({ onClose, initialSection = 'appearance', onOpenD
                   <div className="settings-nav-label">{t(group.label)}</div>
                   {items.map(section => (
                     <button key={section.id} className={section.id === shown?.id ? 'is-active' : ''} aria-current={section.id === shown?.id ? 'page' : undefined}
-                      tabIndex={section.id === shown?.id ? 0 : -1} data-section={section.id} onClick={() => setActive(section.id)}>
+                      tabIndex={section.id === shown?.id ? 0 : -1} data-section={section.id} onClick={() => { setIntegration(null); setActive(section.id); }}>
                       {section.icon}<span>{title(t, section.id)}</span>
                     </button>
                   ))}
@@ -328,10 +336,12 @@ export function SettingsDialog({ onClose, initialSection = 'appearance', onOpenD
               {shown.id === 'chat' && settings && <ChatSection settings={settings} />}
               {shown.id === 'notifications' && <NotificationsSection />}
               {shown.id === 'usage' && <UsageSection />}
-              {shown.id === 'providers' && <ProvidersSection />}
-              {shown.id === 'search' && settings && <WebSearchSection settings={settings} />}
+              {shown.id === 'integrations' && <IntegrationsSection onOpen={target => { setIntegration(target); setQuery(''); setActive(target.section); }} />}
+              {shown.id === 'providers' && <ProvidersSection initialProvider={integration?.section === 'providers' ? integration.provider : null} />}
+              {shown.id === 'search' && settings && <WebSearchSection settings={settings} initialProvider={integration?.section === 'search' ? integration.provider : null} />}
               {shown.id === 'agents' && <AgentsSection />}
-              {shown.id === 'mcp' && <McpSection />}
+              {shown.id === 'skills' && <ProjectSkills />}
+              {shown.id === 'mcp' && <McpSection initialServer={integration?.section === 'mcp' ? integration.server : null} />}
               {shown.id === 'advanced' && <AdvancedSection onOpenDiagnostics={onOpenDiagnostics} />}
             </div>
           )}

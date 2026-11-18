@@ -23,7 +23,7 @@
   "milestones": {
     "M1": "implemented",
     "M2": "implemented",
-    "M3": "not-started",
+    "M3": "in-progress",
     "M4": "not-started"
   },
   "platform": {
@@ -47,7 +47,7 @@
     },
     "milestones": {
       "M5": "in-progress",
-      "M6": "not-started",
+      "M6": "in-progress",
       "M7": "blocked",
       "M8": "blocked"
     },

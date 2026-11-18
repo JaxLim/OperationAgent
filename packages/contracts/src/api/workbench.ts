@@ -97,7 +97,7 @@ export const TaskStartResultSchema = z.discriminatedUnion('accepted', [
 ]);
 export type TaskStartResult = z.infer<typeof TaskStartResultSchema>;
 
-export const CapabilityStatusSchema = z.enum(['unverified', 'unavailable']);
+export const CapabilityStatusSchema = z.enum(['available', 'unverified', 'unavailable']);
 export const CapabilityMatrixSchema = z.strictObject({ ui: CapabilityStatusSchema, read: CapabilityStatusSchema, gitRead: CapabilityStatusSchema,
   highRisk: CapabilityStatusSchema, workerIsolation: CapabilityStatusSchema });
 export type CapabilityMatrix = z.infer<typeof CapabilityMatrixSchema>;
@@ -108,7 +108,7 @@ export const ControlOverviewSchema = z.strictObject({
   agentReady: z.boolean(),
   startedAt: z.iso.datetime(), uptimeMs: z.number().int().nonnegative(),
   runtime: z.strictObject({ node: z.string().max(32), abi: z.string().max(8), sqlite: z.string().max(32), platform: z.string().max(16), arch: z.string().max(16) }),
-  database: z.strictObject({ version: z.literal(13), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
+  database: z.strictObject({ version: z.literal(14), recoveredRuns: z.number().int().nonnegative(), projects: z.number().int().nonnegative(),
     runs: z.number().int().nonnegative(), records: z.number().int().nonnegative() }),
   // Per-platform Worker qualification (SEC-W01) is a build record (build/agent-status.json); at runtime the control plane
   // reports only whether this installation has an isolated Worker runtime and what its supervisor is doing.
@@ -119,7 +119,7 @@ export const ControlOverviewSchema = z.strictObject({
     z.strictObject({ state: z.enum(['idle', 'starting', 'ready']), launches: z.number().int().nonnegative(),
       fixtureLaunch: z.literal('disabled-in-release') }),
   ]),
-  tools: z.strictObject({ read: z.literal('READ_ADAPTER_UNAVAILABLE'), highRisk: z.literal('SANDBOX_UNAVAILABLE') }),
+  tools: z.strictObject({ read: z.enum(['available', 'READ_ADAPTER_UNAVAILABLE']), highRisk: z.literal('SANDBOX_UNAVAILABLE') }),
   capabilities: CapabilityMatrixSchema,
 });
 export type ControlOverview = z.infer<typeof ControlOverviewSchema>;

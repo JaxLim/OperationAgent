@@ -26,7 +26,7 @@ export const AGENT_RUN_LIMITS = Object.freeze({
   maxConversationBytes: 16 * 1024 * 1024,
 });
 
-export const AgentToolNameSchema = z.enum(['read_file', 'list_directory', 'search_text', 'find_files', 'update_plan']);
+export const AgentToolNameSchema = z.enum(['read_file', 'list_directory', 'search_text', 'find_files', 'update_plan', 'load_skill']);
 export type AgentToolName = z.infer<typeof AgentToolNameSchema>;
 
 /** Why a turn ended, normalized from the provider's stop_reason. `refusal` is a policy decline (HTTP 200). */
@@ -88,6 +88,12 @@ export type TurnDelta = z.infer<typeof TurnDeltaSchema>;
  * Express still re-validates every input with Zod because model output is untrusted.
  */
 export const AGENT_TOOL_DEFINITIONS = Object.freeze({
+  load_skill: Object.freeze({
+    name: 'load_skill',
+    description: 'Read the instructions for an enabled project skill. Use the exact path shown in the project skill catalog.',
+    input_schema: { type: 'object', additionalProperties: false, required: ['path'],
+      properties: { path: { type: 'string', minLength: 1, maxLength: 100 } } },
+  }),
   update_plan: Object.freeze({
     name: 'update_plan',
     description: 'Maintain a short plan for a multi-step task. Send the full current step list each time. Keep step IDs stable, ' +

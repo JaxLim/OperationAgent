@@ -22,6 +22,9 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 - 在“设置 → 用量”按供应商和模型查看本机任务的调用次数、输入、输出、缓存读写和总 Token。输入包含缓存部分。统计来自已完成的模型回合，失败请求和连接测试不计入。单个任务也可以查看模型与工具耗时。
 - 任务计划：模型通过 `update_plan` 列出步骤并更新状态，任务页显示进度与依赖。计划写入本地数据库，停止、中断和重启后可以查看。连续 4 轮没有完成新步骤时提醒一次，每个任务最多 2 次。任务结束仍有未完成步骤时保留提示。当前验证使用本地模型应答。
 - 会话：任务完成后可在原对话追问。在「设置 → 聊天与执行 → 保存检查点」开启本机保存，中断后可在任务页点「继续」。续接使用原来的渠道和模型。
+- 项目技能：在「设置 → 项目技能」扫描、按来源筛选并预览当前项目的 `SKILL.md`。支持 `.operationagent/skills/`、`.agents/skills/`、`.claude/skills/` 和 `.opencode/skills/`。授权绑定文件哈希，模型按需加载正文。
+- GitHub 技能目录可浏览精选或手动输入的公开仓库，并预览指定版本的 `SKILL.md`。「设置 → 集成」可搜索现有模型、搜索供应商和 MCP 配置，点选后进入对应设置。
+- 任务右侧「文件」显示成功读取的路径，「结果」显示任务状态和最近保存的回复。
 - 任务基础设施：任务状态机、只追加的任务事件存储、快照与游标分页接口，以及工作台里的任务列表、对话和事件时间线。从源码运行的开发构建不会启动隔离 Worker，在那里提交的请求会被拒绝，不会创建任务。
 - 在“设置 → 供应商”配置 API Key，选择支持文本对话和工具调用的模型。任务启动时采用输入框选中的渠道和模型。Anthropic 支持流式输出与上下文压缩，OpenAI、Google Gemini、OpenRouter 按回合返回结果。网页搜索供应商（Exa、Tavily、Brave、Firecrawl）目前可以保存密钥。
 - Agent 配置与 MCP 服务器定义：可以新建和编辑，但目前只保存配置，不会运行、启动或连接任何东西。
@@ -32,7 +35,6 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 **还没实现的**
 
 - 真实供应商账号联调。现有自动化使用本地应答验证请求、工具调用和用量。
-- 项目技能（见 [路线图](docs/ROADMAP.md)）。
 - 写文件与运行 Shell 的沙箱、审批流程、网页搜索工具、MCP Host。
 - 自定义渠道已接入 OpenAI 兼容基础地址、模型 ID 和独立密钥，本机 HTTP 须单独勾选。Hugging Face 设备码登录需要你为应用注册的公开 OAuth Client ID，授权后填写推理模型 ID。真实账号授权尚未联调。[官方注册说明](https://huggingface.co/docs/hub/oauth)
 - ChatGPT 套餐和 GitHub Copilot 的账号登录尚未接入。
@@ -55,10 +57,10 @@ OperationAgent 是一个**安全优先**的桌面 AI 编程 Agent，基于 Elect
 | P2.0–P2.3 | 任务契约与状态机、任务事件存储、快照与游标补拉、工作台任务视图 | 已实现；P2 整体验收所需的 CI 证据还没产出 |
 | M1 | SEC-W01：Windows 生产 Worker 隔离门禁 | 已完成（Windows x64 通过） |
 | M2 | 只读 Agent：凭据、模型网关、模型设置、Read Adapter、Agent Loop、隔离 Worker、对话界面 | 已完成（Windows x64；runner 证据见 `docs/evidence/m2/win32-x64/`） |
-| M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | 未开始 |
+| M3 | 写文件与 Shell：沙箱、审批、命令规范化、停止语义 | P3a 验收进行中，生产执行由 P3b 门禁控制 |
 | M4 | 产品化：MCP、签名与升级 | 未开始 |
 | M5 | 平台基础（[ADR-PLAT-001](docs/adr/ADR-PLAT-001.md)）：上下文引擎与度量、选择性检索、计划 | 已实现上下文度量、选择性检索和任务计划；真实供应商联调待完成 |
-| M6 | 会话、检查点和项目技能 | 已实现会话与检查点，项目技能待开发 |
+| M6 | 会话、检查点和项目技能 | 已实现会话、检查点和项目技能，安装版与真实供应商复验待完成 |
 | M7–M8 | 子 Agent、目标驱动运行、MCP Host 和插件 | 待批准 ADR 中的具体决策 |
 
 详细计划见 [路线图](docs/ROADMAP.md)，每次变更的验证记录见 [执行记录](docs/EXECUTION.md)。
@@ -77,7 +79,7 @@ flowchart LR
 
 - **桌面端**：Electron 45、React 19、TypeScript 5.9、Vite。Renderer 只管界面，碰不到 Node、文件系统和密钥；Preload 只暴露一组固定的白名单接口。
 - **控制面**：Express 5，跑在独立的官方 Node.js 24 进程里（不用 Electron 自带的 Node），也是唯一能读写数据库的进程。主进程先通过继承的通道确认服务身份，再经 HMAC 认证的回环 HTTP 转发 API 请求。
-- **持久化**：better-sqlite3（SQLite 3.53），9 个版本化 SQL 迁移；任务状态和事件在同一事务中提交。
+- **持久化**：better-sqlite3（SQLite 3.53），14 个版本化 SQL 迁移。任务状态和事件在同一事务中提交。
 - **契约**：`packages/contracts` 用 zod 定义 API、IPC、事件和错误码，单元测试确保未知字段和非法的状态迁移都会被拒绝。
 - **Worker 隔离（Windows）**：控制面内的原生 WorkerLauncher 以 AppContainer + Job Object 启动 Worker，通过单条受保护的继承管道通信（OWIP/1 分帧 + JSON-RPC 2.0）。
 - **凭据**：首次输入的 API Key 经主进程的 `safeStorage` 加密后保存。发起请求时由控制面取用对应渠道的密钥，Worker 只接收模型结果。

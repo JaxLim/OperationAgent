@@ -26,9 +26,12 @@ export const CONTROL_ROUTES = Object.freeze({ health: '/v1/health', heartbeat: '
   // Settings expansion: linked providers, web-search keys, agent profiles and MCP server definitions (configuration only).
   providers: '/v1/providers', providerCredential: '/v1/providers/credential', providerCredentialClear: '/v1/providers/credential/clear',
   providerTest: '/v1/providers/test', providerModels: '/v1/providers/models', providerModel: '/v1/providers/model',
-  agents: '/v1/agents', agentRemove: '/v1/agents/remove', mcpServers: '/v1/mcp/servers', mcpServerRemove: '/v1/mcp/servers/remove' });
+  agents: '/v1/agents', agentRemove: '/v1/agents/remove', mcpServers: '/v1/mcp/servers', mcpServerRemove: '/v1/mcp/servers/remove',
+  projectSkills: '/v1/project-skills', projectSkillGrant: '/v1/project-skills/grant', projectSkillPreview: '/v1/project-skills/preview',
+  githubSkillCatalog: '/v1/skill-catalog/github', githubSkillPreview: '/v1/skill-catalog/github/preview' });
 export const ControlErrorSchema = z.enum(['VALIDATION_ERROR', 'AUTHENTICATION_FAILED', 'IDENTITY_MISMATCH',
   'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'RECORD_CONFLICT', 'RATE_LIMITED', 'WORKER_ISOLATION_UNAVAILABLE', 'NOT_FOUND', 'LIMIT_EXCEEDED',
+  'READ_ADAPTER_UNAVAILABLE',
   // The client's cursor is past the committed log (e.g. another database); it must refetch the snapshot.
   'CURSOR_AHEAD',
   // SEC-14: OS-backed encryption is unavailable, so a key is refused instead of being stored weakly.
@@ -44,7 +47,7 @@ export type SmokeRecord = z.infer<typeof SmokeRecordSchema>;
 export type SmokeRecords = z.infer<typeof SmokeRecordsSchema>;
 export const ControlHealthSchema = z.strictObject({ protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, controlPlaneReady: z.literal(true), agentReady: z.boolean(),
-  databaseVersion: z.literal(13), recoveredRuns: z.number().int().nonnegative() });
+  databaseVersion: z.literal(14), recoveredRuns: z.number().int().nonnegative() });
 export type ControlHealth = z.infer<typeof ControlHealthSchema>;
 export const BootstrapSchema = z.strictObject({ kind: z.literal('bootstrap'), protocolVersion: z.literal(PROTOCOL_VERSION),
   ...ServiceTreeIdentitySchema.shape, token: z.string().regex(/^[a-f0-9]{64}$/),

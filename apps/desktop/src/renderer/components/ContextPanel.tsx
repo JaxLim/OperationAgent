@@ -5,15 +5,12 @@ import { useT } from '../locale';
 import { useStore } from '../state';
 import { duration, shortId } from './format';
 import { IconCheck, IconDiff, IconFile, IconFlask, IconInfo, IconLock, IconShield, IconX } from './Icons';
-
-// Secondary views beside the chat. Only Status shows live data; the rest explain which gate keeps them empty.
+import { Markdown } from './Markdown';
 
 type Tab = 'status' | 'files' | 'changes' | 'approvals' | 'results';
-const LOCKED: Record<Exclude<Tab, 'status'>, { icon: ReactNode; title: MessageKey; code: string; text: MessageKey }> = {
-  files: { icon: <IconFile size={18} />, title: 'panel.files.title', code: 'READ_ADAPTER_UNAVAILABLE', text: 'panel.files.text' },
+const LOCKED: Record<'changes' | 'approvals', { icon: ReactNode; title: MessageKey; code: string; text: MessageKey }> = {
   changes: { icon: <IconDiff size={18} />, title: 'panel.changes.title', code: 'SANDBOX_UNAVAILABLE', text: 'panel.changes.text' },
   approvals: { icon: <IconShield size={18} />, title: 'panel.approvals.title', code: 'SANDBOX_UNAVAILABLE', text: 'panel.approvals.text' },
-  results: { icon: <IconFlask size={18} />, title: 'panel.results.title', code: 'WORKER_ISOLATION_UNAVAILABLE', text: 'panel.results.text' },
 };
 
 function Kv({ label, children, tone }: { label: string; children: ReactNode; tone?: 'ok' | 'warn' | 'danger' | 'muted' | undefined }) {
@@ -26,7 +23,8 @@ function StatusTab() {
   const overview = useStore(s => s.overview);
   const connection = useStore(s => s.connection);
   const service = desktop?.service;
-  const capability = (value: string): 'muted' | 'danger' => value === 'unavailable' ? 'danger' : 'muted';
+  const capability = (value: string): 'muted' | 'danger' | 'ok' =>
+    value === 'available' ? 'ok' : value === 'unavailable' ? 'danger' : 'muted';
   return (
     <div className="rp-scroll status-tab">
       <section className="status-card">
@@ -75,6 +73,46 @@ function StatusTab() {
   );
 }
 
+function TaskTab({ tab }: { tab: 'files' | 'results' }) {
+  const t = useT();
+  const task = useStore(s => s.tasks.find(item => item.id === s.selectedTaskId && item.projectId === s.settings?.activeProjectId));
+  const view = useStore(s => task ? s.taskViews[task.id] : undefined);
+  const messages = useStore(s => task ? s.conversations[task.id]?.messages : undefined);
+  if (!task) return <div className="panel-empty"><p className="panel-empty-text">{t('panel.selectTask')}</p></div>;
+
+  if (tab === 'files') {
+    const paths = new Set<string>();
+    for (const event of view?.events ?? []) {
+      if (event.type !== 'tool_call') continue;
+      const { tool, status, target } = event.payload;
+      if (tool === 'read_file' && status === 'ok' && target) paths.add(target);
+    }
+    return <div className="rp-scroll" data-panel-files>
+      <section className="status-card">
+        <h3 className="status-title"><IconFile size={14} />{t('panel.files.title')}</h3>
+        {paths.size ? <ul className="panel-file-list">{Array.from(paths, path => <li className="mono" key={path}>{path}</li>)}</ul>
+          : <p className="muted small">{t(view?.sync === 'syncing' ? 'panel.loadingTask' : 'panel.files.text')}</p>}
+      </section>
+    </div>;
+  }
+
+  const state = view?.events.findLast(event => event.type === 'task_state_changed' && event.payload.to === task.state);
+  const answer = messages?.findLast(message => message.role === 'assistant' && message.taskId === task.id);
+  return <div className="rp-scroll" data-panel-results>
+    <section className="status-card">
+      <h3 className="status-title"><IconFlask size={14} />{t(`task.state.${task.state}`)}</h3>
+      {state?.type === 'task_state_changed' && state.payload.reason && <p className="muted small">{state.payload.reason}</p>}
+    </section>
+    <section className="status-card">
+      <h3 className="status-title">{t('panel.results.title')}</h3>
+      {answer ? <>
+        <div className="conv-answer"><Markdown text={answer.text} /></div>
+        {answer.textTruncated && <p className="muted small">{t('conv.clipped')}</p>}
+      </> : <p className="muted small">{t(view?.sync === 'syncing' ? 'panel.loadingTask' : 'panel.results.text')}</p>}
+    </section>
+  </div>;
+}
+
 export function ContextPanel({ onClose }: { onClose: () => void }) {
   const t = useT();
   const [tab, setTab] = useState<Tab>('status');
@@ -83,14 +121,14 @@ export function ContextPanel({ onClose }: { onClose: () => void }) {
     { id: 'changes', label: t('panel.tab.changes'), icon: <IconDiff size={14} /> }, { id: 'approvals', label: t('panel.tab.approvals'), icon: <IconShield size={14} /> },
     { id: 'results', label: t('panel.tab.results'), icon: <IconFlask size={14} /> },
   ];
-  const locked = tab === 'status' ? undefined : LOCKED[tab];
+  const locked = tab === 'changes' || tab === 'approvals' ? LOCKED[tab] : undefined;
   return (
     <aside className="right-panel" aria-label={t('panel.label')}>
       <div className="rp-head">
         <div className="rp-tabs" role="tablist" aria-label={t('panel.views')}>
           {tabs.map(item => (
             <button key={item.id} role="tab" aria-selected={tab === item.id} className={`rp-tab${tab === item.id ? ' is-active' : ''}`} onClick={() => setTab(item.id)}
-              title={item.id === 'status' ? item.label : t('panel.locked', { label: item.label })} aria-label={item.label}>
+              title={item.id in LOCKED ? t('panel.locked', { label: item.label }) : item.label} aria-label={item.label}>
               {item.icon}<span className="rp-tab-label">{item.label}</span>
             </button>
           ))}
@@ -105,7 +143,7 @@ export function ContextPanel({ onClose }: { onClose: () => void }) {
             <div className="panel-empty-text">{t(locked.text)}</div>
             <span className="badge badge-soft mono"><IconLock size={11} /> {locked.code}</span>
           </div>
-        ) : <StatusTab />}
+        ) : tab === 'files' || tab === 'results' ? <TaskTab tab={tab} /> : <StatusTab />}
       </div>
     </aside>
   );

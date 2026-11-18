@@ -24,11 +24,16 @@ import type { ProviderGateway } from './models/providers.js';
 import { clipMessage } from './agent/message-view.js';
 import type { TaskRunner } from './agent/runner.js';
 import type { AgentWorkerSnapshot } from './agent/supervisor.js';
+import { GitHubSkillCatalogSchema, GitHubSkillPreviewRequestSchema, GitHubSkillSourceSchema, ProjectSkillPreviewRequestSchema, ProjectSkillPreviewSchema, ProjectSkillsSchema, SetProjectSkillSchema } from '@operation-agent/contracts';
+import type { ProjectSkillService } from './tools/project-skills.js';
+import { GitHubSkillCatalogService } from './tools/github-skill-catalog.js';
 
 export interface ModelServices { bridge?: CryptoBridge; gateway?: ModelGateway; providerGateway?: ProviderGateway;
   connections?: ReturnType<typeof createModelConnections>;
   /** Present only when a qualified Worker runtime exists; without it task starts are refused (ADR-WIN-001 D4). */
   runner?: TaskRunner;
+  skills?: ProjectSkillService;
+  githubSkills?: GitHubSkillCatalogService;
   workers?: { snapshot(): AgentWorkerSnapshot } }
 
 export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: () => number, contact: () => void, services: ModelServices = {}): Express {
@@ -39,6 +44,7 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   const gateway = services.gateway ?? createModelGateway({ endpoint: bootstrap.modelEndpoint });
   // Linked providers always use their fixed official endpoints in production; only tests inject a fake gateway.
   const providerGateway = services.providerGateway ?? createProviderGateway();
+  const githubSkills = services.githubSkills ?? new GitHubSkillCatalogService();
   const slots = Object.fromEntries(CREDENTIAL_SLOTS.map(slot => [slot, createCredentialService(store.credentialStore(slot), services.bridge ?? UNAVAILABLE_BRIDGE)])) as
     Record<CredentialSlot, CredentialService>;
   const startedAt = new Date();
@@ -51,7 +57,7 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
         ? 'RESTART_BUDGET_EXHAUSTED' as const : 'SHUT_DOWN' as const, fixtureLaunch: 'disabled-in-release' as const };
     return { state: snapshot.state, launches: snapshot.launches, fixtureLaunch: 'disabled-in-release' as const };
   };
-  const agentReady = (): boolean => workerView().state !== 'unavailable';
+  const agentReady = (): boolean => services.runner !== undefined && workerView().state !== 'unavailable';
   app.disable('x-powered-by');
   app.disable('etag'); app.set('trust proxy', false);
   const seen = new Map<string, number>();
@@ -157,13 +163,16 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
   app.get(CONTROL_ROUTES.overview, (_req, res) => {
     try {
       const counts = store.counts();
+      const ready = agentReady();
+      const readAvailable = ready && services.runner?.readAvailable === true;
       res.json(ControlOverviewSchema.parse({ protocolVersion: PROTOCOL_VERSION, mainRunId: bootstrap.mainRunId, expressRunId: bootstrap.expressRunId,
-        controlPlaneReady: true, agentReady: agentReady(), startedAt: startedAt.toISOString(), uptimeMs: Date.now() - startedAt.getTime(),
+        controlPlaneReady: true, agentReady: ready, startedAt: startedAt.toISOString(), uptimeMs: Date.now() - startedAt.getTime(),
         runtime: { node: process.versions.node, abi: process.versions.modules, sqlite: store.sqliteVersion, platform: process.platform, arch: process.arch },
         database: { version: store.databaseVersion, recoveredRuns: store.recoveredRuns, ...counts },
         worker: workerView(),
-        tools: { read: 'READ_ADAPTER_UNAVAILABLE', highRisk: 'SANDBOX_UNAVAILABLE' },
-        capabilities: { ui: 'unverified', read: 'unavailable', gitRead: 'unavailable', highRisk: 'unavailable', workerIsolation: 'unverified' } }));
+        tools: { read: readAvailable ? 'available' : 'READ_ADAPTER_UNAVAILABLE', highRisk: 'SANDBOX_UNAVAILABLE' },
+        capabilities: { ui: 'unverified', read: readAvailable ? 'available' : 'unavailable',
+          gitRead: 'unavailable', highRisk: 'unavailable', workerIsolation: ready ? 'available' : 'unverified' } }));
     } catch (error) { failure(res, error); }
   });
   app.get(CONTROL_ROUTES.settings, (_req, res) => { try { res.json(store.getSettings()); } catch (error) { failure(res, error); } });
@@ -339,9 +348,47 @@ export function createControlPlane(bootstrap: Bootstrap, store: Store, getPort: 
       res.json(used.ok ? used.value : ProviderModelListSchema.parse({ provider, status: used.reason, models: [], fetchedAt: new Date().toISOString() }));
     }, (error: unknown) => { failure(res, error); });
   });
-  // Agent profiles and MCP server definitions: stored configuration only. Nothing here runs an agent, launches a
-  // process or opens a connection; the agent loop and the MCP Host (P5) are not part of this build.
+  // Agent profiles and MCP server definitions are configuration. Task Runner uses its own fixed tool registry.
   app.get(CONTROL_ROUTES.agents, (_req, res) => { try { res.json(AgentListSchema.parse({ agents: store.listAgents() })); } catch (error) { failure(res, error); } });
+  async function skillReply(res: Response, run: () => Promise<unknown>): Promise<void> {
+    try { res.json(await run()); }
+    catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      if (code === 'READ_ADAPTER_UNAVAILABLE' || code === 'SERVICE_UNAVAILABLE') res.status(503).json({ error: code });
+      else if (code === 'RATE_LIMITED') res.status(429).json({ error: code });
+      else failure(res, error);
+    }
+  }
+  async function skillRequest(res: Response, run: (skills: ProjectSkillService) => Promise<unknown>): Promise<void> {
+    const skills = services.skills;
+    if (!skills) { res.status(503).json({ error: 'READ_ADAPTER_UNAVAILABLE' }); return; }
+    await skillReply(res, () => run(skills));
+  }
+  app.post(CONTROL_ROUTES.projectSkills, async (req, res) => {
+    const input = ProjectRefSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    await skillRequest(res, async skills => ProjectSkillsSchema.parse(await skills.list(input.data.id)));
+  });
+  app.put(CONTROL_ROUTES.projectSkillGrant, async (req, res) => {
+    const input = SetProjectSkillSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    await skillRequest(res, async skills => { await skills.set(input.data); return {}; });
+  });
+  app.post(CONTROL_ROUTES.projectSkillPreview, async (req, res) => {
+    const input = ProjectSkillPreviewRequestSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    await skillRequest(res, async skills => ProjectSkillPreviewSchema.parse(await skills.preview(input.data)));
+  });
+  app.post(CONTROL_ROUTES.githubSkillCatalog, async (req, res) => {
+    const input = GitHubSkillSourceSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    await skillReply(res, async () => GitHubSkillCatalogSchema.parse(await githubSkills.list(input.data)));
+  });
+  app.post(CONTROL_ROUTES.githubSkillPreview, async (req, res) => {
+    const input = GitHubSkillPreviewRequestSchema.safeParse(req.body);
+    if (!input.success) { validationError(res); return; }
+    await skillReply(res, async () => ProjectSkillPreviewSchema.parse(await githubSkills.preview(input.data)));
+  });
   app.put(CONTROL_ROUTES.agents, (req, res) => {
     const input = AgentSaveSchema.safeParse(req.body);
     if (!input.success) { validationError(res); return; }

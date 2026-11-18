@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve, sep } from 'node:path';
 import { root, until, environment, launchSidecar, closeDirectory, httpCall } from './sidecar-helper.mjs';
@@ -69,7 +69,8 @@ test('real Electron Main → sandboxed Preload → authenticated Express → SQL
     'listTasks', 'getTask', 'listTaskEvents', 'getModelSettings', 'saveModelChoice', 'setApiKey', 'clearApiKey', 'testModelConnection',
     'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel', 'listUsage',
     'saveCustomProvider', 'removeCustomProvider', 'beginHfLogin', 'pollHfLogin', 'cancelHfLogin', 'configureHf',
-    'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'].sort());
+    'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer', 'listProjectSkills', 'setProjectSkill',
+    'previewProjectSkill', 'listGitHubSkills', 'previewGitHubSkill'].sort());
   assert.equal(first.renderer.mounted, true);
   assert.equal(await host.command('csp'), 'blocked'); assert.equal(await host.command('invalid-input'), 'rejected');
   assert.match(await host.command('foreign-window'), /IPC_SENDER_REJECTED/);
@@ -173,9 +174,11 @@ test('workbench settings persist, invalid input and Worker-less task starts are 
   assert.equal(result.tooLong, 'rejected'); assert.match(result.missing, /NOT_FOUND/);
   assert.deepEqual(result.task, { accepted: false, error: 'WORKER_ISOLATION_UNAVAILABLE' });
   assert.equal(result.emptyTask, 'rejected'); assert.equal(result.forged, 'rejected');
-  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 13);
+  assert.equal(result.overview.agentReady, false); assert.equal(result.overview.database.version, 14);
   assert.equal(result.overview.worker.error, 'WORKER_ISOLATION_UNAVAILABLE');
-  assert.ok(Object.values(result.overview.capabilities).every(value => value !== 'verified'));
+  assert.equal(result.overview.tools.read, 'READ_ADAPTER_UNAVAILABLE');
+  assert.deepEqual(result.overview.capabilities,
+    { ui: 'unverified', read: 'unavailable', gitRead: 'unavailable', highRisk: 'unavailable', workerIsolation: 'unverified' });
   assert.equal(result.runs.runs[0].outcome, 'RUNNING'); assert.deepEqual(result.projects.projects, []);
   // P2.2 read-only task views: a refused start persists nothing, and unknown or malformed queries fail closed.
   assert.deepEqual(result.tasks, { tasks: [] });
@@ -237,10 +240,11 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   seed.appendAgentEvent(task, 'user_message', { messageId: prompt.id, chars: 26 });
   step('RUNNING');
   const first = seed.addTaskMessage(task, 'assistant', 1, 'Let me look at the layout first.');
-  seed.appendAgentEvent(task, 'assistant_turn', { turn: 1, model: 'claude-sonnet-5-5', messageId: first.id, stopReason: 'tool_use', toolCalls: 2, fallback: false, usage,
+  seed.appendAgentEvent(task, 'assistant_turn', { turn: 1, model: 'claude-sonnet-5-5', messageId: first.id, stopReason: 'tool_use', toolCalls: 3, fallback: false, usage,
     timing: { ttftMs: 400, durationMs: 2_100 }, context: context(900) });
   seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_a', tool: 'list_directory', target: '.', status: 'ok', code: null, size: 12, durationMs: 80 });
   seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_b', tool: 'read_file', target: '.env', status: 'refused', code: 'SENSITIVE_PATH', size: null, durationMs: 5 });
+  seed.appendAgentEvent(task, 'tool_call', { turn: 1, callId: 'toolu_c', tool: 'read_file', target: 'package.json', status: 'ok', code: null, size: 348, durationMs: 8 });
   const answer = ['## Build', '', 'It uses **pnpm** and `tsc -b`:', '', '```bash', 'pnpm install', 'pnpm build', '```', '',
     '- Lint with `pnpm lint`', '- Test with `pnpm test`', '', 'Injected <img src=x onerror="window.__pwned=1"> stays text.'].join('\n');
   const second = seed.addTaskMessage(task, 'assistant', 2, answer);
@@ -256,16 +260,19 @@ test('M2 conversation: a committed agent task shows its prompt, Markdown answers
   assert.match(view.answers[0], /Let me look at the layout first/);
   assert.deepEqual(view.code, ['pnpm install\npnpm build']);
   assert.equal(view.headings, 1); assert.equal(view.listItems, 2);
-  assert.equal(view.tools.length, 2);
+  assert.equal(view.tools.length, 3);
   assert.match(view.tools[0], /Listed/); assert.match(view.tools[1], /\.env/); assert.match(view.tools[1], /SENSITIVE_PATH/);
   assert.match(view.answers[1], /<img src=x onerror=/, 'markup in model output is shown as text');
   assert.equal(view.images, 0); assert.equal(view.scripts, 0);
   assert.equal(view.pwned, false, 'no handler from model output ever ran');
   assert.match(view.end, /Done/); assert.match(view.end, /no files were changed/);
+  assert.deepEqual(view.filePaths, ['package.json']);
+  assert.match(view.result, /Completed.*no files were changed/);
+  assert.equal(view.resultCode, 'pnpm install\npnpm build');
   assert.equal(view.stop, false, 'a finished task offers no Stop');
   assert.match(view.activity, /Activity log/);
   // The usage line is derived from the committed turn and tool events: 900 + 300 + 900 input tokens, 900 of them cached.
-  assert.match(view.usage, /turns 2 · tool calls 2/);
+  assert.match(view.usage, /turns 2 · tool calls 3/);
   assert.match(view.usage, /input 2,100 tokens \(43% cached\)/);
   assert.match(view.usage, /output 240 tokens/);
   assert.match(view.usage, /model 5\.5s · first content 0\.5s \(median\) · tools 0\.1s/);
@@ -337,6 +344,40 @@ test('M5.3 task plans retain progress and dependencies across terminal states, l
   assert.equal(restored.plan.completed, 1); assert.equal(restored.plan.revision, 2);
   assert.match(restored.plan.incomplete, /2 steps remain unfinished/);
 });
+
+test('project skills and integration catalog: real Electron previews, authorizes, navigates and rechecks skills after restart',
+  { skip: (process.platform !== 'win32' || process.arch !== 'x64') && 'win32-x64 only', timeout: 90_000 }, async t => {
+    const create = await fixture(t);
+    const workspace = resolve(create.directory, 'workspace');
+    const folder = resolve(workspace, '.claude', 'skills', 'review');
+    await mkdir(folder, { recursive: true });
+    const writeSkill = text => writeFile(resolve(folder, 'SKILL.md'),
+      `---\nname: review\ndescription: ${text}\n---\n## Checklist\n\n- Read the proposed change.\n- Verify the affected paths.\n\n<img src=x onerror="window.__skillPreviewFired=1">\n`);
+    await writeSkill('Read the project before making recommendations');
+    const seed = openStore(resolve(create.directory, 'database'), randomUUID());
+    const project = seed.addProject({ name: 'With skills', path: workspace });
+    seed.saveSettings({ ...seed.getSettings(), activeProjectId: project.id, language: 'en' });
+    seed.close(true);
+
+    const host = await create();
+    const enabled = await host.command('project-skills-ui', { before: 'available', action: 'enable-skill', after: 'enabled' });
+    assert.match(enabled.current, /Revoke/);
+    assert.match(enabled.current, /Checklist/);
+    assert.equal(enabled.activeContent, false);
+    await host.command('capture', `m6/${process.platform}-${process.arch}/project-skills.png`);
+    const integrations = await host.command('integrations-ui');
+    assert.equal(integrations.providerDetail, 'openai');
+    assert.equal(integrations.mcpForm, true);
+    await host.close();
+
+    const reopened = await create();
+    const saved = await reopened.command('project-skills-ui', { before: 'enabled', after: 'enabled' });
+    assert.match(saved.current, /Read the project before making recommendations/);
+    await writeSkill('Read the latest project priorities');
+    const changed = await reopened.command('project-skills-ui', { before: 'changed', action: 'enable-skill', after: 'enabled' });
+    assert.match(changed.initial, /Authorize new version/);
+    assert.match(changed.current, /Read the latest project priorities/);
+  });
 
 test('custom provider confirmation encrypts its dedicated key and survives Electron restart', { timeout: 90_000 }, async t => {
   const create = await fixture(t);

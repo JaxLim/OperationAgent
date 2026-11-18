@@ -27,7 +27,9 @@ const ipcOperations = ['health', 'listRecords', 'writeRecords', 'desktopStatus',
   // MCP server definitions, which are stored configuration only: none runs an agent, launches a process or connects.
   'getProviders', 'setProviderKey', 'clearProviderKey', 'testProvider', 'listProviderModels', 'saveProviderModel', 'listUsage',
   'saveCustomProvider', 'removeCustomProvider', 'beginHfLogin', 'pollHfLogin', 'cancelHfLogin', 'configureHf',
-  'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer'];
+  'listAgents', 'saveAgent', 'removeAgent', 'listMcpServers', 'saveMcpServer', 'removeMcpServer',
+  // ADR-PLAT-001 D6: list skill metadata and authorize a version within a registered project.
+  'listProjectSkills', 'setProjectSkill', 'previewProjectSkill', 'listGitHubSkills', 'previewGitHubSkill'];
 
 export function zoneFor(filename, cwd) {
   const name = relative(cwd, filename).replaceAll('\\', '/');
@@ -48,6 +50,7 @@ export default {
       'packages/platform-worker/src/parent.ts': ['node:module'],
       // SEC-08: the Read Adapter launcher is the only Express module that creates a child process.
       'apps/server/src/tools/read-adapter.ts': ['node:child_process'],
+      'apps/server/src/tools/project-skills.ts': ['js-yaml'],
       // The Model Gateway is the only module that talks to the provider; the conversation only uses its types.
       'apps/server/src/models/turns.ts': ['@anthropic-ai/sdk', '@anthropic-ai/sdk/resources/beta/messages/messages'],
       'apps/server/src/models/custom-transport.ts': ['node:dns/promises', 'node:https', 'node:net'],

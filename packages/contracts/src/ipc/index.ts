@@ -10,6 +10,7 @@ import type { ApiKeyInput, ModelChoice, ModelSettingsView, ModelTestResult } fro
 import type { LinkedProviderRef, ProviderKeyInput, ProviderModelChoice, ProviderModelList, ProviderOverviewView, ProviderRef,
   ProviderTestResult } from '../api/providers.js';
 import type { AgentList, AgentRef, AgentSave, McpServerList, McpServerRef, McpServerSave } from '../api/agents.js';
+import type { GitHubSkillCatalog, GitHubSkillPreviewRequest, GitHubSkillSource, ProjectSkillPreview, ProjectSkillPreviewRequest, ProjectSkills, SetProjectSkill } from '../agent/skills.js';
 export { ServiceTreeIdentitySchema } from './identity.js';
 export type { ServiceTreeIdentity } from './identity.js';
 
@@ -36,6 +37,9 @@ export const IPC_CHANNELS = Object.freeze({
   testProvider: 'oa:provider-test', listProviderModels: 'oa:provider-models', saveProviderModel: 'oa:provider-model-save',
   listAgents: 'oa:agents-list', saveAgent: 'oa:agents-save', removeAgent: 'oa:agents-remove',
   listMcpServers: 'oa:mcp-list', saveMcpServer: 'oa:mcp-save', removeMcpServer: 'oa:mcp-remove',
+  listProjectSkills: 'oa:project-skills-list', setProjectSkill: 'oa:project-skill-set',
+  previewProjectSkill: 'oa:project-skill-preview',
+  listGitHubSkills: 'oa:github-skills-list', previewGitHubSkill: 'oa:github-skill-preview',
 });
 export const EmptyInputSchema = z.strictObject({});
 
@@ -102,6 +106,11 @@ export interface DesktopApi {
   /** Agent profiles and MCP server definitions are stored configuration; nothing here runs, launches or connects. */
   listAgents(): Promise<AgentList>;
   saveAgent(input: AgentSave): Promise<AgentList>;
+  listProjectSkills(input: ProjectRef): Promise<ProjectSkills>;
+  setProjectSkill(input: SetProjectSkill): Promise<void>;
+  previewProjectSkill(input: ProjectSkillPreviewRequest): Promise<ProjectSkillPreview>;
+  listGitHubSkills(input: GitHubSkillSource): Promise<GitHubSkillCatalog>;
+  previewGitHubSkill(input: GitHubSkillPreviewRequest): Promise<ProjectSkillPreview>;
   removeAgent(input: AgentRef): Promise<AgentList>;
   listMcpServers(): Promise<McpServerList>;
   saveMcpServer(input: McpServerSave): Promise<McpServerList>;

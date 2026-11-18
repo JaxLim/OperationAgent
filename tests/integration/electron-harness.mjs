@@ -108,6 +108,14 @@ process.on('message', async message => {
           const section = await wait(() => document.querySelector('section[data-task-id="' + id + '"] .conversation'));
           await wait(() => section.querySelectorAll('.conv-answer').length >= ${JSON.stringify(answers)} && section.querySelector('.conv-end'));
           const detail = document.querySelector('section[data-task-id="' + id + '"]');
+          if (!document.querySelector('.right-panel')) document.querySelector('button[aria-label="Toggle side panel"]').click();
+          const panel = await wait(() => document.querySelector('.right-panel'));
+          const openPanel = label => [...panel.querySelectorAll('[role="tab"]')].find(tab => tab.getAttribute('aria-label') === label).click();
+          openPanel('Files');
+          const files = await wait(() => panel.querySelector('[data-panel-files]'));
+          const filePaths = [...files.querySelectorAll('li')].map(row => row.textContent);
+          openPanel('Results');
+          const results = await wait(() => panel.querySelector('[data-panel-results]'));
           return { prompt: section.querySelector('.conv-prompt')?.textContent ?? null,
             answers: [...section.querySelectorAll('.conv-answer')].map(node => node.textContent),
             code: [...section.querySelectorAll('.md-pre code')].map(node => node.textContent),
@@ -115,9 +123,55 @@ process.on('message', async message => {
             tools: [...section.querySelectorAll('.conv-tool')].map(node => node.textContent),
             images: section.querySelectorAll('img').length, scripts: section.querySelectorAll('script').length, pwned: window.__pwned !== undefined,
             end: section.querySelector('.conv-end')?.textContent ?? null,
+            filePaths, result: results.textContent, resultCode: results.querySelector('pre code')?.textContent,
             stop: Boolean([...detail.querySelectorAll('.task-actions button')].find(button => /Stop/.test(button.textContent))),
             activity: detail.querySelector('details.activity summary')?.textContent ?? null,
             usage: detail.querySelector('[data-task-usage]')?.textContent ?? null };
+        })()`);
+        break;
+      }
+      case 'project-skills-ui': {
+        const state = JSON.stringify(message.input);
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const wait = async check => {
+            for (let attempts = 0; attempts < 300; attempts++) {
+              const result = check();
+              if (result) return result;
+              await new Promise(done => setTimeout(done, 50));
+            }
+            throw new Error('PROJECT_SKILLS_UI_TIMEOUT');
+          };
+          const input = ${state};
+          await wait(() => document.querySelector('.app[data-loaded="true"]'));
+          if (!document.querySelector('.settings-nav')) window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', ctrlKey: true, bubbles: true }));
+          (await wait(() => document.querySelector('.settings-nav button[data-section="skills"]'))).click();
+          (await wait(() => document.querySelector('[data-action="scan-skills"]:enabled'))).click();
+          const node = await wait(() => document.querySelector('[data-skill-state="' + input.before + '"]'));
+          const initial = node.textContent;
+          if (input.action) (await wait(() => node.querySelector('[data-action="' + input.action + '"]:enabled'))).click();
+          const current = await wait(() => document.querySelector('[data-skill-state="' + input.after + '"]'));
+          const preview = await wait(() => current.querySelector('[data-skill-preview="preview"]'));
+          return { initial, current: current.textContent, activeContent: !!preview.querySelector('img,script') || window.__skillPreviewFired === 1 };
+        })()`);
+        break;
+      }
+      case 'integrations-ui': {
+        value = await host.window.webContents.executeJavaScript(`(async () => {
+          const wait = async selector => {
+            for (let attempts = 0; attempts < 200; attempts++) {
+              const result = document.querySelector(selector);
+              if (result) return result;
+              await new Promise(done => setTimeout(done, 50));
+            }
+            throw new Error('INTEGRATIONS_UI_TIMEOUT: ' + selector);
+          };
+          const nav = '.settings-nav button[data-section="integrations"]';
+          (await wait(nav)).click();
+          (await wait('[data-integration="openai"]')).click();
+          const provider = await wait('[data-provider-detail="openai"]');
+          (await wait(nav)).click();
+          (await wait('[data-integration="mcp-new"]')).click();
+          return { providerDetail: provider.dataset.providerDetail, mcpForm: !!(await wait('.settings-body[data-section="mcp"] form')) };
         })()`);
         break;
       }

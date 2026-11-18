@@ -1,5 +1,7 @@
 import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, safeStorage, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
+import { GITHUB_SKILL_LIMITS, GitHubSkillCatalogSchema, GitHubSkillPreviewRequestSchema, GitHubSkillSourceSchema, PROJECT_SKILL_LIMITS,
+  ProjectSkillPreviewRequestSchema, ProjectSkillPreviewSchema, ProjectSkillsSchema, SetProjectSkillSchema } from '@operation-agent/contracts';
 import { CustomProviderInputSchema, CustomProviderRefSchema, HfConfigSchema, HfLoginChallengeSchema, HfLoginInputSchema,
   HfLoginStateSchema, HfSessionSchema, UsagePageSchema, UsageQuerySchema } from '@operation-agent/contracts';
 import { basename } from 'node:path';
@@ -224,6 +226,17 @@ export async function startDesktop(options: { stageDirectory: string; dataDirect
   register(IPC_CHANNELS.saveProviderModel, async input =>
     providersView(await supervisor.call('PUT', CONTROL_ROUTES.providerModel, ProviderOverviewSchema, ProviderModelChoiceSchema.parse(input))));
   register(IPC_CHANNELS.listAgents, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.agents, AgentListSchema); });
+  register(IPC_CHANNELS.listProjectSkills, async input =>
+    supervisor.call('POST', CONTROL_ROUTES.projectSkills, ProjectSkillsSchema, ProjectRefSchema.parse(input), PROJECT_SKILL_LIMITS.scanTimeoutMs));
+  register(IPC_CHANNELS.previewProjectSkill, async input => supervisor.call('POST', CONTROL_ROUTES.projectSkillPreview, ProjectSkillPreviewSchema,
+    ProjectSkillPreviewRequestSchema.parse(input), PROJECT_SKILL_LIMITS.scanTimeoutMs));
+  register(IPC_CHANNELS.listGitHubSkills, async input => supervisor.call('POST', CONTROL_ROUTES.githubSkillCatalog, GitHubSkillCatalogSchema,
+    GitHubSkillSourceSchema.parse(input), GITHUB_SKILL_LIMITS.timeoutMs + 2000));
+  register(IPC_CHANNELS.previewGitHubSkill, async input => supervisor.call('POST', CONTROL_ROUTES.githubSkillPreview, ProjectSkillPreviewSchema,
+    GitHubSkillPreviewRequestSchema.parse(input), GITHUB_SKILL_LIMITS.timeoutMs + 2000));
+  register(IPC_CHANNELS.setProjectSkill, async input => {
+    await supervisor.call('PUT', CONTROL_ROUTES.projectSkillGrant, EmptyInputSchema, SetProjectSkillSchema.parse(input), PROJECT_SKILL_LIMITS.scanTimeoutMs);
+  });
   register(IPC_CHANNELS.saveAgent, async input => supervisor.call('PUT', CONTROL_ROUTES.agents, AgentListSchema, AgentSaveSchema.parse(input)));
   register(IPC_CHANNELS.removeAgent, async input => supervisor.call('POST', CONTROL_ROUTES.agentRemove, AgentListSchema, AgentRefSchema.parse(input)));
   register(IPC_CHANNELS.listMcpServers, async input => { empty(input); return supervisor.call('GET', CONTROL_ROUTES.mcpServers, McpServerListSchema); });

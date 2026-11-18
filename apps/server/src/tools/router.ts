@@ -27,6 +27,7 @@ export interface ToolRouter {
   searchText(call: ReadFileCall): Promise<SearchTextResult>;
   findFiles(call: ReadFileCall): Promise<FindFilesResult>;
   readonly adapter: ReadAdapter;
+  readonly readAvailable: boolean;
 }
 
 type Refused = Extract<ReadFileResult, { status: 'refused' }>;
@@ -63,6 +64,9 @@ export function createToolRouter(options: ToolRouterOptions): ToolRouter {
 
   return {
     adapter,
+    get readAvailable() {
+      return TOOL_REGISTRY.read_file.readGatePlatforms.includes(platform) && adapter.snapshot().available;
+    },
     async listDirectory(call) {
       const started = Date.now();
       let path = '';

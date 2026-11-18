@@ -21,6 +21,9 @@ The project is delivered in gated phases, each with evidence that can be re-chec
 - A read-only agent (Windows x64, installed app only): ask a question about a project and the agent searches it, finds files by name, lists directories and reads text files (whole or by line range), streams its answer with the files it looked at, and can be stopped at any time. The agent loop runs in a worker isolated by an AppContainer with no file, network or credential access; the control plane holds the conversation and the API key, and reads files through a short-lived read-only helper process. Secrets (`.env` files, keys, `.git` internals), links and anything outside the project are refused.
 - Usage per task: the task view shows model turns, prompt and output tokens, the share served from the prompt cache, and time spent in the model and in tools. Long tasks ask the model provider to summarize earlier context instead of failing when the context window fills up (this request shape has not been exercised against the real API yet).
 - Sessions support follow-up questions after a task completes. Enable **Settings → Chat & Execution → Save checkpoints** to save progress on this device, then choose **Continue** from an interrupted task. Continuing a chat uses its original provider and model.
+- Project skills: scan and filter the active project in **Settings → Project skills**, preview each `SKILL.md` and approve its exact file hash. Supported roots include `.operationagent/skills/`, `.agents/skills/`, `.claude/skills/` and `.opencode/skills/`.
+- Browse curated or custom public repositories in the GitHub skill catalog. **Settings → Integrations** lets you find existing model, web search and MCP configuration entries.
+- The **Files** panel lists successful file reads. **Results** shows the task state and latest saved response.
 - Task infrastructure: a task state machine, an append-only task event store, snapshot and cursor-paged APIs, and the task list, conversation and event timeline in the workbench. A build run from source does not launch the isolated worker, so there a submitted request is refused and no task is created.
 - Model provider settings: for Anthropic, OpenAI, Google Gemini and OpenRouter you can enter an API key, load the model list and test the connection; keys for web-search providers (Exa, Tavily, Brave, Firecrawl) can be saved. Every key is encrypted by the operating system (Electron `safeStorage`) before it is stored, and the database holds only ciphertext.
 - Agent profiles and MCP server definitions: you can create and edit them, but for now they are configuration only; nothing runs, launches or connects.
@@ -31,7 +34,6 @@ The project is delivered in gated phases, each with evidence that can be re-chec
 **Not implemented yet**
 
 - A recorded run against the real Claude API: the agent has been verified end to end on the CI runner against a local stand-in for the model service, not against the real service. Treat the first real use as untested.
-- Project skills (see the [roadmap](docs/ROADMAP.md)).
 - Sandboxes for file writes and shell commands, approvals, the web-search tool, the MCP host.
 - Custom providers accept an OpenAI-compatible base URL, model ID and dedicated key. Local HTTP requires opt-in. Hugging Face device login uses the public OAuth client ID registered for your app. Real account authorization has not been exercised. [Registration](https://huggingface.co/docs/hub/oauth)
 - ChatGPT plan and GitHub Copilot account sign-in are pending.
@@ -54,10 +56,10 @@ Anything not implemented is labelled as unavailable in the interface; the app ne
 | P2.0–P2.3 | Task contracts and state machine, task event store, snapshots and cursor catch-up, workbench task views | Implemented; the CI evidence for the overall P2 exit is not produced yet |
 | M1 | SEC-W01: the Windows production worker-isolation gate | Done (passes on Windows x64) |
 | M2 | Read-only agent: credentials, model gateway, model settings, Read Adapter, agent loop, isolated worker, conversation view | Done (Windows x64; runner evidence in `docs/evidence/m2/win32-x64/`) |
-| M3 | File writes and shell: sandbox, approvals, command normalization, stop semantics | Not started |
+| M3 | File writes and shell: sandbox, approvals, command normalization, stop semantics | P3a acceptance in progress. Production is gated by P3b. |
 | M4 | Productization: MCP, signing and updates | Not started |
 | M5 | Platform foundations ([ADR-PLAT-001](docs/adr/ADR-PLAT-001.md)): context engine and metrics, selective retrieval, plans | Context metrics, selective retrieval and persisted task plans implemented. Real provider verification pending. |
-| M6 | Sessions, checkpoints and project skills | Sessions and checkpoints implemented. Project skills pending. |
+| M6 | Sessions, checkpoints and project skills | Implemented. Installed-app and live provider verification pending. |
 | M7–M8 | Sub-agents, goal-driven runs, MCP host and plugins | Pending the decisions in the ADR |
 
 See the [roadmap](docs/ROADMAP.md) for the plan and the [execution log](docs/EXECUTION.md) for how each change was verified.
@@ -76,7 +78,7 @@ flowchart LR
 
 - **Desktop**: Electron 45, React 19, TypeScript 5.9, Vite. The renderer only draws the interface and has no access to Node, the file system or keys; the preload exposes a fixed allow-list of calls.
 - **Control plane**: Express 5 in a separate official Node.js 24 process (not Electron's bundled Node), the only reader and writer of the database. The main process establishes the service identity over an inherited channel, then forwards API calls over HMAC-authenticated loopback HTTP.
-- **Persistence**: better-sqlite3 (SQLite 3.53) with 9 versioned SQL migrations; task state and events are committed in the same transaction.
+- **Persistence**: better-sqlite3 (SQLite 3.53) with 14 versioned SQL migrations. Task state and events are committed in the same transaction.
 - **Contracts**: `packages/contracts` defines the API, IPC, events and error codes with zod; unit tests cover rejection of unknown fields and illegal state transitions.
 - **Worker isolation (Windows)**: a native WorkerLauncher inside the control plane starts the worker in an AppContainer with a Job Object and talks to it over a single protected, inherited pipe (OWIP/1 framing + JSON-RPC 2.0).
 - **Credentials**: the API key is encrypted and decrypted through the main process's `safeStorage` crypto bridge and used only by the control plane when calling Anthropic; neither the worker nor the interface ever sees it in plain text.

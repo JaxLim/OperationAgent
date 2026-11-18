@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { ControlRunListSchema, DEFAULT_WORKBENCH_SETTINGS, ProjectInputSchema, ProjectListSchema, ProjectSchema, SmokeBatchSchema,
   SmokeRecordsSchema, WORKBENCH_LIMITS, WorkbenchSettingsSchema, readStoredSettings } from '@operation-agent/contracts';
 import type { ControlRun, Project, SmokeBatch, SmokeRecord, WorkbenchSettings } from '@operation-agent/contracts';
+import { PROJECT_SKILL_LIMITS, SkillHashSchema, SkillPathSchema } from '@operation-agent/contracts';
+import type { ProjectSkillStore, SkillGrant } from '../tools/project-skills.js';
 import { createTaskLog } from './tasks.js';
 import type { TaskLog } from './tasks.js';
 import { createModelStore } from './models.js';
@@ -20,9 +22,9 @@ import type { AuditStore } from './audit.js';
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
 const migrationNames = ['001-control-plane.sql', '002-string-length.sql', '003-workbench.sql', '004-task-events.sql', '005-model-credentials.sql',
   '006-providers-agents.sql', '007-tool-audit.sql', '008-tool-audit-tools.sql', '009-agent-conversation.sql',
-  '010-tool-audit-search.sql', '011-provider-connections.sql', '012-task-plans.sql', '013-task-sessions.sql'];
+  '010-tool-audit-search.sql', '011-provider-connections.sql', '012-task-plans.sql', '013-task-sessions.sql', '014-project-skills.sql'];
 type ConnectionStore = ReturnType<typeof createConnectionStore>;
-export interface Store extends TaskLog, ModelStore, ConfigStore, AuditStore, ConnectionStore {
+export interface Store extends TaskLog, ModelStore, ConfigStore, AuditStore, ConnectionStore, ProjectSkillStore {
   readonly databaseVersion: number;
   readonly recoveredRuns: number;
   /** Unfinished tasks moved to INTERRUPTED when this instance opened the database. */
@@ -89,6 +91,10 @@ export function openStore(directory: string, runId: string, migrationDirectory =
     const readSettings = db.prepare<[], { value: string }>("SELECT value FROM settings WHERE key = 'workbench'");
     const writeSettings = db.prepare("INSERT INTO settings(key, value, updated_at) VALUES ('workbench', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at");
     const selectProjects = db.prepare('SELECT id, name, path, created_at AS createdAt FROM projects ORDER BY created_at, id LIMIT ?');
+    const selectSkillGrants = db.prepare<[string], SkillGrant>('SELECT path, sha256 FROM project_skill_grants WHERE project_id = ? ORDER BY path');
+    const deleteSkillGrant = db.prepare('DELETE FROM project_skill_grants WHERE project_id = ? AND path = ?');
+    const upsertSkillGrant = db.prepare(`INSERT INTO project_skill_grants (project_id, path, sha256) VALUES (?, ?, ?)
+      ON CONFLICT (project_id, path) DO UPDATE SET sha256 = excluded.sha256`);
     const count = (table: 'projects' | 'control_plane_runs' | 'smoke_records'): number =>
       (db.prepare(`SELECT count(*) AS total FROM ${table}`).get() as { total: number }).total;
     const settings = (): WorkbenchSettings => {
@@ -119,6 +125,18 @@ export function openStore(directory: string, runId: string, migrationDirectory =
         }).immediate();
       },
       listProjects: () => ProjectListSchema.parse({ projects: selectProjects.all(WORKBENCH_LIMITS.maxProjects) }).projects,
+      listSkillGrants: projectId => selectSkillGrants.all(projectId),
+      setSkillGrant(projectId, path, sha256) {
+        SkillPathSchema.parse(path);
+        if (sha256 === null) { deleteSkillGrant.run(projectId, path); return; }
+        SkillHashSchema.parse(sha256);
+        db.transaction(() => {
+          if (!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(projectId)) throw new Error('NOT_FOUND');
+          const grants = selectSkillGrants.all(projectId);
+          if (grants.length >= PROJECT_SKILL_LIMITS.maxEnabled && !grants.some(grant => grant.path === path)) throw new Error('LIMIT_EXCEEDED');
+          upsertSkillGrant.run(projectId, path, sha256);
+        }).immediate();
+      },
       addProject(input) {
         const value = ProjectInputSchema.parse(input);
         return db.transaction(() => {

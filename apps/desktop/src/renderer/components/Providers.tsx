@@ -306,12 +306,12 @@ function HfDetail() {
   </>;
 }
 
-export function ProvidersSection() {
+export function ProvidersSection({ initialProvider = null }: { initialProvider?: Card['id'] | null }) {
   const t = useT();
   const settings = useStore(s => s.settings);
   const status = useProviderStatus();
   const overview = useStore(s => s.providers);
-  const [open, setOpen] = useState<Card['id'] | null>(null);
+  const [open, setOpen] = useState<Card['id'] | null>(initialProvider);
   const [query, setQuery] = useState('');
   useEffect(() => { void actions.refreshProviders(); void actions.refreshModel(); }, []);
   const back = (): void => setOpen(null);
@@ -366,11 +366,11 @@ const SEARCH_INFO: Readonly<Record<SearchProvider, { name: string; desc: Message
   firecrawl: { name: 'Firecrawl', desc: 'search.firecrawl', mark: 'F', tone: 'violet' },
 };
 
-export function WebSearchSection({ settings }: { settings: WorkbenchSettings }) {
+export function WebSearchSection({ settings, initialProvider = null }: { settings: WorkbenchSettings; initialProvider?: SearchProvider | null }) {
   const t = useT();
   const overview = useStore(s => s.providers);
   const ready = useStore(s => s.connection === 'ready');
-  const [open, setOpen] = useState<SearchProvider | null>(null);
+  const [open, setOpen] = useState<SearchProvider | null>(initialProvider);
   useEffect(() => { void actions.refreshProviders(); }, []);
   const credential = (id: SearchProvider): CredentialStatus | null => overview?.search.find(item => item.provider === id)?.credential ?? null;
   const mode = settings.webSearchMode;
@@ -418,4 +418,72 @@ export function WebSearchSection({ settings }: { settings: WorkbenchSettings }) 
       <div className="settings-note"><IconInfo size={14} /><span>{t('search.note')}</span></div>
     </>
   );
+}
+
+export type IntegrationTarget =
+  | { section: 'providers'; provider: Card['id'] }
+  | { section: 'search'; provider: SearchProvider }
+  | { section: 'mcp'; server: string };
+
+export function IntegrationsSection({ onOpen }: { onOpen: (target: IntegrationTarget) => void }) {
+  const t = useT();
+  const providerStatus = useProviderStatus();
+  const overview = useStore(s => s.providers);
+  const mcp = useStore(s => s.mcpServers);
+  const [query, setQuery] = useState('');
+  const [configuredOnly, setConfiguredOnly] = useState(false);
+  const [category, setCategory] = useState<IntegrationTarget['section'] | 'all'>('all');
+  useEffect(() => { void actions.refreshProviders(); void actions.refreshModel(); void actions.refreshMcp(); }, []);
+
+  const entries = CARDS.map(card => ({
+    id: card.id, name: card.nameKey ? t(card.nameKey) : card.name, description: t(card.desc),
+    mark: card.mark, tone: card.tone, configured: card.id === 'custom' ? Boolean(overview?.custom?.length)
+      : card.id === 'huggingface' ? overview?.huggingface?.configured === true : providerStatus(card.id as ModelProvider)?.configured === true,
+    target: { section: 'providers', provider: card.id } satisfies IntegrationTarget,
+  }));
+  const search = SEARCH_PROVIDERS.map(provider => ({
+    ...SEARCH_INFO[provider], id: provider, description: t(SEARCH_INFO[provider].desc),
+    configured: overview?.search.some(item => item.provider === provider && item.credential.configured) === true,
+    target: { section: 'search', provider } satisfies IntegrationTarget,
+  }));
+  const servers = (mcp ?? []).map(server => ({
+    id: server.id, name: server.name, description: t('integrations.mcpSaved'),
+    mark: 'M', tone: 'slate', configured: true, target: { section: 'mcp', server: server.id } satisfies IntegrationTarget,
+  }));
+  const addServer = {
+    id: 'mcp-new', name: t('mcp.add'), description: t('integrations.mcpAdd'),
+    mark: '+', tone: 'plain', configured: false, target: { section: 'mcp', server: 'new' } satisfies IntegrationTarget,
+  };
+  const groups = [{ id: 'providers', entries }, { id: 'search', entries: search }, { id: 'mcp', entries: [...servers, addServer] }] as const;
+  const q = query.trim().toLowerCase();
+  const shown = groups.filter(group => category === 'all' || category === group.id).map(group => ({ ...group,
+    entries: group.entries.filter(item => (!configuredOnly || item.configured) && `${item.name} ${item.description}`.toLowerCase().includes(q)),
+  })).filter(group => group.entries.length);
+  return <div className="integration-catalog">
+    <label className="settings-search skill-search"><IconSearch size={15} />
+      <input value={query} maxLength={128} onChange={event => setQuery(event.target.value)} placeholder={t('integrations.search')}
+        aria-label={t('integrations.search')} />
+    </label>
+    <div className="skill-toolbar">
+      <div className="library-filters">
+        <button className="library-filter" aria-pressed={category === 'all'} onClick={() => setCategory('all')}>{t('integrations.all')}</button>
+        {groups.map(group => <button className="library-filter" key={group.id} aria-pressed={category === group.id}
+          onClick={() => setCategory(group.id)}>{t(`section.${group.id}.title`)}</button>)}
+      </div>
+      <button className="library-filter" aria-pressed={configuredOnly}
+        onClick={() => setConfiguredOnly(value => !value)}>{t('integrations.configuredOnly')}</button>
+    </div>
+    {shown.map(group => <section key={group.id}>
+      <h4 className="settings-group-title">{t(`section.${group.id}.title`)}</h4>
+      <div className="integration-grid">{group.entries.map(item => <button key={item.id} className="integration-entry"
+        onClick={() => onOpen(item.target)} data-integration={item.id}>
+        <ProviderMark label={item.mark} tone={item.tone} />
+        <span><strong>{item.name}</strong><span className="muted small">{item.description}</span>
+          {item.configured && item.target.section !== 'mcp' && <span className="small tone-text-ok">{t('integrations.configured')}</span>}
+        </span>
+        <IconChevronRight size={15} />
+      </button>)}</div>
+    </section>)}
+    {shown.length === 0 && <p className="muted">{t('integrations.empty')}</p>}
+  </div>;
 }

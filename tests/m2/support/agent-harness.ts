@@ -10,6 +10,7 @@ import type { CryptoBridge } from '../../../apps/server/dist/credentials/bridge.
 import { createTurnGateway } from '../../../apps/server/dist/models/turns.js';
 import { createModelConnections } from '../../../apps/server/dist/models/connections.js';
 import { createToolRouter } from '../../../apps/server/dist/tools/router.js';
+import { ProjectSkillService } from '../../../apps/server/dist/tools/project-skills.js';
 import { LiveFeed } from '../../../apps/server/dist/agent/live.js';
 import { TaskRunner } from '../../../apps/server/dist/agent/runner.js';
 import { createAgentSession } from '../../../apps/server/dist/agent/host.js';
@@ -49,6 +50,7 @@ export interface AgentHarnessOptions {
   linkedKey?: string;
 }
 export interface AgentHarness { store: Store; runner: TaskRunner; projectId: string; root: string;
+  skills: ProjectSkillService;
   connections: ReturnType<typeof createModelConnections>;
   /** Starts a task and resolves once it has reached a final state; returns its committed events. */
   runTask(prompt: string, timeoutMs?: number): Promise<{ taskId: string; state: string; events: TaskEvent[] }> }
@@ -69,7 +71,9 @@ export async function withAgentHarness(endpoint: string, run: (harness: AgentHar
   else await credentials.set(AGENT_HARNESS_KEY);
   const model = options.model ?? 'claude-sonnet-5-5';
   const connections = createModelConnections(store, fakeBridge());
-  const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools: createToolRouter({ store }),
+  const tools = createToolRouter({ store });
+  const skills = new ProjectSkillService(store, tools);
+  const runner = new TaskRunner({ store, credentials, gateway: createTurnGateway({ endpoint, maxRetries: 0 }), tools, skills,
     linkedRoute: connections.route,
     model: () => model, live: new LiveFeed(), stopGraceMs: () => 5_000, ...(options.contextPolicy ? { contextPolicy: options.contextPolicy } : {}) });
   const identity = { expressRunId: randomUUID(), workerRunId: randomUUID() };
@@ -83,7 +87,7 @@ export async function withAgentHarness(endpoint: string, run: (harness: AgentHar
   const agent = createAgentSession({ identity, clock, runner, transport: { write: async frame => { toWorker.push(frame.slice()); }, close: () => toWorker.close() } });
   express.session = agent.session;
   await agent.handshake('c'.repeat(64));
-  const harness: AgentHarness = { store, runner, projectId, root, connections,
+  const harness: AgentHarness = { store, runner, projectId, root, connections, skills,
     async runTask(prompt, timeoutMs = 60_000) {
       const task = await runner.start(projectId, prompt, randomUUID());
       const deadline = Date.now() + timeoutMs;

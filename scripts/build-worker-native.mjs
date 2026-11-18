@@ -67,3 +67,16 @@ for (const name of ['parent', 'channel']) {
 }
 await writeFile(resolve(output, 'build-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
 console.log(JSON.stringify({ check: 'P1_WORKER_NATIVE_BUILD', passed: true, node: lock.node, nativeArtifacts: evidence.artifacts, isolatedFixture: 'NOT_RUN' }));
+
+// P3a: this launcher is a test artifact. Staging the product only copies the qualified Worker addons.
+const toolOutput = resolve(root, '.cache/sec23');
+await mkdir(toolOutput, { recursive: true });
+const launcher = resolve(toolOutput, 'tool-launcher.exe');
+const toolBuild = command(compiler, ['/nologo', '/MT', '/std:c++20', '/EHsc', '/W4', '/WX', '/O2', '/utf-8', '/D_WIN32_WINNT=0x0A00',
+  '/Fo' + resolve(toolOutput, 'tool-launcher.obj'), '/Fd' + resolve(toolOutput, 'tool-launcher.pdb'),
+  resolve(root, 'packages/platform-sandbox/native/windows-tool-launcher.cc'), '/link', '/OUT:' + launcher,
+  'advapi32.lib', 'userenv.lib', 'bcrypt.lib'], { encoding: 'utf8', env: {
+  ...process.env, INCLUDE: include.join(';'), LIB: library.join(';'), PATH: `${resolve(msvc, 'bin/Hostx64/x64')};${process.env.PATH}`,
+} });
+process.stdout.write(toolBuild.stdout ?? '');
+console.log(JSON.stringify({ check: 'P3A_TOOL_LAUNCHER_BUILD', sha256: hash(await readFile(launcher)), sec23: 'NOT_RUN' }));
